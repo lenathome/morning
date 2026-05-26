@@ -16,8 +16,7 @@ Output (stdout): JSON array of events. Each event has:
     }
 
 Exit codes:
-    0 = success (may print "[]" if no events today)
-    1 = gcalcli not installed
+    0 = success (may print "[]" if no events today, or gcalcli not installed — stderr carries the reason)
     2 = bad args
 """
 
@@ -38,7 +37,8 @@ def main() -> None:
 
     if shutil.which("gcalcli") is None:
         print("gcalcli not found in PATH", file=sys.stderr)
-        sys.exit(1)
+        print("[]")
+        sys.exit(0)
 
     today = date.today().isoformat()
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
