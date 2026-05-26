@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# fetch_github.sh — fetch GitHub signal for the morning brief.
+#
+# Subcommands:
+#   initiative <repo,repo> <keyword,keyword>   list recent PRs (last 7 days) matching repos + any keyword
+#   reviewer-requested                          PRs where the current user is requested as reviewer
+#   mentions                                    issues/PRs mentioning the current user updated in last 24h
+#
+# Output (stdout): JSON.
+# Errors → stderr, non-zero exit.
+
+set -euo pipefail
+
+GH_USER=$(gh api user --jq .login 2>/dev/null || echo "")
+if [[ -z "$GH_USER" ]]; then
+  echo "gh not authenticated" >&2
+  exit 1
+fi
+
+subcommand="${1:-}"
+case "$subcommand" in
+
+  initiative)
+    repos="${2:-}"
+    keywords="${3:-}"
+    if [[ -z "$repos" ]]; then
+      echo "usage: fetch_github.sh initiative <repo,repo> [keyword,keyword]" >&2
+      exit 2
+    fi
+
+    # Build the gh search query: scope to repos, last 7 days, any keyword in title.
+    week_ago=$(date -v-7d +%Y-%m-%d 2>/dev/null || date -d "7 days ago" +%Y-%m-%d)
+
+    # Convert comma-separated repos to "repo:owner/r1 repo:owner/r2 ..." (assume ekko-enviroconomy org).
+    repo_filter=""
+    IFS=',' read -ra repo_arr <<< "$repos"
+    for r in "${repo_arr[@]}"; do
+      repo_filter="$repo_filter repo:ekko-enviroconomy/${r// /}"
+    done
+
+    # If keywords given, OR them with the repo filter; if not, just repos.
+    if [[ -n "$keywords" ]]; then
+      kw_filter=""
+      IFS=',' read -ra kw_arr <<< "$keywords"
+      for k in "${kw_arr[@]}"; do
+        kw_filter="$kw_filter $k in:title"
+      done
+      query="$repo_filter updated:>=$week_ago ($kw_filter)"
+    else
+      query="$repo_filter updated:>=$week_ago"
+    fi
+
+    gh search prs --json number,title,url,state,author,repository,updatedAt --limit 30 -- "$query" 2>/dev/null || echo "[]"
+    ;;
+
+  reviewer-requested)
+    gh search prs --review-requested="@me" --state=open \
+      --json number,title,url,repository,author,updatedAt --limit 30 \
+      2>/dev/null || echo "[]"
+    ;;
+
+  mentions)
+    day_ago=$(date -v-1d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "1 day ago" +%Y-%m-%dT%H:%M:%SZ)
+    gh search issues --mentions="@me" --updated=">$day_ago" \
+      --json number,title,url,repository,author,updatedAt --limit 30 \
+      2>/dev/null || echo "[]"
+    ;;
+
+  *)
+    echo "usage: fetch_github.sh {initiative <repos> [keywords] | reviewer-requested | mentions}" >&2
+    exit 2
+    ;;
+esac
