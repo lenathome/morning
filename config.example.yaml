@@ -1,0 +1,72 @@
+# ~/morning/config.yaml template.
+# Copy this file to ~/morning/config.yaml and fill in real values.
+# The real config.yaml is gitignored.
+
+notion:
+  # 32-character hex ID for the Notion database holding tasks.
+  # This DB is created in Task 3 Step 3 (via Notion MCP) — the ID is captured
+  # there and substituted into the live ~/morning/config.yaml.
+  # See the spec: the existing "To Do" page is unstructured notes; this is a
+  # new database for actionable tasks only.
+  todo_database_id: "REPLACE_WITH_NOTION_DB_ID"
+
+  # URL of the existing "To Do" page that the morning tool scans for triage.
+  # This page stays untouched — it's Lena's strategic dumping ground.
+  todo_page_url: "https://www.notion.so/ekko-earth/To-Do-77903060bd6d473eba1011e191acefbb"
+
+  # Cap on untriaged items shown in the daily triage section.
+  triage_cap: 20
+
+  # Property names on the new Notion Tasks DB. These match the schema created
+  # in Task 3 Step 3. Edit ONLY if you rename properties in Notion.
+  property_names:
+    title: "Name"
+    due_date: "Due"
+    status: "Status"
+    category: "Category"
+    type: "Type"
+    client: "Client"
+    area: "Area"
+
+  # The category value that promotes a task into the "Strategic" bucket.
+  # All other category values are treated as Operational/Other for bucketing.
+  strategic_category: "Strategic"
+
+calendar:
+  # Any attendee whose email does NOT end with this domain is treated as external.
+  ekko_email_domain: "@ekko.earth"
+  # For external meetings: research all named attendees, with a soft cap so
+  # large group meetings don't blow up runtime. Meetings rarely exceed 10.
+  external_meeting_attendee_cap: 10
+  # Path used by gcalcli for OAuth credentials. Default usually fine.
+  gcalcli_oauth_path: "~/.gcalcli_oauth"
+
+github:
+  # Repos to scan for "awaiting your input" (review requests, mentions).
+  # Per-initiative repos come from initiatives.md, not here.
+  ekko_repos:
+    - ekko-home
+    - ekko-edge-api
+    - ekko-api
+    - ekko-admin
+    - ekko-web-mono
+    - skill-forge
+    - sdk-test-client
+
+fathom:
+  enabled: true
+  # How many days back to scan for meetings and open action items.
+  lookback_days: 7
+  # Title regex used to detect engineering standups. Lena has exactly one
+  # standup, titled "Stand up" (or "Standup"), at 09:30 Tue-Fri. Full-title
+  # match so we don't accidentally catch other meetings with "stand up" in
+  # the description.
+  standup_title_regex: "(?i)^stand[\\s-]?up$"
+  # Your name as it would appear as an action-item owner in Fathom summaries.
+  user_name: "Lena"
+
+output:
+  briefs_dir: "~/morning/briefs"
+
+paths:
+  initiatives_file: "~/morning/initiatives.md"
