@@ -118,7 +118,7 @@ Loop over the meetings returned in Step 1.6:
    - If the title matches `fathom.standup_title_regex`, flag it as a standup.
    - Capture the summary text for embedding into the engineering progress section. If the summary mentions specific initiatives (match against the names from the initiatives index), attach the summary to that initiative's block. Otherwise attach as a top-level "Standup notes" line under engineering progress.
 
-3. **Yesterday's meetings list.** For each non-standup meeting in the lookback window, prepare a single line: `**<Title>** (<HH:MM>) — <one-line summary>`. Standups are not duplicated here — they appear under engineering progress.
+3. **Recent meetings list.** For each non-standup meeting in the lookback window, prepare a single line. EXCLUDE any meeting that already contributed at least one item to the open action items list — that meeting's relevant context is already surfaced via the action's Fathom link, and listing it again is duplicative. Standups are also excluded here (they appear under engineering progress).
 
 ## Step 4b: Extract untriaged To Do page bullets
 
@@ -228,12 +228,14 @@ Issues / PRs mentioning you in the last 24h (N):
 
 (If both lists are empty, write "Nothing waiting on you. Nice.")
 
-## Yesterday's meetings
+## Recent meetings (last <lookback_days> days)
 
-For each non-standup Fathom meeting in the lookback window. The title MUST be a markdown link to the Fathom call URL.
+Heading should literally include the number of days, e.g. "Recent meetings (last 7 days)". List meetings that did NOT contribute any item to the open action items list above (those are already surfaced via their action links). Standups are also excluded — they appear inside engineering progress as standup notes.
+
 - [**<Title>**](<fathom_call_url>) (<date>) — <one-line summary>
 
-(If no meetings or Fathom unavailable: skip the section, or write "Fathom unavailable — <reason>".)
+(If after filtering the list is empty, write "No untouched meetings in the window. Everything's already in the action list or the engineering section.")
+(If Fathom unavailable: "Fathom unavailable — <reason>".)
 
 ## Open action items
 
