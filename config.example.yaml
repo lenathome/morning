@@ -35,6 +35,10 @@ notion:
 calendar:
   # Any attendee whose email does NOT end with this domain is treated as external.
   ekko_email_domain: "@ekko.earth"
+  # Primary calendar to read from. Restricts gcalcli to YOUR own events so
+  # shared calendars (other people's standups, team OOO calendars, colleagues
+  # subscribed for awareness) don't clutter the brief.
+  primary_calendar: "lena.thome@ekko.earth"
   # For external meetings: research all named attendees, with a soft cap so
   # large group meetings don't blow up runtime. Meetings rarely exceed 10.
   external_meeting_attendee_cap: 10

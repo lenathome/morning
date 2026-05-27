@@ -2,8 +2,12 @@
 """fetch_calendar.py — emit today's calendar events as JSON.
 
 Usage:
-    python3 fetch_calendar.py <ekko_email_domain>
-    e.g. python3 fetch_calendar.py @ekko.earth
+    python3 fetch_calendar.py <ekko_email_domain> [<primary_calendar>]
+    e.g. python3 fetch_calendar.py @ekko.earth lena.thome@ekko.earth
+
+If <primary_calendar> is provided, the gcalcli query is restricted to that
+single calendar so events you're only subscribed to (other people's standups,
+team OOO calendars, etc.) are filtered out. Recommended.
 
 Output (stdout): JSON array of events. Each event has:
     {
@@ -31,9 +35,10 @@ from datetime import date, timedelta
 
 def main() -> None:
     if len(sys.argv) < 2:
-        print("usage: fetch_calendar.py <ekko_email_domain>", file=sys.stderr)
+        print("usage: fetch_calendar.py <ekko_email_domain> [<primary_calendar>]", file=sys.stderr)
         sys.exit(2)
     ekko_domain = sys.argv[1]
+    primary_calendar = sys.argv[2] if len(sys.argv) > 2 else None
 
     if shutil.which("gcalcli") is None:
         print("gcalcli not found in PATH", file=sys.stderr)
@@ -46,17 +51,17 @@ def main() -> None:
     # --tsv format with email + conference + length details.
     # Actual layout observed at runtime (gcalcli emits a header row first):
     #   start_date  start_time  end_date  end_time  length  conference_uri  title  email
-    result = subprocess.run(
-        [
-            "gcalcli", "agenda", today, tomorrow,
-            "--details=email",
-            "--details=length",
-            "--details=conference",
-            "--tsv",
-        ],
-        capture_output=True,
-        text=True,
-    )
+    cmd = ["gcalcli"]
+    if primary_calendar:
+        cmd += ["--calendar", primary_calendar]
+    cmd += [
+        "agenda", today, tomorrow,
+        "--details=email",
+        "--details=length",
+        "--details=conference",
+        "--tsv",
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
 
     if result.returncode != 0:
         # Don't fail the brief — emit empty array so the section just says "no events".
