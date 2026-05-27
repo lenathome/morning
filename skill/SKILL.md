@@ -210,35 +210,37 @@ Standup notes (from <meeting title>, <date>): <one or two lines distilled from t
 
 GitHub:
 - <N PRs merged in last 7 days, N open>
-- Open PRs:
-  - #<num> <title> (<repo>) — <state>, updated <relative>
+- Open PRs (PR numbers MUST be markdown links to the PR URL):
+  - [#<num>](<pr_url>) <title> (<repo>) — <state>, updated <relative>
   - ...
 
 (If no recent activity at all: write "No recent activity.")
 
 ## Awaiting your input
 
+PR / issue numbers MUST be wrapped as markdown links to the GitHub URL.
+
 PRs requesting your review (N):
-- #<num> <title> (<repo>) — opened by <author>, <days> days ago
+- [#<num>](<pr_url>) <title> (<repo>) — opened by <author>, <days> days ago
 
 Issues / PRs mentioning you in the last 24h (N):
-- #<num> <title> (<repo>)
+- [#<num>](<issue_url>) <title> (<repo>)
 
 (If both lists are empty, write "Nothing waiting on you. Nice.")
 
 ## Yesterday's meetings
 
-For each non-standup Fathom meeting in the lookback window:
-- **<Title>** (<HH:MM>) — <one-line summary>
+For each non-standup Fathom meeting in the lookback window. The title MUST be a markdown link to the Fathom call URL.
+- [**<Title>**](<fathom_call_url>) (<date>) — <one-line summary>
 
 (If no meetings or Fathom unavailable: skip the section, or write "Fathom unavailable — <reason>".)
 
 ## Open action items
 
-Numbered list, one per open action where you're the owner or named:
+Numbered list, one per open action where you're the owner or named. The action text MUST be wrapped as a markdown link to the Fathom timestamp URL so the user can jump into the recording at the exact moment the action was raised.
 
-1. [ ] <action text> (from "<meeting title>", <date>)
-2. [ ] <action text> (from "<meeting title>", <date>)
+1. [ ] [<action text>](<fathom_timestamp_url_from_MCP>) (from "<meeting title>", <date>)
+2. [ ] [<action text>](<fathom_timestamp_url_from_MCP>) (from "<meeting title>", <date>)
 ...
 
 The numbers MUST be 1-indexed and sequential — they're used by the tick-off prompt. Pass the corresponding action keys to the tick-off step.
