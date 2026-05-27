@@ -44,8 +44,8 @@ def main() -> None:
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
 
     # --tsv format with email + conference + length details.
-    # Layout per gcalcli docs (subject to version drift):
-    #   start_date  start_time  end_date  end_time  length  title  conference  emails
+    # Actual layout observed at runtime (gcalcli emits a header row first):
+    #   start_date  start_time  end_date  end_time  length  conference_uri  title  email
     result = subprocess.run(
         [
             "gcalcli", "agenda", today, tomorrow,
@@ -72,11 +72,16 @@ def main() -> None:
             continue
 
         start_date = fields[0]
+        # Skip the header row that gcalcli --tsv emits as the first non-empty line.
+        # The first column on the header is literally "start_date".
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", start_date):
+            continue
+
         start_time = fields[1] if len(fields) > 1 else ""
         end_date = fields[2] if len(fields) > 2 else ""
         end_time = fields[3] if len(fields) > 3 else ""
-        title = fields[5] if len(fields) > 5 else "(no title)"
-        conference = fields[6] if len(fields) > 6 else ""
+        conference = fields[5] if len(fields) > 5 else ""
+        title = fields[6] if len(fields) > 6 else "(no title)"
         emails_field = fields[7] if len(fields) > 7 else ""
 
         attendees = []
