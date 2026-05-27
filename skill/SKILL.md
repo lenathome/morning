@@ -59,7 +59,7 @@ Make these tool calls in a SINGLE message (parallel tool use):
 
 1. **To-dos** — Notion MCP `notion-fetch` against the `todo_database_id` from config. Filter for incomplete items. If MCP unavailable, mark to-dos section as "Notion unavailable".
 
-2. **Calendar** — Bash: `python3 ~/github/morning/scripts/fetch_calendar.py "<ekko_email_domain from config>"`
+2. **Calendar** — Bash: `python3 ~/github/morning/scripts/fetch_calendar.py "<ekko_email_domain>" "<primary_calendar>"` (both values from config; second arg restricts gcalcli to your own calendar so shared calendars don't clutter the brief)
 
 3. **Initiatives index** — Bash: `python3 ~/github/morning/scripts/parse_initiatives.py "<initiatives_file from config>"`
 
