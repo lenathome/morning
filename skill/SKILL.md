@@ -111,8 +111,11 @@ Loop over the meetings returned in Step 1.6:
 
 1. **Action item extraction.** Parse the summary for action items. Most Fathom summaries have a structured "Action items" block. For each action:
    - Compute the stable key: `sha1(meeting_id + lowercased_whitespace_normalised_text)[:16]`.
-   - Include in the open-actions list if EITHER the action's owner equals `fathom.user_name` from config, OR the owner is unspecified and the action text mentions `fathom.user_name`.
-   - Filter out any whose key appears in the acknowledged-actions list from Step 1.7.
+   - Classify into one of two buckets:
+     - **Your actions** — owner equals `fathom.user_name` from config, OR owner is unspecified and the action text mentions `fathom.user_name`.
+     - **Team actions** — every other action from the same set of meetings (any other named owner). The user attended these meetings so the actions are FYI / might get absorbed by her.
+   - Filter out (from EITHER bucket) any action whose key is in the acknowledged-actions list from Step 1.7. Tick-off works the same way regardless of bucket.
+   - Cap the team actions bucket at 20 items, ordered by meeting date descending then by position within the meeting. The user can manually look in Fathom for older ones.
 
 2. **Standup classification.** For each meeting:
    - If the title matches `fathom.standup_title_regex`, flag it as a standup.
@@ -239,15 +242,23 @@ Heading should literally include the number of days, e.g. "Recent meetings (last
 
 ## Open action items
 
-Numbered list, one per open action where you're the owner or named. The action text MUST be wrapped as a markdown link to the Fathom timestamp URL so the user can jump into the recording at the exact moment the action was raised.
+**Your actions** — action items where you're the owner or named. Numbered list. The action text MUST be wrapped as a markdown link to the Fathom timestamp URL so you can jump into the recording at the exact moment the action was raised.
 
-1. [ ] [<action text>](<fathom_timestamp_url_from_MCP>) (from "<meeting title>", <date>)
-2. [ ] [<action text>](<fathom_timestamp_url_from_MCP>) (from "<meeting title>", <date>)
+1. [ ] [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
+2. [ ] [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
 ...
 
-The numbers MUST be 1-indexed and sequential — they're used by the tick-off prompt. Pass the corresponding action keys to the tick-off step.
+(If list is empty: write "Nothing carrying over on your own actions. Clean slate.")
 
-(If list is empty: write "Nothing carrying over. Clean slate.")
+**Team actions in your meetings** — open actions from meetings you attended, owned by others. Surfaced for awareness because the work sometimes lands on you anyway. Each line shows the owner. Tick off any that you've absorbed.
+
+N+1. [ ] [<action text>](<fathom_timestamp_url>) → <owner> (from "<meeting title>", <date>)
+N+2. [ ] [<action text>](<fathom_timestamp_url>) → <owner> (from "<meeting title>", <date>)
+...
+
+Numbering continues sequentially from the Your actions list — so if you have 7 own actions and 12 team actions, the team list is numbered 8-19. The tick-off prompt accepts any number across both lists.
+
+(If team list is empty: skip the sub-section entirely.)
 
 ## From your To Do page — triage
 
