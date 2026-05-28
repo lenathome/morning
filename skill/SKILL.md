@@ -113,7 +113,7 @@ Loop over the meetings returned in Step 1.6:
    - Compute the stable key: `sha1(meeting_id + lowercased_whitespace_normalised_text)[:16]`.
    - Classify into one of two buckets:
      - **Your actions** — owner equals `fathom.user_name` from config, OR owner is unspecified and the action text mentions `fathom.user_name`.
-     - **Team actions** — every other action from the same set of meetings (any other named owner). The user attended these meetings so the actions are FYI / might get absorbed by her.
+     - **Team actions** — actions owned by anyone in `fathom.team_action_owners` from config (case-insensitive substring match on the owner string, so "Etienne" matches "Etienne Smith"). These are the people whose work the user might absorb or needs to track (typically managers, peers in tight collaboration). Other owners are excluded entirely. If `team_action_owners` is empty or missing, no team actions are surfaced.
    - Filter out (from EITHER bucket) any action whose key is in the acknowledged-actions list from Step 1.7. Tick-off works the same way regardless of bucket.
    - Cap the team actions bucket at 20 items, ordered by meeting date descending then by position within the meeting. The user can manually look in Fathom for older ones.
 
