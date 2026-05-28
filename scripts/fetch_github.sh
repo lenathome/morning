@@ -28,29 +28,26 @@ case "$subcommand" in
       exit 2
     fi
 
-    # Build the gh search query: scope to repos, last 7 days, any keyword in title.
+    # Scope to repos, last 7 days, any keyword in title.
     week_ago=$(date -v-7d +%Y-%m-%d 2>/dev/null || date -d "7 days ago" +%Y-%m-%d)
 
-    # Convert comma-separated repos to "repo:owner/r1 repo:owner/r2 ..." (assume ekko-enviroconomy org).
-    repo_filter=""
+    # Build --repo flags (gh accepts multiple). Assume ekko-enviroconomy org.
+    repo_flags=()
     IFS=',' read -ra repo_arr <<< "$repos"
     for r in "${repo_arr[@]}"; do
-      repo_filter="$repo_filter repo:ekko-enviroconomy/${r// /}"
+      repo_flags+=(--repo "ekko-enviroconomy/${r// /}")
     done
 
-    # If keywords given, OR them with the repo filter; if not, just repos.
+    # Build the command as an array. Optional keyword qualifiers append as positional args.
+    cmd=(gh search prs "${repo_flags[@]}" --updated ">=$week_ago" --json number,title,url,state,author,repository,updatedAt --limit 30)
     if [[ -n "$keywords" ]]; then
-      kw_filter=""
       IFS=',' read -ra kw_arr <<< "$keywords"
       for k in "${kw_arr[@]}"; do
-        kw_filter="$kw_filter $k in:title"
+        cmd+=("${k} in:title")
       done
-      query="$repo_filter updated:>=$week_ago ($kw_filter)"
-    else
-      query="$repo_filter updated:>=$week_ago"
     fi
 
-    gh search prs --json number,title,url,state,author,repository,updatedAt --limit 30 -- "$query" 2>/dev/null || echo "[]"
+    "${cmd[@]}" 2>/dev/null || echo "[]"
     ;;
 
   reviewer-requested)
