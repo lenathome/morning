@@ -68,6 +68,13 @@ fathom:
   standup_title_regex: "(?i)^stand[\\s-]?up$"
   # Your name as it would appear as an action-item owner in Fathom summaries.
   user_name: "Lena"
+  # Team action item owners to surface alongside your own. Set this to people
+  # whose work you might absorb or need to track (typically a manager, or a
+  # tight peer). Other owners are filtered out of the team bucket. Match is
+  # case-insensitive substring, so "Etienne" matches "Etienne Smith".
+  # Leave empty to disable the team-actions section.
+  team_action_owners:
+    - Etienne
 
 output:
   briefs_dir: "~/morning/briefs"
