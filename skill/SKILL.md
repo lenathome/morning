@@ -78,6 +78,8 @@ Make these tool calls in a SINGLE message (parallel tool use):
 
 9. **Triaged-items state** — Bash: `cat ~/morning/state/triaged-items.json 2>/dev/null || echo "[]"`
 
+10. **Acknowledged PRs state** — Bash: `cat ~/morning/state/acknowledged-prs.json 2>/dev/null || echo "[]"`
+
 ## Step 2: Per-initiative data fetch (parallel)
 
 Once Step 1's initiatives parse completes, for EACH initiative that has a `github` block in its YAML, dispatch in parallel:
@@ -184,15 +186,11 @@ Each line shows the task title, its due date if any, and its categories as inlin
 
 If a bucket is empty, omit its sub-heading entirely. If ALL buckets are empty, write "Notion DB is empty. Add tasks at <DB url>".
 
-## Calendar
+## External meeting prep
 
-- HH:MM — <Title> (<internal | external>)
-- HH:MM–HH:MM — Free (NN min)
-- ...
+Only render this section when there's at least one external meeting today (events with `is_external: true`). DO NOT render a calendar listing of all events — the user can check her own calendar. The calendar data is still fetched in Step 1 and used in Step 4 (research), Step 3 (gap computation) and Strategic-slot fit (deep-work block detection), but it does NOT get listed in the brief.
 
-### External meeting prep
-
-For each external meeting (skip section if none):
+For each external meeting today:
 
 **HH:MM — <Title>**
 - Company: <name> — <one-line on what they do>. <Recent news if any>.
@@ -200,6 +198,8 @@ For each external meeting (skip section if none):
   - <Name> — <role at company>
   - ...
 - (If recent news or anything notable, one line.)
+
+(If no external meetings: skip this section entirely.)
 
 ## Engineering progress
 
@@ -221,7 +221,9 @@ GitHub:
 
 ## Awaiting your input
 
-PR / issue numbers MUST be wrapped as markdown links to the GitHub URL.
+Filter the PRs from Step 1.4 against the acknowledged-PRs state from Step 1.10. A PR is hidden when its `updatedAt` is less than or equal to the recorded `last_seen_updated_at` (i.e. nothing has happened since the user parked it). Show the PR again when its `updatedAt` moves forward.
+
+PR numbers MUST be wrapped as markdown links to the GitHub URL.
 
 PRs requesting your review (N):
 - [#<num>](<pr_url>) <title> (<repo>) — opened by <author>, <days> days ago
@@ -230,15 +232,6 @@ Issues / PRs mentioning you in the last 24h (N):
 - [#<num>](<issue_url>) <title> (<repo>)
 
 (If both lists are empty, write "Nothing waiting on you. Nice.")
-
-## Recent meetings (last <lookback_days> days)
-
-Heading should literally include the number of days, e.g. "Recent meetings (last 7 days)". List meetings that did NOT contribute any item to the open action items list above (those are already surfaced via their action links). Standups are also excluded — they appear inside engineering progress as standup notes.
-
-- [**<Title>**](<fathom_call_url>) (<date>) — <one-line summary>
-
-(If after filtering the list is empty, write "No untouched meetings in the window. Everything's already in the action list or the engineering section.")
-(If Fathom unavailable: "Fathom unavailable — <reason>".)
 
 ## Open action items
 
@@ -250,15 +243,15 @@ Heading should literally include the number of days, e.g. "Recent meetings (last
 
 (If list is empty: write "Nothing carrying over on your own actions. Clean slate.")
 
-**Team actions in your meetings** — open actions from meetings you attended, owned by others. Surfaced for awareness because the work sometimes lands on you anyway. Each line shows the owner. Tick off any that you've absorbed.
+**Product actions** — open actions from product-side colleagues (per `fathom.team_action_owners` config). These often land on the user as the only PM. No parenthetical preamble in the rendered brief; just the heading and the list.
 
-N+1. [ ] [<action text>](<fathom_timestamp_url>) → <owner> (from "<meeting title>", <date>)
-N+2. [ ] [<action text>](<fathom_timestamp_url>) → <owner> (from "<meeting title>", <date>)
+N+1. [ ] [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
+N+2. [ ] [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
 ...
 
-Numbering continues sequentially from the Your actions list — so if you have 7 own actions and 12 team actions, the team list is numbered 8-19. The tick-off prompt accepts any number across both lists.
+Numbering continues sequentially from the Your actions list. Owner names are NOT shown inline because all entries in this section share the same configured owner(s); putting the name on each line just adds noise. The tick-off prompt accepts any number across both lists.
 
-(If team list is empty: skip the sub-section entirely.)
+(If this list is empty: skip the sub-section entirely.)
 
 ## From your To Do page — triage
 
@@ -274,12 +267,18 @@ The numbers are 1-indexed and match the order in Step 9 (triage prompt).
 
 (If no untriaged items: skip the section entirely.)
 
-## Strategic-slot fit
+## Time blocked for deep work
 
-<One short paragraph. State the largest free gap, the to-do best matched to it from the **Strategic bucket only** (items where `Category` contains `Strategic`), and ONE sentence on why it fits — e.g. "it needs deep focus and it's been parked for 9 days".>
+Lena schedules her own deep-work blocks on the calendar. The point of this section is to surface those blocks (so she sees at a glance how much focus time she's already secured) and only suggest a free gap if it's worth flagging.
 
-(If no gap ≥45 min: "No deep-work window today. The strategic list will have to wait.")
-(If no Strategic items at all: "Strategic bucket is empty. Add one in Notion and tag it `Strategic`.")
+1. **Identify self-scheduled deep-work blocks.** From today's calendar, pick events where the only attendee is the user (or the event has no other attendees) AND the title is descriptive of a work block rather than a routine ceremony. Heuristics:
+   - INCLUDE: titles like `OSTs`, `OST`, `Deep work`, `Focus`, any initiative name (matched against the initiatives index), product-y titles like `Optty flow`, `Nature Footprint: Tech Spec`.
+   - EXCLUDE: `Stand up`, `Lunch`, `Catch up`, `1:1`, any title with another person's name, recurring ceremonies, breaks.
+2. **List them in one short paragraph**, summing total time: e.g. *"You've blocked 3h45 for deep work: OSTs 10:00–12:00, Nature Footprint tech spec 14:30–15:30, plus the 30-min Optty flow at 11:30. The Nature Footprint slot is the highest-leverage of these (mid-June deadline)."*
+3. **If gaps ≥45 min remain on top of those blocks**, mention them in one line: *"If you want more focus time, there's a 60-min open slot at 15:30."* If no gaps, skip.
+
+(If no self-scheduled deep blocks AND no free gaps: "No deep-work window today, and you haven't scheduled any. Consider blocking time tomorrow.")
+(If Notion Strategic bucket has items AND there's a free gap, append one sentence matching one strategic item to the gap — but keep the deep-blocks listing as the primary content of this section.)
 ```
 
 ### How to choose the one-sentence focus (Step 6)
@@ -320,6 +319,18 @@ If the open action items list is non-empty:
 6. Confirm to the user: `Marked N item(s) done. They won't appear tomorrow.`
 
 If the list was empty, skip this step entirely.
+
+## Step 8b: PR park
+
+If "Awaiting your input" surfaced any PRs (after the state filter):
+
+1. Print exactly: `Park any of these PRs until they update? (PR numbers e.g. "182,5", blank to skip):`
+2. Wait for the user's reply.
+3. For each PR number, look up its URL and `updatedAt` from the data fetched in Step 1.4.
+4. Run: `python3 ~/github/morning/scripts/ack_pr.py "<pr_url>" "<updated_at_iso>"`
+5. Confirm: `Parked N PR(s). They'll resurface only if updated.`
+
+If no PRs surfaced, skip this step entirely.
 
 ## Step 9: To Do page triage — Stage 1 (list & select)
 
