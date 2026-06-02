@@ -80,6 +80,8 @@ Make these tool calls in a SINGLE message (parallel tool use):
 
 10. **Acknowledged PRs state** — Bash: `cat ~/morning/state/acknowledged-prs.json 2>/dev/null || echo "[]"`
 
+11. **Your own open PRs** — Bash: `~/github/morning/scripts/fetch_github.sh authored`. Returns non-draft PRs you authored, enriched with `review_decision`, `reviewers_requested`, `latest_approvals`, `mergeable`. Used by the "Your PRs" section.
+
 ## Step 2: Per-initiative data fetch (parallel)
 
 Once Step 1's initiatives parse completes, for EACH initiative that has a `github` block in its YAML, dispatch in parallel:
@@ -232,6 +234,28 @@ Issues / PRs mentioning you in the last 24h (N):
 - [#<num>](<issue_url>) <title> (<repo>)
 
 (If both lists are empty, write "Nothing waiting on you. Nice.")
+
+## Your PRs
+
+PRs you've authored that are still open (drafts excluded). Two buckets, no reviewer names shown (always the same eng team).
+
+**Bucket logic:**
+- **Ready to merge** — `review_decision == "APPROVED"` OR (`latest_approvals` non-empty AND `mergeable == "MERGEABLE"`). The second clause catches the "3 of 4 approved, GitHub still says REVIEW_REQUIRED but the PR is mergeable" case.
+- **Awaiting review** — everything else (REVIEW_REQUIRED, no decision yet, etc).
+
+**Per-line annotations:**
+- Days stale = whole days since `updated_at`. If ≥5 days stale, prefix the line with `⚡` (call to poke).
+- If `reviewers_requested` is empty, append ` (no reviewers assigned)` so Lena knows to add them.
+
+**Ready to merge (N):**
+- [#<num>](<pr_url>) <title> (<repo>)
+
+**Awaiting review (N):**
+- ⚡ [#<num>](<pr_url>) <title> (<repo>) — N reviewers, K days stale
+- [#<num>](<pr_url>) <title> (<repo>) — N reviewers, K days stale
+- [#<num>](<pr_url>) <title> (<repo>) — opened today (no reviewers assigned)
+
+(If both buckets empty, write "Nothing of yours in flight.")
 
 ## Open action items
 
