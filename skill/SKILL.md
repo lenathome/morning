@@ -57,7 +57,7 @@ Load `~/morning/config.yaml`. All paths in this skill resolve relative to that c
 
 Make these tool calls in a SINGLE message (parallel tool use):
 
-1. **To-dos** — Notion MCP `notion-fetch` against the `todo_database_id` from config. Filter for incomplete items. If MCP unavailable, mark to-dos section as "Notion unavailable".
+1. **To-dos** — Notion MCP. Use `notion-search` with `data_source_url: collection://<todo_database_id from config's data source>` to list pages in the Tasks DB. Increase `page_size` to 25 (max) and `max_highlight_length: 0`. Then `notion-fetch` each page to read properties (Name, Due, Status, Category, Type, Client, Area, Parent, Subtasks). Filter out `Status: Done`. Keep `Parent` and `Subtasks` fields — they drive the parent/subtask rendering in the brief. If MCP unavailable, mark to-dos section as "Notion unavailable".
 
 2. **Calendar** — Bash: `python3 ~/github/morning/scripts/fetch_calendar.py "<ekko_email_domain>" "<primary_calendar>"` (both values from config; second arg restricts gcalcli to your own calendar so shared calendars don't clutter the brief)
 
@@ -162,29 +162,47 @@ Produce the brief as a single markdown file. Apply the voice guide at every step
 
 ## To-dos
 
-Bucket logic (in priority order — each task lands in the first matching bucket):
+**Bucket logic** (in priority order, each task lands in the first matching bucket):
 1. **Urgent / due today** — has `Due` ≤ today.
 2. **This week** — has `Due` in the rest of this calendar week.
 3. **Strategic** — `Category` contains `Strategic` (regardless of date, unless already shown above).
 4. **Later** — everything else (no date and not Strategic).
 
+**Parent/subtask rendering.** The Tasks DB has a self-referencing `Parent` / `Subtasks` relation. Tasks split into three kinds:
+- **Parent groupers** — `Subtasks` non-empty. These are containers, NOT actionable themselves. Do NOT render parent groupers as task lines. Use their Name as the heading for their child subtasks.
+- **Subtasks** — `Parent` non-empty. Bucketed individually by their own Due/Category.
+- **Standalone tasks** — both `Parent` and `Subtasks` empty. Bucketed individually.
+
+Within each bucket:
+1. Group the bucket's subtasks by their Parent's Name.
+2. For each parent group, render the parent name as an italic sub-header, then indent the subtasks under it.
+3. Render standalone tasks as flat list items, no indent.
+4. Sort: standalone tasks first, then parent groups alphabetically by parent name.
+
 Each line shows the task title, its due date if any, and its categories as inline `[Tag1, Tag2]` after the title.
 
+Example shape:
+
 **Urgent / due today** — N
-- <task title> (due today)  [<categories>]
-- ...
+- <standalone task> (due today)  [<categories>]
+- *<Parent name>:*
+  - <subtask> (due today)  [<categories>]
+  - <subtask> (due today)  [<categories>]
 
 **This week** — N
-- <task title> (due <date>)  [<categories>]
-- ...
+- <standalone task> (due <date>)  [<categories>]
+- *<Parent name>:*
+  - <subtask> (due <date>)  [<categories>]
 
 **Strategic** — N
-- <task title> (<due date if any>)  [<categories>]
-- ...
+- <standalone task> (<due date if any>)  [<categories>]
+- *<Parent name>:*
+  - <subtask> (<due date if any>)  [<categories>]
 
 **Later** — N
-- <task title>  [<categories>]
-- ...
+- <standalone task>  [<categories>]
+- *<Parent name>:*
+  - <subtask>  [<categories>]
 
 If a bucket is empty, omit its sub-heading entirely. If ALL buckets are empty, write "Notion DB is empty. Add tasks at <DB url>".
 
