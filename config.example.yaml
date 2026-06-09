@@ -10,13 +10,6 @@ notion:
   # new database for actionable tasks only.
   todo_database_id: "REPLACE_WITH_NOTION_DB_ID"
 
-  # URL of the existing "To Do" page that the morning tool scans for triage.
-  # This page stays untouched — it's Lena's strategic dumping ground.
-  todo_page_url: "https://www.notion.so/ekko-earth/To-Do-77903060bd6d473eba1011e191acefbb"
-
-  # Cap on untriaged items shown in the daily triage section.
-  triage_cap: 20
-
   # Property names on the new Notion Tasks DB. These match the schema created
   # in Task 3 Step 3. Edit ONLY if you rename properties in Notion.
   property_names:
