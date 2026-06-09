@@ -74,13 +74,9 @@ Make these tool calls in a SINGLE message (parallel tool use):
 
 7. **Acknowledged action items** — Bash: `cat ~/morning/state/acknowledged-actions.json 2>/dev/null || echo "[]"`
 
-8. **Existing "To Do" page (for triage)** — Notion MCP `notion-fetch` against `notion.todo_page_url`. The page is large (~70KB); the response will contain all toggle sections and bullets. Extraction happens in Step 4b (see below).
+8. **Acknowledged PRs state** — Bash: `cat ~/morning/state/acknowledged-prs.json 2>/dev/null || echo "[]"`
 
-9. **Triaged-items state** — Bash: `cat ~/morning/state/triaged-items.json 2>/dev/null || echo "[]"`
-
-10. **Acknowledged PRs state** — Bash: `cat ~/morning/state/acknowledged-prs.json 2>/dev/null || echo "[]"`
-
-11. **Your own open PRs** — Bash: `~/github/morning/scripts/fetch_github.sh authored`. Returns non-draft PRs you authored, enriched with `review_decision`, `reviewers_requested`, `latest_approvals`, `mergeable`. Used by the "Your PRs" section.
+9. **Your own open PRs** — Bash: `~/github/morning/scripts/fetch_github.sh authored`. Returns non-draft PRs you authored, enriched with `review_decision`, `reviewers_requested`, `latest_approvals`, `mergeable`. Used by the "Your PRs" section.
 
 ## Step 2: Per-initiative data fetch (parallel)
 
@@ -126,16 +122,6 @@ Loop over the meetings returned in Step 1.6:
    - Capture the summary text for embedding into the engineering progress section. If the summary mentions specific initiatives (match against the names from the initiatives index), attach the summary to that initiative's block. Otherwise attach as a top-level "Standup notes" line under engineering progress.
 
 3. **Recent meetings list.** For each non-standup meeting in the lookback window, prepare a single line. EXCLUDE any meeting that already contributed at least one item to the open action items list — that meeting's relevant context is already surfaced via the action's Fathom link, and listing it again is duplicative. Standups are also excluded here (they appear under engineering progress).
-
-## Step 4b: Extract untriaged To Do page bullets
-
-From the To Do page fetched in Step 1.8:
-
-1. **Extract bullets.** Read the markdown content. For each `<details>` toggle section, walk the top-level bullets (lines starting with `- ` or `* ` inside that section's body, ignoring lines beginning with `~~`/strikethrough and ignoring deeply nested rich content like email drafts). Each bullet's plain text becomes one candidate item.
-2. **Compute hash for each.** `sha1(normalised_text)[:16]` where `normalised_text` = lowercase + collapse whitespace.
-3. **Filter against state.** Drop any hash present in the triaged-items state from Step 1.9.
-4. **Cap.** Keep at most `notion.triage_cap` items (default 20), preserving page order (oldest top-to-bottom).
-5. **Hold the list.** Pair each surviving item with its hash and 1-indexed position. The list is used in the brief render (Step 5) and in Stage 1 of the interactive triage (Step 9 below).
 
 ## Step 5: Render the brief
 
@@ -295,20 +281,6 @@ Numbering continues sequentially from the Your actions list. Owner names are NOT
 
 (If this list is empty: skip the sub-section entirely.)
 
-## From your To Do page — triage
-
-(Section heading reads: "## From your To Do page — triage (N untriaged items, showing top K)" where N is total untriaged and K is what's surfaced after capping.)
-
-Numbered list of the surviving items from Step 4b:
-
-1. <bullet text>
-2. <bullet text>
-...
-
-The numbers are 1-indexed and match the order in Step 9 (triage prompt).
-
-(If no untriaged items: skip the section entirely.)
-
 ## Time blocked for deep work
 
 Lena schedules her own deep-work blocks on the calendar. The point of this section is to surface those blocks (so she sees at a glance how much focus time she's already secured) and only suggest a free gap if it's worth flagging.
@@ -374,52 +346,8 @@ If "Awaiting your input" surfaced any PRs (after the state filter):
 
 If no PRs surfaced, skip this step entirely.
 
-## Step 9: To Do page triage — Stage 1 (list & select)
+## Step 9: Final confirmation
 
-If the untriaged list from Step 4b is non-empty:
-
-1. Print exactly: `Numbers to add to DB? (e.g. "1,3-4"). "s <nums>" to skip-forever. Blank to leave for tomorrow:`
-2. Wait for the user's reply.
-3. Parse the response:
-   - Tokens like `1`, `3-4`, `7` → list of integer indices to ADD
-   - Token like `s 2,5,9` or `s2,5,9` → list of integer indices to SKIP-FOREVER
-   - Mixed input allowed: `1,3 s 2,5`
-   - Blank → no action; all items stay untriaged
-4. For each SKIP-FOREVER index: look up its hash, then run `python3 ~/github/morning/scripts/triage_state.py skip <hash1> <hash2> ...`
-5. Hold the list of ADD indices for Stage 2.
-
-## Step 10: To Do page triage — Stage 2 (per-item Q&A)
-
-For each index in the ADD list, in user-selected order:
-
-1. Print:
-   ```
-   Item <N>: "<bullet text>"
-   Details? (category, type, client, due, context — or "defaults"):
-   ```
-2. Wait for the user's reply.
-3. Parse the free-text reply. Apply these rules in order:
-   - If reply contains `defaults` or is blank → use `Type: Action`, `Category: ["Operational"]`, `Client: false`, no due date, no context.
-   - Else, recognise tokens (case-insensitive, comma- or space-separated):
-     - `strategic` → add `Strategic` to `Category` multi-select
-     - `operational` → add `Operational` to `Category` multi-select (default if neither given)
-     - `action` → `Type: Action` (default if not specified)
-     - `idea` → `Type: Idea`
-     - `feature` → `Type: Feature`
-     - `client` or `+client` → `Client: true`
-     - Specific client names like `megatix`, `acme` → `Client: true` AND if matching an Area option, add to `Area`
-     - Date phrases (`fri`, `friday`, `next week`, `2026-06-15`, `mon`, `tomorrow`) → set `Due` using a robust date parser. If ambiguous, ask: "Due when? (specific date please)"
-     - `context: <text>` or `+context: <text>` → save `<text>` as the page body content
-4. If the parse is ambiguous in a way you can't infer (e.g. user types just "tag it nicely"), ask ONE clarifying question, then proceed.
-5. Call Notion MCP `notion-create-pages` with:
-   - parent = `notion.todo_database_id`
-   - properties: Name = bullet text, plus parsed Category / Type / Client / Due / Area
-   - body = context text if provided
-6. Append the item's hash to triaged state: `python3 ~/github/morning/scripts/triage_state.py add <hash> <notion_page_url>`
-7. Print: `✓ Added. [<Category>, <Type>]` (and any extras)
-
-## Step 11: Final confirmation
-
-Print one summary line like: `Done. Added N, skipped M, K left for tomorrow.`
+Print one summary line like: `Done.`
 
 No other follow-up questions. No "would you like me to..." offers. The brief is the deliverable.
