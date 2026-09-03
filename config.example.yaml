@@ -40,7 +40,7 @@ calendar:
 
 github:
   # Repos to scan for "awaiting your input" (review requests, mentions).
-  # Per-initiative repos come from initiatives.md, not here.
+  # Per-project repos come from ~/product-os/projects/*.md, not here.
   ekko_repos:
     - ekko-home
     - ekko-edge-api
@@ -73,4 +73,6 @@ output:
   briefs_dir: "~/morning/briefs"
 
 paths:
-  initiatives_file: "~/morning/initiatives.md"
+  # Directory of per-project markdown files with YAML frontmatter.
+  # See ~/product-os/projects/_template.md for the schema.
+  projects_dir: "~/product-os/projects"
