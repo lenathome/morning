@@ -10,13 +10,6 @@ notion:
   # new database for actionable tasks only.
   todo_database_id: "REPLACE_WITH_NOTION_DB_ID"
 
-  # URL of the existing "To Do" page that the morning tool scans for triage.
-  # This page stays untouched — it's Lena's strategic dumping ground.
-  todo_page_url: "https://www.notion.so/ekko-earth/To-Do-77903060bd6d473eba1011e191acefbb"
-
-  # Cap on untriaged items shown in the daily triage section.
-  triage_cap: 20
-
   # Property names on the new Notion Tasks DB. These match the schema created
   # in Task 3 Step 3. Edit ONLY if you rename properties in Notion.
   property_names:
@@ -35,6 +28,10 @@ notion:
 calendar:
   # Any attendee whose email does NOT end with this domain is treated as external.
   ekko_email_domain: "@ekko.earth"
+  # Primary calendar to read from. Restricts gcalcli to YOUR own events so
+  # shared calendars (other people's standups, team OOO calendars, colleagues
+  # subscribed for awareness) don't clutter the brief.
+  primary_calendar: "lena.thome@ekko.earth"
   # For external meetings: research all named attendees, with a soft cap so
   # large group meetings don't blow up runtime. Meetings rarely exceed 10.
   external_meeting_attendee_cap: 10
@@ -43,7 +40,7 @@ calendar:
 
 github:
   # Repos to scan for "awaiting your input" (review requests, mentions).
-  # Per-initiative repos come from initiatives.md, not here.
+  # Per-project repos come from ~/product-os/projects/*.md, not here.
   ekko_repos:
     - ekko-home
     - ekko-edge-api
@@ -64,9 +61,18 @@ fathom:
   standup_title_regex: "(?i)^stand[\\s-]?up$"
   # Your name as it would appear as an action-item owner in Fathom summaries.
   user_name: "Lena"
+  # Team action item owners to surface alongside your own. Set this to people
+  # whose work you might absorb or need to track (typically a manager, or a
+  # tight peer). Other owners are filtered out of the team bucket. Match is
+  # case-insensitive substring, so "Etienne" matches "Etienne Smith".
+  # Leave empty to disable the team-actions section.
+  team_action_owners:
+    - Etienne
 
 output:
   briefs_dir: "~/morning/briefs"
 
 paths:
-  initiatives_file: "~/morning/initiatives.md"
+  # Directory of per-project markdown files with YAML frontmatter.
+  # See ~/product-os/projects/_template.md for the schema.
+  projects_dir: "~/product-os/projects"
