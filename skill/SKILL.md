@@ -46,7 +46,7 @@ leverage, delve, it's worth noting, seamless, game-changer, empower, transformat
   - Good: "Ship the carbon factors merchant-config doc."
   - Bad: "Your focus today is to consider shipping the carbon factors doc."
 - Strategic-slot suggestion: one short paragraph. State the time, the suggested item, and ONE sentence on why it fits.
-- Engineering progress: per-initiative one-liner BEFORE the PR list. The one-liner is the *narrative*, the PR list is the *evidence*.
+- Engineering progress: per-project one-liner BEFORE the PR list. The one-liner is the *narrative*, the PR list is the *evidence*.
 - External meeting prep: factual. Don't speculate about meeting outcomes or strategy.
 
 ## Configuration
@@ -119,7 +119,7 @@ Loop over the meetings returned in Step 1.6:
 
 2. **Standup classification.** For each meeting:
    - If the title matches `fathom.standup_title_regex`, flag it as a standup.
-   - Capture the summary text for embedding into the engineering progress section. If the summary mentions specific initiatives (match against the names from the projects index), attach the summary to that initiative's block. Otherwise attach as a top-level "Standup notes" line under engineering progress.
+   - Capture the summary text for embedding into the engineering progress section. If the summary mentions specific projects (match against the names from the projects index), attach the summary to that project's block. Otherwise attach as a top-level "Standup notes" line under engineering progress.
 
 3. **Recent meetings list.** For each non-standup meeting in the lookback window, prepare a single line. EXCLUDE any meeting that already contributed at least one item to the open action items list — that meeting's relevant context is already surfaced via the action's Fathom link, and listing it again is duplicative. Standups are also excluded here (they appear under engineering progress).
 
