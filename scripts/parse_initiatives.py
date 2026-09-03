@@ -28,7 +28,9 @@ try:
     import yaml
 except ImportError:
     print("error: pyyaml not installed. Run: python3 -m pip install --user pyyaml", file=sys.stderr)
-    sys.exit(1)
+    # Exit 0 with an empty result so the morning skill's parallel batch isn't cancelled.
+    print("[]")
+    sys.exit(0)
 
 
 # H2 heading then anything until next H2 or EOF.
