@@ -1,6 +1,6 @@
 ---
 name: morning
-description: Produce the daily morning brief — to-dos, calendar, engineering progress, GitHub items awaiting input, strategic-slot fit, and one-sentence focus. Run at the start of each working day.
+description: Produce the daily morning brief - to-dos, external meeting prep, engineering progress per project, GitHub items awaiting input, your open PRs, open action items, deep-work blocks and a one-sentence focus. Run at the start of each working day.
 ---
 
 # /morning — daily brief skill
@@ -46,7 +46,7 @@ leverage, delve, it's worth noting, seamless, game-changer, empower, transformat
   - Good: "Ship the carbon factors merchant-config doc."
   - Bad: "Your focus today is to consider shipping the carbon factors doc."
 - Strategic-slot suggestion: one short paragraph. State the time, the suggested item, and ONE sentence on why it fits.
-- Engineering progress: per-initiative one-liner BEFORE the PR list. The one-liner is the *narrative*, the PR list is the *evidence*.
+- Engineering progress: per-project one-liner BEFORE the PR list. The one-liner is the *narrative*, the PR list is the *evidence*.
 - External meeting prep: factual. Don't speculate about meeting outcomes or strategy.
 
 ## Configuration
@@ -61,7 +61,7 @@ Make these tool calls in a SINGLE message (parallel tool use):
 
 2. **Calendar** — Bash: `python3 ~/github/morning/scripts/fetch_calendar.py "<ekko_email_domain>" "<primary_calendar>"` (both values from config; second arg restricts gcalcli to your own calendar so shared calendars don't clutter the brief)
 
-3. **Initiatives index** — Bash: `python3 ~/github/morning/scripts/parse_initiatives.py "<initiatives_file from config>"`
+3. **Projects index** — Bash: `python3 ~/github/morning/scripts/parse_projects.py "<paths.projects_dir from config>"`. Returns a JSON array of live projects from `~/product-os/projects/*.md`, each with `slug, name, status, owner, repos, keywords, notion, next_milestone, target_date, last_reviewed, stale, body`. If the command exits non-zero, render the Engineering progress section as "Projects unavailable: <first line of stderr>" and continue.
 
 4. **GitHub reviewer-requested** — Bash: `~/github/morning/scripts/fetch_github.sh reviewer-requested`
 
@@ -78,13 +78,13 @@ Make these tool calls in a SINGLE message (parallel tool use):
 
 9. **Your own open PRs** — Bash: `~/github/morning/scripts/fetch_github.sh authored`. Returns non-draft PRs you authored, enriched with `review_decision`, `reviewers_requested`, `latest_approvals`, `mergeable`. Used by the "Your PRs" section.
 
-## Step 2: Per-initiative data fetch (parallel)
+## Step 2: Per-project data fetch (parallel)
 
-Once Step 1's initiatives parse completes, for EACH initiative that has a `github` block in its YAML, dispatch in parallel:
+Once Step 1's projects parse completes, for EACH project whose `repos` list is non-empty and whose `status` is not `done`, dispatch in parallel:
 
-- `~/github/morning/scripts/fetch_github.sh initiative "<repos comma-joined>" "<keywords comma-joined>"`
+- `~/github/morning/scripts/fetch_github.sh initiative "<repos comma-joined>" "<keywords comma-joined, or empty string>"`
 
-If an initiative has no GitHub config, no fetch — it'll appear in the brief with status only.
+If a project has no repos, no fetch - it appears in the brief with status only.
 
 ## Step 3: Compute calendar gaps
 
@@ -119,7 +119,7 @@ Loop over the meetings returned in Step 1.6:
 
 2. **Standup classification.** For each meeting:
    - If the title matches `fathom.standup_title_regex`, flag it as a standup.
-   - Capture the summary text for embedding into the engineering progress section. If the summary mentions specific initiatives (match against the names from the initiatives index), attach the summary to that initiative's block. Otherwise attach as a top-level "Standup notes" line under engineering progress.
+   - Capture the summary text for embedding into the engineering progress section. If the summary mentions specific projects (match against the names from the projects index), attach the summary to that project's block. Otherwise attach as a top-level "Standup notes" line under engineering progress.
 
 3. **Recent meetings list.** For each non-standup meeting in the lookback window, prepare a single line. EXCLUDE any meeting that already contributed at least one item to the open action items list — that meeting's relevant context is already surfaced via the action's Fathom link, and listing it again is duplicative. Standups are also excluded here (they appear under engineering progress).
 
@@ -209,11 +209,13 @@ For each external meeting today:
 
 ## Engineering progress
 
-For each initiative from initiatives.md:
+For each project from the projects index with `status` other than `done`, ordered active first, then blocked, then waiting:
 
-**<Name>** — <owner>, <status>, target <date if present>
+**<name>** — <owner>, <status>, next: <next_milestone if present>, target <target_date if present>
 
-<one-liner: your own free-text status from initiatives.md>
+<one-liner: the first paragraph under `## Where it is` in the project body>
+
+(If `stale` is true, append on its own line: `Not reviewed since <last_reviewed or "never">. Update ~/product-os/projects/<slug>.md.`)
 
 Standup notes (from <meeting title>, <date>): <one or two lines distilled from the Fathom summary — only if a matching standup summary exists>.
 
@@ -286,7 +288,7 @@ Numbering continues sequentially from the Your actions list. Owner names are NOT
 Lena schedules her own deep-work blocks on the calendar. The point of this section is to surface those blocks (so she sees at a glance how much focus time she's already secured) and only suggest a free gap if it's worth flagging.
 
 1. **Identify self-scheduled deep-work blocks.** From today's calendar, pick events where the only attendee is the user (or the event has no other attendees) AND the title is descriptive of a work block rather than a routine ceremony. Heuristics:
-   - INCLUDE: titles like `OSTs`, `OST`, `Deep work`, `Focus`, any initiative name (matched against the initiatives index), product-y titles like `Optty flow`, `Nature Footprint: Tech Spec`.
+   - INCLUDE: titles like `OSTs`, `OST`, `Deep work`, `Focus`, any project name (matched against the projects index), product-y titles like `Optty flow`, `Nature Footprint: Tech Spec`.
    - EXCLUDE: `Stand up`, `Lunch`, `Catch up`, `1:1`, any title with another person's name, recurring ceremonies, breaks.
 2. **List them in one short paragraph**, summing total time: e.g. *"You've blocked 3h45 for deep work: OSTs 10:00–12:00, Nature Footprint tech spec 14:30–15:30, plus the 30-min Optty flow at 11:30. The Nature Footprint slot is the highest-leverage of these (mid-June deadline)."*
 3. **If gaps ≥45 min remain on top of those blocks**, mention them in one line: *"If you want more focus time, there's a 60-min open slot at 15:30."* If no gaps, skip.
@@ -299,7 +301,7 @@ Lena schedules her own deep-work blocks on the calendar. The point of this secti
 
 Synthesise across:
 - Items overdue or urgent in to-dos
-- Initiatives marked `blocked` or `in-review` where you're the owner
+- Projects marked `blocked` or `waiting` where you're the owner
 - External meetings (if there's a major one, prep IS the focus)
 - The strategic-slot suggestion (if the day is genuinely open)
 
