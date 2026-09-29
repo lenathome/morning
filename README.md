@@ -16,6 +16,21 @@ Running since 2026-05-26. Phase 1 of the product OS (2026-09) moved project cont
 ~/product-os/            # curated context repo - projects/*.md is read by the brief
 ```
 
+## session-sweep
+
+A second skill, `sweep/SKILL.md`, runs unattended just before the brief (or when I say "sweep sessions"). It reads every Claude Code session since its last run, appends a digest of each to `~/ai-log/YYYY-MM-DD.md` and queues proposed updates to the project files in `~/product-os/projects/`. It never edits a project file. The brief shows the queued proposals as numbered lines under "Project updates to review"; I accept or reject them there.
+
+State lives in `~/morning/state/`:
+
+- `sweep-last-run.txt` - start time of the last successful sweep. The next run reads sessions since then.
+- `project-proposals.json` - pending proposals. `project-proposals-log.json` keeps the resolved ones.
+
+Install:
+
+```
+ln -s ~/github/morning/sweep ~/.claude/skills/session-sweep
+```
+
 ## Tests
 
 ```

@@ -78,6 +78,8 @@ Make these tool calls in a SINGLE message (parallel tool use):
 
 9. **Your own open PRs** — Bash: `~/github/morning/scripts/fetch_github.sh authored`. Returns non-draft PRs you authored, enriched with `review_decision`, `reviewers_requested`, `latest_approvals`, `mergeable`. Used by the "Your PRs" section.
 
+10. **Pending project updates** — Bash: `python3 ~/github/morning/scripts/proposals.py list`. Returns the proposals queued by the session-sweep skill, each with `id, slug, kind, section, field, text, value, source, session_title, session_date, created_at`. If the command fails, the Project updates section shows "Project updates unavailable: <reason>".
+
 ## Step 2: Per-project data fetch (parallel)
 
 Once Step 1's projects parse completes, for EACH project whose `repos` list is non-empty and whose `status` is not `done`, dispatch in parallel:
@@ -173,7 +175,7 @@ A parent group renders as a standalone italic line, `*<Parent name>:*`, on its o
 
 Each line shows the task title, its due date if any, and its categories as inline `[Tag1, Tag2]` after the title.
 
-**Numbering.** Every actionable line across the WHOLE brief shares one running number sequence, starting at 1 here in To-dos and continuing, unbroken, into the Open action items section later in the document. Parent-name sub-headers are not actionable and do not consume a number; only standalone tasks and subtasks do. Keep an ordered lookup as you number: for each number, record whether it is a Notion to-do (its page id) or, later, a Fathom action (its stable key) — Step 8 needs this to know what to update when Lena replies with bare numbers.
+**Numbering.** Every actionable line across the WHOLE brief shares one running number sequence, starting at 1 here in To-dos and continuing, unbroken, into the Open action items section later in the document. Parent-name sub-headers are not actionable and do not consume a number; only standalone tasks and subtasks do. Keep an ordered lookup as you number: for each number, record whether it is a Notion to-do (its page id), later a Fathom action (its stable key) or, later still, a project update (its proposal id) — Step 8 needs this to know what to update when Lena replies with bare numbers.
 
 Example shape:
 
@@ -315,6 +317,20 @@ Numbering continues sequentially from the Your actions list, which itself contin
 
 (If this list is empty: skip the sub-section entirely.)
 
+## Project updates to review
+
+Proposals from Step 1.10, queued by the session-sweep skill. If there are no pending proposals, omit this whole section. If the fetch failed, write "Project updates unavailable: <reason>" instead.
+
+Print one sentence above the list, exactly: "From yesterday's sessions. Tick a number below to apply it to the project file."
+
+Then a blank line, then the list. Numbering continues the single running sequence from wherever the Product actions list ended (or Your actions, or To-dos, if those are empty). Same blank-line CommonMark rule as the other numbered sections: an ordered list that doesn't start at 1 can't interrupt a paragraph, so the sentence is followed by a blank line before the first number.
+
+Each line:
+
+N. [ ] **<project name>** - <section or field>: <text or value> (from "<session_title>", <session_date>)
+
+`<project name>` is the `name` from the projects index for the proposal's `slug`. `<section or field>` is `section` for an append and `field` for a frontmatter change; `<text or value>` is `text` or `value` to match. Group nothing: order by project name, then `created_at`. Record each number against its proposal `id` in the lookup map.
+
 ## Time blocked for deep work
 
 Lena schedules her own deep-work blocks on the calendar. The point of this section is to surface those blocks (so she sees at a glance how much focus time she's already secured) and only suggest a free gap if it's worth flagging.
@@ -357,7 +373,7 @@ Examples (bad):
 
 ## Step 8: Action item tick-off
 
-If the combined list (To-dos numbered lines plus Open action items) is non-empty:
+If the combined list (To-dos numbered lines, Open action items plus Project updates) is non-empty:
 
 1. Print exactly: `Already done any? (numbers comma-separated, blank to skip):`
 2. Wait for the user's reply in the same conversation.
@@ -365,9 +381,12 @@ If the combined list (To-dos numbered lines plus Open action items) is non-empty
 4. For each valid number, look it up in the running number→item map you built while rendering (Step 5's numbering note): it resolves to either a Notion to-do (page id) or a Fathom action (stable key).
 5. For a Notion to-do: update that page's `Status` property to `Done` via the Notion MCP.
 6. For a Fathom action: run `python3 ~/github/morning/scripts/ack_action.py <key1> <key2> ...` (batch all such keys into one call).
-7. Confirm to the user: `Marked N item(s) done. They won't appear tomorrow.`
+7. For a project update: run `python3 ~/github/morning/scripts/proposals.py accept <id1> <id2> ...` (batch all such ids into one call). This writes the change to the project file.
+8. Confirm to the user: `Marked N item(s) done. They won't appear tomorrow.` If any project updates were accepted, count them separately: N is the to-dos and Fathom actions only, and the line reads `Marked N item(s) done and applied M project update(s).` If only project updates were ticked: `Applied M project update(s).`
 
 If the combined list was empty, skip this step entirely.
+
+Unattended runs (scheduled, no user present) never accept or reject proposals, and never run this step.
 
 ## Step 8b: PR park
 
@@ -380,6 +399,18 @@ If "Awaiting your input" surfaced any PRs (after the state filter):
 5. Confirm: `Parked N PR(s). They'll resurface only if updated.`
 
 If no PRs surfaced, skip this step entirely.
+
+## Step 8c: Project update reject
+
+Only if the brief showed project updates and some were not accepted in Step 8. Never in an unattended run.
+
+1. Print exactly: `Reject any project updates? (numbers comma-separated, blank keeps them for tomorrow):`
+2. Wait for the user's reply.
+3. Map each valid number to its proposal id using the lookup map. Ignore numbers that aren't project updates.
+4. Run: `python3 ~/github/morning/scripts/proposals.py reject <id1> <id2> ...`
+5. Confirm: `Rejected N project update(s).`
+
+If the reply is blank, do nothing. The proposals stay pending and show again tomorrow.
 
 ## Step 9: Final confirmation
 
