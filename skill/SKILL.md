@@ -72,9 +72,9 @@ Make these tool calls in a SINGLE message (parallel tool use):
    - Then in parallel: `get_meeting_summary` for each meeting returned.
    - If the MCP is unavailable, mark the "Yesterday's meetings" and "Open action items" sections as "Fathom unavailable" and continue.
 
-7. **Acknowledged action items** — Bash: `cat ~/morning/state/acknowledged-actions.json 2>/dev/null || echo "[]"`
+7. **Acknowledged action items** — Read tool: `~/morning/state/acknowledged-actions.json`. If the file is missing, treat it as `[]`. Use Read, not `cat`, so an unattended run needs no Bash approval.
 
-8. **Acknowledged PRs state** — Bash: `cat ~/morning/state/acknowledged-prs.json 2>/dev/null || echo "[]"`
+8. **Acknowledged PRs state** — Read tool: `~/morning/state/acknowledged-prs.json`. If the file is missing, treat it as `[]`.
 
 9. **Your own open PRs** — Bash: `~/github/morning/scripts/fetch_github.sh authored`. Returns non-draft PRs you authored, enriched with `review_decision`, `reviewers_requested`, `latest_approvals`, `mergeable`. Used by the "Your PRs" section.
 
@@ -88,10 +88,10 @@ If a project has no repos, no fetch - it appears in the brief with status only.
 
 ## Step 3: Compute calendar gaps
 
-Pipe the calendar output through gap computation:
+Re-run the calendar fetch and pipe it straight into gap computation. Both halves are python3 calls, so the pipeline needs no extra Bash approval; do not paste the JSON through `echo`:
 
 ```
-echo '<calendar JSON from step 1>' | python3 ~/github/morning/scripts/compute_gaps.py --min-minutes 45
+python3 ~/github/morning/scripts/fetch_calendar.py "<ekko_email_domain>" "<primary_calendar>" | python3 ~/github/morning/scripts/compute_gaps.py --min-minutes 45
 ```
 
 ## Step 4: External meeting research
