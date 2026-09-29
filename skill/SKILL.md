@@ -167,28 +167,30 @@ Within each bucket:
 
 Each line shows the task title, its due date if any, and its categories as inline `[Tag1, Tag2]` after the title.
 
+**Numbering.** Every actionable line across the WHOLE brief shares one running number sequence, starting at 1 here in To-dos and continuing, unbroken, into the Open action items section later in the document. Parent-name sub-headers are not actionable and do not consume a number; only standalone tasks and subtasks do. Keep an ordered lookup as you number: for each number, record whether it is a Notion to-do (its page id) or, later, a Fathom action (its stable key) — Step 8 needs this to know what to update when Lena replies with bare numbers.
+
 Example shape:
 
 **Urgent / due today** — N
-- <standalone task> (due today)  [<categories>]
+1. <standalone task> (due today)  [<categories>]
 - *<Parent name>:*
-  - <subtask> (due today)  [<categories>]
-  - <subtask> (due today)  [<categories>]
+  2. <subtask> (due today)  [<categories>]
+  3. <subtask> (due today)  [<categories>]
 
 **This week** — N
-- <standalone task> (due <date>)  [<categories>]
+4. <standalone task> (due <date>)  [<categories>]
 - *<Parent name>:*
-  - <subtask> (due <date>)  [<categories>]
+  5. <subtask> (due <date>)  [<categories>]
 
 **Strategic** — N
-- <standalone task> (<due date if any>)  [<categories>]
+6. <standalone task> (<due date if any>)  [<categories>]
 - *<Parent name>:*
-  - <subtask> (<due date if any>)  [<categories>]
+  7. <subtask> (<due date if any>)  [<categories>]
 
 **Later** — N
-- <standalone task>  [<categories>]
+8. <standalone task>  [<categories>]
 - *<Parent name>:*
-  - <subtask>  [<categories>]
+  9. <subtask>  [<categories>]
 
 If a bucket is empty, omit its sub-heading entirely. If ALL buckets are empty, write "Notion DB is empty. Add tasks at <DB url>".
 
@@ -265,10 +267,12 @@ PRs you've authored that are still open (drafts excluded). Two buckets, no revie
 
 ## Open action items
 
-**Your actions** — action items where you're the owner or named. Numbered list. The action text MUST be wrapped as a markdown link to the Fathom timestamp URL so you can jump into the recording at the exact moment the action was raised.
+Numbering continues here from wherever To-dos left off — do NOT restart at 1. If To-dos ended at 9, the first action item here is 10.
 
-1. [ ] [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
-2. [ ] [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
+**Your actions** — action items where you're the owner or named. The action text MUST be wrapped as a markdown link to the Fathom timestamp URL so you can jump into the recording at the exact moment the action was raised.
+
+10. [ ] [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
+11. [ ] [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
 ...
 
 (If list is empty: write "Nothing carrying over on your own actions. Clean slate.")
@@ -279,7 +283,7 @@ N+1. [ ] [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>
 N+2. [ ] [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
 ...
 
-Numbering continues sequentially from the Your actions list. Owner names are NOT shown inline because all entries in this section share the same configured owner(s); putting the name on each line just adds noise. The tick-off prompt accepts any number across both lists.
+Numbering continues sequentially from the Your actions list, which itself continues from To-dos. Owner names are NOT shown inline because all entries in this section share the same configured owner(s); putting the name on each line just adds noise. The tick-off prompt in Step 8 accepts any number from anywhere in the brief: To-dos, Your actions or Product actions alike.
 
 (If this list is empty: skip the sub-section entirely.)
 
@@ -320,21 +324,22 @@ Examples (bad):
 ## Step 7: Save and present
 
 1. Save the rendered brief to: `<briefs_dir from config>/<YYYY-MM-DD>.md`
-2. Print the full brief to the conversation so the user sees it immediately.
+2. Print the ENTIRE brief, verbatim, in the chat message itself — every section, in full. Never substitute a condensed summary, a "highlights" version, or a pointer to the file in place of any section's content. The file is a copy for later, not the primary way Lena reads it; she reads it in the conversation, so nothing gets shortened, cut, or replaced with "see the saved brief" on the assumption she'll open the file.
 3. End with the file path so she can re-open the brief later.
 
 ## Step 8: Action item tick-off
 
-If the open action items list is non-empty:
+If the combined list (To-dos numbered lines plus Open action items) is non-empty:
 
 1. Print exactly: `Already done any? (numbers comma-separated, blank to skip):`
 2. Wait for the user's reply in the same conversation.
-3. Parse the response: split on commas, strip whitespace, drop anything that isn't a positive integer or that exceeds the list length.
-4. For each valid number, look up the corresponding action's stable key from the list you prepared in Step 4a.
-5. Run: `python3 ~/github/morning/scripts/ack_action.py <key1> <key2> ...`
-6. Confirm to the user: `Marked N item(s) done. They won't appear tomorrow.`
+3. Parse the response: split on commas, strip whitespace, drop anything that isn't a positive integer or that exceeds the highest number used in the brief.
+4. For each valid number, look it up in the running number→item map you built while rendering (Step 5's numbering note): it resolves to either a Notion to-do (page id) or a Fathom action (stable key).
+5. For a Notion to-do: update that page's `Status` property to `Done` via the Notion MCP.
+6. For a Fathom action: run `python3 ~/github/morning/scripts/ack_action.py <key1> <key2> ...` (batch all such keys into one call).
+7. Confirm to the user: `Marked N item(s) done. They won't appear tomorrow.`
 
-If the list was empty, skip this step entirely.
+If the combined list was empty, skip this step entirely.
 
 ## Step 8b: PR park
 
