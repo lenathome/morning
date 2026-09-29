@@ -139,6 +139,57 @@ class ExtractTests(unittest.TestCase):
         [s] = self.run_extract()
         self.assertEqual(s["scheduled_task"], "morning-sweep")
 
+    def test_machine_injected_prefixes_excluded(self):
+        prefixes = [
+            "<task-notification>x", "<system-reminder>x", "Another Claude session sent a message: hi",
+            "<agent-message from=a>x", "Base directory for this skill: /x",
+            "<local-command-caveat>x", "<command-name>/clear", "<local-command-stdout>x",
+            "<bash-stdout>x", "<bash-input>ls", "[Request interrupted by user for tool use]",
+            "The app was quit while you were working",
+        ]
+        for i, prefix in enumerate(prefixes):
+            with self.subTest(prefix=prefix):
+                entries = [
+                    user("2026-09-29T11:00:00Z", "  \n" + prefix),
+                    user("2026-09-29T11:01:00Z", "real words"),
+                ]
+                for old in self.root.glob("p/*.jsonl"):
+                    old.unlink()
+                write_session(self.root, "p", f"s{i}.jsonl", entries)
+                [s] = self.run_extract()
+                self.assertEqual(s["human_turns"], 1)
+                self.assertEqual([m["text"] for m in s["messages"]], ["real words"])
+
+    def test_machine_only_session_dropped(self):
+        write_session(self.root, "p", "s1.jsonl", [
+            user("2026-09-29T11:00:00Z", "<task-notification>done"),
+            assistant("2026-09-29T11:01:00Z", "ok"),
+        ])
+        self.assertEqual(self.run_extract(), [])
+
+    def test_non_human_origin_text_not_in_messages(self):
+        write_session(self.root, "p", "s1.jsonl", [
+            user("2026-09-29T11:00:00Z", "auto", turnOrigin="scheduled", origin={"kind": "scheduled"}),
+            user("2026-09-29T11:01:00Z", "mine"),
+        ])
+        [s] = self.run_extract()
+        self.assertEqual([m["text"] for m in s["messages"]], ["mine"])
+
+    def test_scheduled_task_detected_in_excluded_entry(self):
+        text = '<scheduled-task name="nightly" file="x">go</scheduled-task>'
+        write_session(self.root, "p", "s1.jsonl", [
+            user("2026-09-29T11:00:00Z", text, turnOrigin="scheduled", origin={"kind": "scheduled"}),
+            user("2026-09-29T11:01:00Z", "follow up"),
+        ])
+        [s] = self.run_extract()
+        self.assertEqual(s["scheduled_task"], "nightly")
+        self.assertEqual([m["text"] for m in s["messages"]], ["follow up"])
+
+    def test_ordinary_human_message_kept(self):
+        write_session(self.root, "p", "s1.jsonl", [user("2026-09-29T11:00:00Z", "Base directory is fine, thanks")])
+        [s] = self.run_extract()
+        self.assertEqual(s["messages"][0]["text"], "Base directory is fine, thanks")
+
     def test_scheduled_task_null_by_default(self):
         write_session(self.root, "p", "s1.jsonl", [user("2026-09-29T11:00:00Z", "hi")])
         self.assertIsNone(self.run_extract()[0]["scheduled_task"])
