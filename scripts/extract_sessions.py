@@ -9,9 +9,17 @@ Scans <projects-dir>/<project>/<session>.jsonl (default projects-dir:
 deeper files are subagent transcripts and are ignored. Files last modified before
 --since are skipped without being opened.
 
-Kept entries: timestamp strictly after --since and isSidechain not true. Only
-human user text and assistant text blocks are kept; tool calls, tool results and
-thinking blocks are dropped. Malformed lines are skipped.
+Kept entries: timestamp strictly after --since and isSidechain not true. Kept
+messages are assistant text blocks and genuine human user turns. A user entry is
+a human turn only when its origin is human (or unset) and its text is not
+machine-injected (see MACHINE_PREFIXES: task notifications, system reminders,
+messages from other Claude sessions, agent messages, skill base-directory
+banners, local-command and bash echoes, interrupt markers, app-quit notices).
+Those are Claude- or harness-generated, not the user's words, so they are left
+out of messages, human_turns and the started_at/ended_at range. Tool calls, tool
+results and thinking blocks are dropped. Malformed lines are skipped.
+scheduled_task, cwd and git_branch are still read from every user entry, so a
+<scheduled-task name="..."> wrapper is detected even when its entry is not kept.
 
 Output (stdout): JSON array sorted by started_at, one object per session:
     {session_id, cwd, git_branch, title, started_at, ended_at,
@@ -40,6 +48,20 @@ MAX_MESSAGE_CHARS = 2000
 MAX_SESSION_CHARS = 40000
 KEEP_HEAD = 5
 TRUNCATED_SUFFIX = "…[truncated]"
+MACHINE_PREFIXES = (
+    "<task-notification",
+    "<system-reminder",
+    "Another Claude session sent a message:",
+    "<agent-message",
+    "Base directory for this skill:",
+    "<local-command-caveat>",
+    "<command-name>",
+    "<local-command-stdout>",
+    "<bash-stdout>",
+    "<bash-input>",
+    "[Request interrupted by user",
+    "The app was quit while you were working",
+)
 SCHEDULED_RE = re.compile(r'<scheduled-task name="([^"]*)"')
 
 
@@ -106,6 +128,10 @@ def is_human_origin(entry: dict) -> bool:
     if turn_origin is None and origin_kind is None:
         return True
     return turn_origin == "human" or origin_kind == "human"
+
+
+def is_machine_text(text: str) -> bool:
+    return text.lstrip().startswith(MACHINE_PREFIXES)
 
 
 def cap_session(messages: list[dict]) -> list[dict]:
@@ -181,8 +207,9 @@ def extract_file(path: Path, since: dt.datetime) -> dict | None:
                     m = SCHEDULED_RE.search(text)
                     if m:
                         session["scheduled_task"] = m.group(1)
-                if is_human_origin(entry):
-                    session["human_turns"] += 1
+                if not is_human_origin(entry) or is_machine_text(text):
+                    continue
+                session["human_turns"] += 1
             raw_ts = entry["timestamp"]
             if first_dt is None or ts < first_dt:
                 first_dt = ts
