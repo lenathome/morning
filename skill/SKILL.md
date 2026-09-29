@@ -72,9 +72,9 @@ Make these tool calls in a SINGLE message (parallel tool use):
    - Then in parallel: `get_meeting_summary` for each meeting returned.
    - If the MCP is unavailable, mark the "Yesterday's meetings" and "Open action items" sections as "Fathom unavailable" and continue.
 
-7. **Acknowledged action items** — Bash: `cat ~/morning/state/acknowledged-actions.json 2>/dev/null || echo "[]"`
+7. **Acknowledged action items** — Read tool: `~/morning/state/acknowledged-actions.json`. If the file is missing, treat it as `[]`. Use Read, not `cat`, so an unattended run needs no Bash approval.
 
-8. **Acknowledged PRs state** — Bash: `cat ~/morning/state/acknowledged-prs.json 2>/dev/null || echo "[]"`
+8. **Acknowledged PRs state** — Read tool: `~/morning/state/acknowledged-prs.json`. If the file is missing, treat it as `[]`.
 
 9. **Your own open PRs** — Bash: `~/github/morning/scripts/fetch_github.sh authored`. Returns non-draft PRs you authored, enriched with `review_decision`, `reviewers_requested`, `latest_approvals`, `mergeable`. Used by the "Your PRs" section.
 
@@ -88,10 +88,10 @@ If a project has no repos, no fetch - it appears in the brief with status only.
 
 ## Step 3: Compute calendar gaps
 
-Pipe the calendar output through gap computation:
+Re-run the calendar fetch and pipe it straight into gap computation. Both halves are python3 calls, so the pipeline needs no extra Bash approval; do not paste the JSON through `echo`:
 
 ```
-echo '<calendar JSON from step 1>' | python3 ~/github/morning/scripts/compute_gaps.py --min-minutes 45
+python3 ~/github/morning/scripts/fetch_calendar.py "<ekko_email_domain>" "<primary_calendar>" | python3 ~/github/morning/scripts/compute_gaps.py --min-minutes 45
 ```
 
 ## Step 4: External meeting research
@@ -155,46 +155,59 @@ Produce the brief as a single markdown file. Apply the voice guide at every step
 4. **Later** — everything else (no date and not Strategic).
 
 **Parent/subtask rendering.** The Tasks DB has a self-referencing `Parent` / `Subtasks` relation. Tasks split into three kinds:
-- **Parent groupers** — `Subtasks` non-empty. These are containers, NOT actionable themselves. Do NOT render parent groupers as task lines. Use their Name as the heading for their child subtasks.
-- **Subtasks** — `Parent` non-empty. Bucketed individually by their own Due/Category.
+- **Parent groupers** — `Subtasks` non-empty. These are containers, NOT actionable themselves. Do NOT render parent groupers as task lines. Use their Name as the heading for their child subtasks. If the query returns an empty `Subtasks` field on every row, that view doesn't populate it - infer parent groupers instead from the children's `Parent` relation: any page named by at least one other row's `Parent` field is a grouper, even though its own `Subtasks` field reads empty.
+- **Subtasks** — `Parent` non-empty. Bucketed individually by their own Due/Category (see below), but never rendered under more than one heading.
 - **Standalone tasks** — both `Parent` and `Subtasks` empty. Bucketed individually.
 
-Within each bucket:
-1. Group the bucket's subtasks by their Parent's Name.
-2. For each parent group, render the parent name as an italic sub-header, then indent the subtasks under it.
-3. Render standalone tasks as flat list items, no indent.
-4. Sort: standalone tasks first, then parent groups alphabetically by parent name.
+**Each parent group renders exactly once in the whole To-dos section** - never split across buckets, never repeated:
+1. Bucket every subtask individually, using the bucket logic above against its own Due/Category.
+2. Place the group in the bucket of its most urgent subtask: the bucket of the subtask with the earliest `Due` date. If no subtask in the group has a `Due` date, use instead the highest-priority bucket (Urgent > This week > Strategic > Later) that any subtask in the group falls into.
+3. Within that one bucket, render the group once, with its subtasks sorted by `Due` date (undated subtasks last). Each subtask line still shows its own due date.
+
+Within each bucket: standalone tasks first (flat, no indent, sorted by due date), then parent groups (alphabetically by parent name).
+
+Every bucket heading line is followed by a blank line before its first list item, and a blank line separates one list (a run of standalone tasks, or a parent group's italic name line plus its subtasks) from the next. In CommonMark, an ordered list that doesn't start at 1 cannot interrupt a preceding paragraph, so a numbered line placed right after a heading or after a parent's italic name line - with no blank line between - merges into that line instead of rendering as a list. The same blank-line rule applies to the Open action items headings later in this document.
+
+A parent group renders as a standalone italic line, `*<Parent name>:*`, on its own with no leading bullet, followed by a blank line, then its numbered subtasks flush-left with no indent.
 
 Each line shows the task title, its due date if any, and its categories as inline `[Tag1, Tag2]` after the title.
+
+**Numbering.** Every actionable line across the WHOLE brief shares one running number sequence, starting at 1 here in To-dos and continuing, unbroken, into the Open action items section later in the document. Parent-name sub-headers are not actionable and do not consume a number; only standalone tasks and subtasks do. Keep an ordered lookup as you number: for each number, record whether it is a Notion to-do (its page id) or, later, a Fathom action (its stable key) — Step 8 needs this to know what to update when Lena replies with bare numbers.
 
 Example shape:
 
 **Urgent / due today** — N
-- <standalone task> (due today)  [<categories>]
-- *<Parent name>:*
-  - <subtask> (due today)  [<categories>]
-  - <subtask> (due today)  [<categories>]
+
+1. <standalone task> (due today)  [<categories>]
+
+*<Parent name>:*
+
+2. <subtask> (due today)  [<categories>]
+3. <subtask> (due tomorrow)  [<categories>]
 
 **This week** — N
-- <standalone task> (due <date>)  [<categories>]
-- *<Parent name>:*
-  - <subtask> (due <date>)  [<categories>]
+
+4. <standalone task> (due <date>)  [<categories>]
 
 **Strategic** — N
-- <standalone task> (<due date if any>)  [<categories>]
-- *<Parent name>:*
-  - <subtask> (<due date if any>)  [<categories>]
+
+5. <standalone task> (<due date if any>)  [<categories>]
+
+*<Parent name 2>:*
+
+6. <subtask> (<due date if any>)  [<categories>]
 
 **Later** — N
-- <standalone task>  [<categories>]
-- *<Parent name>:*
-  - <subtask>  [<categories>]
+
+7. <standalone task>  [<categories>]
 
 If a bucket is empty, omit its sub-heading entirely. If ALL buckets are empty, write "Notion DB is empty. Add tasks at <DB url>".
 
 ## External meeting prep
 
 Only render this section when there's at least one external meeting today (events with `is_external: true`). DO NOT render a calendar listing of all events — the user can check her own calendar. The calendar data is still fetched in Step 1 and used in Step 4 (research), Step 3 (gap computation) and Strategic-slot fit (deep-work block detection), but it does NOT get listed in the brief.
+
+Never repeat a To-dos or Open action items line here in full - each already has its own numbered line elsewhere in the brief. If any numbered item relates to this meeting (by company, client or topic), add one line pointing to it by number instead, e.g. "Your open Moka items are 3 to 8 and 29." Omit the line if nothing relates.
 
 For each external meeting today:
 
@@ -204,28 +217,44 @@ For each external meeting today:
   - <Name> — <role at company>
   - ...
 - (If recent news or anything notable, one line.)
+- (If related numbered items exist, one line per the rule above.)
 
 (If no external meetings: skip this section entirely.)
 
 ## Engineering progress
 
-For each project from the projects index with `status` other than `done`, ordered active first, then blocked, then waiting:
+Projects whose slug starts with `client-` are commercial partners, not engineering initiatives. Skip them in the loop below entirely - they render together at the end of this section instead, under "Partners - next actions".
 
-**<name>** — <owner>, <status>, next: <next_milestone if present>, target <target_date if present>
+For each remaining project from the projects index with `status` other than `done`, ordered active first, then blocked, then waiting:
+
+**<name>** - <owner>, <status>, next: <next_milestone if present>, target <target_date if present>
 
 <one-liner: the first paragraph under `## Where it is` in the project body>
 
 (If `stale` is true, append on its own line: `Not reviewed since <last_reviewed or "never">. Update ~/product-os/projects/<slug>.md.`)
 
-Standup notes (from <meeting title>, <date>): <one or two lines distilled from the Fathom summary — only if a matching standup summary exists>.
+Standup notes (from <meeting title>, <date>): <one or two lines distilled from the Fathom summary - only if a matching standup summary exists>.
 
-GitHub:
-- <N PRs merged in last 7 days, N open>
+**PR relevance.** A project's PR list only shows PRs that actually relate to that project:
+- No `keywords` set on the project (even if it has `repos`) → skip the list and write: `GitHub: no keywords set, add some to ~/product-os/projects/<slug>.md.`
+- Otherwise, a PR relates to a project when it matched that project's keyword search from Step 2. If the same PR matches more than one project's keywords (shared repo, overlapping terms), attribute it to the single best-matching project only - never list the same PR under two projects.
+- Keywords set but nothing matched → write: `GitHub: no related PRs this week.`
+- Otherwise, render:
+
+GitHub: <N PRs merged in last 7 days, N open>
 - Open PRs (PR numbers MUST be markdown links to the PR URL):
-  - [#<num>](<pr_url>) <title> (<repo>) — <state>, updated <relative>
+  - [#<num>](<pr_url>) <title> (<repo>) - <state>, updated <relative>
   - ...
 
-(If no recent activity at all: write "No recent activity.")
+The counts and list cover related PRs only - never the full, unfiltered set the repo-level fetch returned.
+
+**Partners - next actions**
+
+One bullet per `client-` project, in place of the full block above:
+
+- **<name>** (<owner>[, <status> if not active]): <next_milestone>[, target <target_date>]
+
+No "Where it is" paragraph, no standup notes, no GitHub subsection, for these. (If there are no commercial partner projects, omit this heading entirely.)
 
 ## Awaiting your input
 
@@ -265,10 +294,12 @@ PRs you've authored that are still open (drafts excluded). Two buckets, no revie
 
 ## Open action items
 
-**Your actions** — action items where you're the owner or named. Numbered list. The action text MUST be wrapped as a markdown link to the Fathom timestamp URL so you can jump into the recording at the exact moment the action was raised.
+Numbering continues here from wherever To-dos left off — do NOT restart at 1. If To-dos ended at 9, the first action item here is 10. As in To-dos, each `**Your actions**` / `**Product actions**` heading below is followed by a blank line before its numbered list starts, for the same CommonMark reason: an ordered list that doesn't start at 1 can't interrupt the heading's paragraph.
 
-1. [ ] [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
-2. [ ] [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
+**Your actions** — action items where you're the owner or named. The action text MUST be wrapped as a markdown link to the Fathom timestamp URL so you can jump into the recording at the exact moment the action was raised.
+
+10. [ ] [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
+11. [ ] [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
 ...
 
 (If list is empty: write "Nothing carrying over on your own actions. Clean slate.")
@@ -279,7 +310,7 @@ N+1. [ ] [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>
 N+2. [ ] [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
 ...
 
-Numbering continues sequentially from the Your actions list. Owner names are NOT shown inline because all entries in this section share the same configured owner(s); putting the name on each line just adds noise. The tick-off prompt accepts any number across both lists.
+Numbering continues sequentially from the Your actions list, which itself continues from To-dos. Owner names are NOT shown inline because all entries in this section share the same configured owner(s); putting the name on each line just adds noise. The tick-off prompt in Step 8 accepts any number from anywhere in the brief: To-dos, Your actions or Product actions alike.
 
 (If this list is empty: skip the sub-section entirely.)
 
@@ -320,21 +351,22 @@ Examples (bad):
 ## Step 7: Save and present
 
 1. Save the rendered brief to: `<briefs_dir from config>/<YYYY-MM-DD>.md`
-2. Print the full brief to the conversation so the user sees it immediately.
+2. Print the ENTIRE brief, verbatim, in the chat message itself — every section, in full. Never substitute a condensed summary, a "highlights" version, or a pointer to the file in place of any section's content. The file is a copy for later, not the primary way Lena reads it; she reads it in the conversation, so nothing gets shortened, cut, or replaced with "see the saved brief" on the assumption she'll open the file.
 3. End with the file path so she can re-open the brief later.
 
 ## Step 8: Action item tick-off
 
-If the open action items list is non-empty:
+If the combined list (To-dos numbered lines plus Open action items) is non-empty:
 
 1. Print exactly: `Already done any? (numbers comma-separated, blank to skip):`
 2. Wait for the user's reply in the same conversation.
-3. Parse the response: split on commas, strip whitespace, drop anything that isn't a positive integer or that exceeds the list length.
-4. For each valid number, look up the corresponding action's stable key from the list you prepared in Step 4a.
-5. Run: `python3 ~/github/morning/scripts/ack_action.py <key1> <key2> ...`
-6. Confirm to the user: `Marked N item(s) done. They won't appear tomorrow.`
+3. Parse the response: split on commas, strip whitespace, drop anything that isn't a positive integer or that exceeds the highest number used in the brief.
+4. For each valid number, look it up in the running number→item map you built while rendering (Step 5's numbering note): it resolves to either a Notion to-do (page id) or a Fathom action (stable key).
+5. For a Notion to-do: update that page's `Status` property to `Done` via the Notion MCP.
+6. For a Fathom action: run `python3 ~/github/morning/scripts/ack_action.py <key1> <key2> ...` (batch all such keys into one call).
+7. Confirm to the user: `Marked N item(s) done. They won't appear tomorrow.`
 
-If the list was empty, skip this step entirely.
+If the combined list was empty, skip this step entirely.
 
 ## Step 8b: PR park
 

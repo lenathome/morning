@@ -2,7 +2,7 @@
 # fetch_github.sh — fetch GitHub signal for the morning brief.
 #
 # Subcommands:
-#   initiative <repo,repo> <keyword,keyword>   list recent PRs (last 7 days) matching repos + any keyword
+#   initiative <repo,repo> <keyword,keyword>   list recent PRs (last 7 days) matching repos + any keyword (OR'd, one search per keyword, results merged)
 #   reviewer-requested                          PRs where the current user is requested as reviewer
 #   mentions                                    issues/PRs mentioning the current user updated in last 24h
 #
@@ -28,7 +28,9 @@ case "$subcommand" in
       exit 2
     fi
 
-    # Scope to repos, last 7 days, any keyword in title.
+    # Scope to repos, last 7 days, keywords OR'd (each keyword is its own
+    # search — gh search prs joins multiple positional args into a single
+    # AND'd query, so ANDing keywords together silently over-narrows results).
     week_ago=$(date -v-7d +%Y-%m-%d 2>/dev/null || date -d "7 days ago" +%Y-%m-%d)
 
     # Build --repo flags (gh accepts multiple). Assume ekko-enviroconomy org.
@@ -38,16 +40,29 @@ case "$subcommand" in
       repo_flags+=(--repo "ekko-enviroconomy/${r// /}")
     done
 
-    # Build the command as an array. Optional keyword qualifiers append as positional args.
-    cmd=(gh search prs "${repo_flags[@]}" --updated ">=$week_ago" --json number,title,url,state,author,repository,updatedAt --limit 30)
-    if [[ -n "$keywords" ]]; then
+    base_fields="number,title,url,state,author,repository,updatedAt"
+
+    if [[ -z "$keywords" ]]; then
+      gh search prs "${repo_flags[@]}" --updated ">=$week_ago" --json "$base_fields" --limit 100 2>/dev/null || echo "[]"
+    else
+      # One search per keyword, quoted as a phrase so multi-word keywords
+      # (e.g. "impact receipt") match as a phrase rather than as separate
+      # AND'd terms. Merge and dedupe by URL.
+      results=()
       IFS=',' read -ra kw_arr <<< "$keywords"
       for k in "${kw_arr[@]}"; do
-        cmd+=("${k} in:title")
+        k="$(echo "$k" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+        [[ -z "$k" ]] && continue
+        qualifier="\"${k}\" in:title"
+        one=$(gh search prs "${repo_flags[@]}" --updated ">=$week_ago" --json "$base_fields" --limit 100 "$qualifier" 2>/dev/null || echo "[]")
+        results+=("$one")
       done
+      if [[ ${#results[@]} -eq 0 ]]; then
+        echo "[]"
+      else
+        printf '%s\n' "${results[@]}" | jq -s 'add | unique_by(.url)'
+      fi
     fi
-
-    "${cmd[@]}" 2>/dev/null || echo "[]"
     ;;
 
   reviewer-requested)
