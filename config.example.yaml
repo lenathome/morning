@@ -54,11 +54,11 @@ fathom:
   enabled: true
   # How many days back to scan for meetings and open action items.
   lookback_days: 7
-  # Title regex used to detect engineering standups. Lena has exactly one
-  # standup, titled "Stand up" (or "Standup"), at 09:30 Tue-Fri. Full-title
-  # match so we don't accidentally catch other meetings with "stand up" in
-  # the description.
-  standup_title_regex: "(?i)^stand[\\s-]?up$"
+  # Title regex used to detect internal team syncs, whose summaries feed the
+  # engineering progress section: "P&E team sync" and "Knowledge share"
+  # (or "Knowledge sharing"). Anchored at the start so other meetings that
+  # merely mention these words are not caught.
+  team_sync_title_regex: "(?i)^(p\\s*&\\s*e team sync|knowledge shar(e|ing))"
   # Your name as it would appear as an action-item owner in Fathom summaries.
   user_name: "Lena"
   # Team action item owners to surface alongside your own. Set this to people

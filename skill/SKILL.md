@@ -117,11 +117,12 @@ Loop over the meetings returned in Step 1.6:
    - Filter out (from EITHER bucket) any action whose key is in the acknowledged-actions list from Step 1.7. Tick-off works the same way regardless of bucket.
    - Cap the team actions bucket at 20 items, ordered by meeting date descending then by position within the meeting. The user can manually look in Fathom for older ones.
 
-2. **Standup classification.** For each meeting:
-   - If the title matches `fathom.standup_title_regex`, flag it as a standup.
-   - Capture the summary text for embedding into the engineering progress section. If the summary mentions specific projects (match against the names from the projects index), attach the summary to that project's block. Otherwise attach as a top-level "Standup notes" line under engineering progress.
+2. **Team sync classification.** For each meeting:
+   - If the title matches `fathom.team_sync_title_regex`, flag it as a team sync.
+   - Capture the summary text for embedding into the engineering progress section. If the summary mentions specific projects (match against the names from the projects index), attach the summary to that project's block. Otherwise attach as a top-level "Team sync notes" line under engineering progress.
+   - Action items from team syncs are still extracted in item 1 as normal.
 
-3. **Recent meetings list.** For each non-standup meeting in the lookback window, prepare a single line. EXCLUDE any meeting that already contributed at least one item to the open action items list — that meeting's relevant context is already surfaced via the action's Fathom link, and listing it again is duplicative. Standups are also excluded here (they appear under engineering progress).
+3. **Recent meetings list.** For each non-team-sync meeting in the lookback window, prepare a single line. EXCLUDE any meeting that already contributed at least one item to the open action items list — that meeting's relevant context is already surfaced via the action's Fathom link, and listing it again is duplicative. Team syncs are also excluded here (they appear under engineering progress).
 
 ## Step 5: Render the brief
 
@@ -233,7 +234,7 @@ For each remaining project from the projects index with `status` other than `don
 
 (If `stale` is true, append on its own line: `Not reviewed since <last_reviewed or "never">. Update ~/product-os/projects/<slug>.md.`)
 
-Standup notes (from <meeting title>, <date>): <one or two lines distilled from the Fathom summary - only if a matching standup summary exists>.
+Team sync notes (from <meeting title>, <date>): <one or two lines distilled from the Fathom summary - only if a matching team sync summary exists>.
 
 **PR relevance.** A project's PR list only shows PRs that actually relate to that project:
 - No `keywords` set on the project (even if it has `repos`) → skip the list and write: `GitHub: no keywords set, add some to ~/product-os/projects/<slug>.md.`
@@ -254,7 +255,7 @@ One bullet per `client-` project, in place of the full block above:
 
 - **<name>** (<owner>[, <status> if not active]): <next_milestone>[, target <target_date>]
 
-No "Where it is" paragraph, no standup notes, no GitHub subsection, for these. (If there are no commercial partner projects, omit this heading entirely.)
+No "Where it is" paragraph, no team sync notes, no GitHub subsection, for these. (If there are no commercial partner projects, omit this heading entirely.)
 
 ## Awaiting your input
 
@@ -320,7 +321,7 @@ Lena schedules her own deep-work blocks on the calendar. The point of this secti
 
 1. **Identify self-scheduled deep-work blocks.** From today's calendar, pick events where the only attendee is the user (or the event has no other attendees) AND the title is descriptive of a work block rather than a routine ceremony. Heuristics:
    - INCLUDE: titles like `OSTs`, `OST`, `Deep work`, `Focus`, any project name (matched against the projects index), product-y titles like `Optty flow`, `Nature Footprint: Tech Spec`.
-   - EXCLUDE: `Stand up`, `Lunch`, `Catch up`, `1:1`, any title with another person's name, recurring ceremonies, breaks.
+   - EXCLUDE: `P&E team sync`, `Knowledge share`, `Lunch`, `Catch up`, `1:1`, any title with another person's name, recurring ceremonies, breaks.
 2. **List them in one short paragraph**, summing total time: e.g. *"You've blocked 3h45 for deep work: OSTs 10:00–12:00, Nature Footprint tech spec 14:30–15:30, plus the 30-min Optty flow at 11:30. The Nature Footprint slot is the highest-leverage of these (mid-June deadline)."*
 3. **If gaps ≥45 min remain on top of those blocks**, mention them in one line: *"If you want more focus time, there's a 60-min open slot at 15:30."* If no gaps, skip.
 
