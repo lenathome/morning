@@ -1,6 +1,6 @@
 # morning
 
-A personal Claude Code skill that produces a daily morning brief - to-dos, external meeting prep, engineering progress per project, GitHub items awaiting input, your open PRs, open action items and deep-work blocks, plus a one-sentence focus for the day.
+A personal Claude Code skill that produces a daily morning brief - urgent to-dos, PRs needing you, open action items, to-dos, external meeting prep and engineering progress per project, plus a one-sentence focus for the day.
 
 This is **my own tool**, not an ekko team tool. The pattern is partly inspired by [Ryan's morning tool](https://github.com/ryanharmuth-ekko/crazy-experiments/tree/main/morning) (built for dispatching engineering work) and the Anthropic morning brief pattern, but tailored to the Head of Product job.
 
@@ -18,7 +18,7 @@ Running since 2026-05-26. Phase 1 of the product OS (2026-09) moved project cont
 
 ## session-sweep
 
-A second skill, `sweep/SKILL.md`, runs unattended just before the brief (or when I say "sweep sessions"). It reads every Claude Code session since its last run, appends a digest of each to `~/ai-log/YYYY-MM-DD.md` and queues proposed updates to the project files in `~/product-os/projects/`. It never edits a project file. The brief shows the queued proposals as numbered lines under "Project updates to review"; I accept or reject them there.
+A second skill, `sweep/SKILL.md`, runs unattended just before the brief (or when I say "sweep sessions"). It reads every Claude Code session since its last run, appends a digest of each to `~/ai-log/YYYY-MM-DD.md` and queues proposed updates to the project files in `~/product-os/projects/`. It never edits a project file. The brief opens with the queued proposals as a numbered list (Step 0). I reply with the numbers to apply, "all" or "none" before the brief is built.
 
 State lives in `~/morning/state/`:
 
