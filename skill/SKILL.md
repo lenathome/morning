@@ -77,7 +77,7 @@ Make these tool calls in a SINGLE message (parallel tool use):
 
 1. **To-dos** — Notion MCP. Use `notion-search` with `data_source_url: collection://<todo_database_id from config's data source>` to list pages in the Tasks DB. Increase `page_size` to 25 (max) and `max_highlight_length: 0`. Then `notion-fetch` each page to read properties (Name, Due, Status, Category, Type, Client, Area, Parent, Subtasks). Filter out `Status: Done` and filter out `Type: Idea`. An Idea is not a to-do: parked ideas live in `~/product-os/backlog.md` and are reviewed at the cycle boundary, so surfacing them daily buries the actionable rows. Rows with no `Type` set are kept, because an unset Type is missing data rather than a decision. Keep `Parent` and `Subtasks` fields — they drive the parent/subtask rendering in the brief. If MCP unavailable, mark to-dos section as "Notion unavailable".
 
-2. **Calendar** — Bash: `python3 ~/github/morning/scripts/fetch_calendar.py "<ekko_email_domain>" "<primary_calendar>"` (both values from config; second arg restricts gcalcli to your own calendar so shared calendars don't clutter the brief)
+2. **Calendar** — Bash: `python3 ~/github/morning/scripts/fetch_calendar.py "<ekko_email_domain>" "<primary_calendar>" "<calendar.internal_contacts comma-joined, or empty string>"` (values from config; second arg restricts gcalcli to your own calendar so shared calendars don't clutter the brief; third arg lists personal contacts who do not make a meeting external)
 
 3. **Projects index** — Bash: `python3 ~/github/morning/scripts/parse_projects.py "<paths.projects_dir from config>"`. Returns a JSON array of live projects from `~/product-os/projects/*.md`, each with `slug, name, status, owner, repos, keywords, notion, next_milestone, target_date, last_reviewed, stale, body`. If the command exits non-zero, render the Engineering progress section as "Projects unavailable: <first line of stderr>" and continue.
 
@@ -137,7 +137,13 @@ Loop over the meetings returned in Step 1.6:
 
 ## Step 4: Render the brief
 
-Use the voice guide section above. The full brief structure is in the next section of this skill file (continued in part 2).
+Write the brief's content as JSON to `<briefs_dir>/<YYYY-MM-DD>.json`, following the contract in `docs/plans/2026-10-01-brief-html-page.md` (section "The brief JSON contract"). That contract lives in this repo; the skill reads it from `~/github/morning/docs/plans/2026-10-01-brief-html-page.md`. Do not number anything: the renderer does. Put every list in final display order (standalone tasks first, then parent groups alphabetically). Apply the voice guide to every string you write. Then run:
+
+`python3 ~/github/morning/scripts/render_brief.py <briefs_dir>/<date>.json --md <briefs_dir>/<date>.md --html <briefs_dir>/<date>.html --map ~/morning/state/brief-map-<date>.json`
+
+It prints one JSON line of counts; keep it for Step 6. If it exits 1, fix the JSON it names and run it again.
+
+The "Brief structure" section below still defines what goes in each list.
 
 ## Error handling
 
@@ -151,7 +157,7 @@ If the entire orchestration fails before rendering, write a one-line error to `~
 
 Produce the brief as a single markdown file. Apply the voice guide at every step.
 
-### Template
+### Markdown archive layout (produced by render_brief.py)
 
 ```markdown
 # Morning brief — <Weekday DD MMM YYYY>
@@ -376,13 +382,15 @@ Examples (bad):
 - "Focus on engineering progress." (vague)
 - "Do the things from your to-do list." (useless)
 
-## Step 6: Save and present
+## Step 6: Publish and present
 
-
-1. Save the rendered brief to: `<briefs_dir from config>/<YYYY-MM-DD>.md`
-2. Print the ENTIRE brief, verbatim, in the chat message itself — every section, in full. Never substitute a condensed summary, a "highlights" version, or a pointer to the file in place of any section's content. The file is a copy for later, not the primary way Lena reads it; she reads it in the conversation, so nothing gets shortened, cut, or replaced with "see the saved brief" on the assumption she'll open the file.
-3. End with the file path so she can re-open the brief later.
-
+1. Publish `<briefs_dir>/<date>.html` with the Artifact tool. If `output.artifact_url` is set: first `read` that URL (a publish to an artifact this conversation hasn't read is refused), then publish with `url` set to it, no `icon`. If it is empty: publish without `url`, with `icon: "calendar"` and `description: "Lena's daily morning brief"`, and tell Lena to paste the returned URL into `output.artifact_url` in `~/morning/config.yaml`.
+2. Print only this in chat:
+   - `**<weekday_label>** - <focus>`
+   - one line of counters from the renderer: `Urgent N (M overdue) · PRs: R to review, K ready, A awaiting · Your actions N · Meetings N` (drop any part that is 0, except Urgent)
+   - the artifact link
+   - `Saved: <briefs_dir>/<date>.md`
+3. If publishing fails for any reason, say so in one line and print the full markdown archive inline instead, verbatim. Lena must never end up with neither.
 
 ## Step 7: Action item tick-off
 
@@ -391,7 +399,7 @@ If the brief has any numbered lines (Urgent today, Open action items or To-dos):
 1. Print exactly: `Already done any? (numbers comma-separated, blank to skip):`
 2. Wait for the user's reply in the same conversation.
 3. Parse the response: split on commas, strip whitespace, drop anything that isn't a positive integer or that exceeds the highest number used in the brief.
-4. For each valid number, look it up in the running number→item map you built while rendering (Step 4's numbering note): it resolves to either a Notion to-do (page id) or a Fathom action (stable key).
+4. For each valid number, look it up in `~/morning/state/brief-map-<date>.json` (`numbers[<n>]` gives `{kind: notion, id}` or `{kind: fathom, key}`); drop numbers above `max_number` from the renderer's counts.
 5. For a Notion to-do: update that page's `Status` property to `Done` via the Notion MCP.
 6. For a Fathom action: run `python3 ~/github/morning/scripts/ack_action.py <key1> <key2> ...` (batch all such keys into one call).
 7. Confirm to the user: `Marked N item(s) done. They won't appear tomorrow.`

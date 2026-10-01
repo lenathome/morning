@@ -16,6 +16,10 @@ Running since 2026-05-26. Phase 1 of the product OS (2026-09) moved project cont
 ~/product-os/            # curated context repo - projects/*.md is read by the brief
 ```
 
+## The page
+
+Step 4 writes the brief as JSON; `scripts/render_brief.py` numbers it and writes the markdown archive, a tabbed HTML page and the tick-off map. Step 6 publishes the page to the artifact URL in `output.artifact_url` and prints only the focus, counters and the link. Ticking off stays in chat, by number.
+
 ## session-sweep
 
 A second skill, `sweep/SKILL.md`, runs unattended just before the brief (or when I say "sweep sessions"). It reads every Claude Code session since its last run, appends a digest of each to `~/ai-log/YYYY-MM-DD.md` and queues proposed updates to the project files in `~/product-os/projects/`. It never edits a project file. The brief opens with the queued proposals as a numbered list (Step 0). I reply with the numbers to apply, "all" or "none" before the brief is built.
