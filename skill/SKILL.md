@@ -155,7 +155,7 @@ If the entire orchestration fails before rendering, write a one-line error to `~
 
 ## Brief structure
 
-Produce the brief as a single markdown file. Apply the voice guide at every step.
+The model writes the brief JSON (Step 4); `render_brief.py` produces the markdown archive and the page from it. Apply the voice guide at every step.
 
 ### Markdown archive layout (produced by render_brief.py)
 
@@ -264,7 +264,7 @@ A parent group renders as a standalone italic line, `*<Parent name>:*`, on its o
 
 Each line shows the task title, its due date if any, and its categories as inline `[Tag1, Tag2]` after the title. Numbered lines have no checkbox.
 
-**Numbering.** Every actionable line across the WHOLE brief shares one running number sequence, in this order: Urgent today (starting at 1), then Open action items, then To-dos. Parent-name sub-headers are not actionable and do not consume a number; only standalone tasks, subtasks and action items do. PR lines are not numbered. Keep an ordered lookup as you number: for each number, record whether it is a Notion to-do (its page id) or a Fathom action (its stable key). Step 7 needs this to know what to update when Lena replies with bare numbers.
+**Numbering.** Every actionable line across the WHOLE brief shares one running number sequence, in this order: Urgent today (starting at 1), then Open action items, then To-dos. Parent-name sub-headers are not actionable and do not consume a number; only standalone tasks, subtasks and action items do. PR lines are not numbered. The renderer assigns the numbers and writes the map to `~/morning/state/brief-map-<date>.json`; the model never numbers anything.
 
 If Urgent today and every To-dos bucket are empty, render `## To-dos` with "Notion DB is empty. Add tasks at <DB url>". If a To-dos bucket is empty, omit its sub-heading. If Notion is unavailable, render `## To-dos` with "Notion unavailable".
 
@@ -398,8 +398,8 @@ If the brief has any numbered lines (Urgent today, Open action items or To-dos):
 
 1. Print exactly: `Already done any? (numbers comma-separated, blank to skip):`
 2. Wait for the user's reply in the same conversation.
-3. Parse the response: split on commas, strip whitespace, drop anything that isn't a positive integer or that exceeds the highest number used in the brief.
-4. For each valid number, look it up in `~/morning/state/brief-map-<date>.json` (`numbers[<n>]` gives `{kind: notion, id}` or `{kind: fathom, key}`); drop numbers above `max_number` from the renderer's counts.
+3. Parse the response: split on commas, strip whitespace, drop anything that isn't a positive integer or that exceeds `max_number` from the renderer's counts (also derivable as the largest key in the map).
+4. For each valid number, look it up in `~/morning/state/brief-map-<date>.json` (`numbers[<n>]` gives `{kind: notion, id}` or `{kind: fathom, key}`).
 5. For a Notion to-do: update that page's `Status` property to `Done` via the Notion MCP.
 6. For a Fathom action: run `python3 ~/github/morning/scripts/ack_action.py <key1> <key2> ...` (batch all such keys into one call).
 7. Confirm to the user: `Marked N item(s) done. They won't appear tomorrow.`
@@ -425,4 +425,4 @@ If no PRs surfaced, skip this step entirely.
 
 Print one summary line like: `Done.`
 
-No other follow-up questions. No "would you like me to..." offers. The brief is the deliverable.
+No other follow-up questions. No "would you like me to..." offers. The page link is the deliverable.
