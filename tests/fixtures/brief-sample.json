@@ -1,0 +1,33 @@
+{
+  "date": "2026-10-01",
+  "weekday_label": "Thursday 01 Oct 2026",
+  "focus": "Ship the thing.",
+  "unavailable": [],
+  "urgent": [
+    {"parent": null, "items": [
+      {"id": "p1", "title": "Standalone urgent", "due": "due today", "categories": ["Operational"], "note": ""}
+    ]},
+    {"parent": "Moka launch actions (Lena)", "items": [
+      {"id": "p2", "title": "Chase Simon", "due": "overdue since 17 Sep", "categories": ["Operational"], "note": ""}
+    ]}
+  ],
+  "prs": {
+    "review_requested": [],
+    "ready": [{"number": 1291, "url": "https://github.com/ekko-enviroconomy/ekko-api/pull/1291", "title": "fix(funds): convert unit prices", "repo": "ekko-api", "note": "stacked on #1290", "poke": false}],
+    "awaiting": [{"number": 325, "url": "https://github.com/ekko-enviroconomy/ekko-v3-infra/pull/325", "title": "DNS <records>", "repo": "ekko-v3-infra", "note": "1 reviewer, 6 days stale", "poke": true}]
+  },
+  "actions": {
+    "yours": [{"key": "k1", "text": "Email Jamie", "url": "https://fathom.video/calls/1?timestamp=2", "meeting": "P&E team sync", "date": "25 Sep"}],
+    "product": [{"key": "k2", "text": "Schedule officers' call", "url": "https://fathom.video/calls/3?timestamp=4", "meeting": "P&E team sync", "date": "30 Sep"}]
+  },
+  "todos": {
+    "this_week": [{"parent": null, "items": [{"id": "p3", "title": "Revisit round-up", "due": "due 2 Oct", "categories": ["Operational"], "note": ""}]}],
+    "strategic": [{"parent": null, "items": [{"id": "p4", "title": "Travel calculator", "due": "", "categories": ["Strategic"], "note": ""}]}],
+    "later": [{"parent": "Public documentation", "items": [{"id": "p5", "title": "Link to methodology PDFs", "due": "", "categories": ["Operational"], "note": ""}]}]
+  },
+  "meetings": [{"time": "16:30", "title": "Partner call", "company": "Acme - payments", "participants": [{"name": "Jo Bloggs", "role": "likely Head of Product"}], "notes": []}],
+  "projects": [{"name": "PPP localisation", "slug": "ppp-localisation", "owner": "Etienne", "status": "active", "next": "Flag on", "target": "2026-10-02", "summary": "Bilo is finishing the move.", "stale_note": "", "sync_note": "",
+    "github": {"line": "0 PRs merged in last 7 days, 1 open", "open": [{"number": 1258, "url": "https://github.com/ekko-enviroconomy/ekko-api/pull/1258", "title": "feat(ppp): drop the gate", "repo": "ekko-api", "state": "open", "updated": "yesterday"}]}}],
+  "partners": [{"name": "Zip", "owner": "Jamie", "status": "active", "next": "Get a live date", "target": ""}],
+  "team_sync_notes": "SDK moves to one skeleton loader."
+}
