@@ -91,7 +91,6 @@ button { font: inherit; color: inherit; }
 header { display: flex; flex-direction: column; gap: 10px; }
 .date { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 .focus { font-family: var(--font-display); font-weight: 500; font-size: 26px; line-height: 1.2; margin: 0; text-wrap: balance; }
-.focus-line { margin: 0; font-size: 15px; color: var(--muted); }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip {
   display: inline-flex; align-items: baseline; gap: 6px;
@@ -500,7 +499,6 @@ tr:last-child td { border-bottom: 0; }
   var header = el("header", {}, [
     el("div", { "class": "date", text: brief.weekday_label || brief.date }),
     el("h1", { "class": "focus", text: "Morning brief" }),
-    el("p", { "class": "focus-line", text: brief.focus }),
     el("div", { "class": "chips" }, chips.map(function (c) {
       return el("button", { "class": "chip", type: "button", onclick: function () { select(c.tab, true); } }, [
         span("", c.label), el("b", { text: String(c.n) }),
