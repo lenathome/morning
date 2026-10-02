@@ -272,27 +272,27 @@ tr:last-child td { border-bottom: 0; }
   function numberedRow(n, body) {
     return el("div", { "class": "row" }, [span("num", String(n)), el("div", { "class": "rowbody" }, body)]);
   }
-  function todoRow(item) {
+  function todoRow(item, showTags) {
     var meta = [];
     if (item.due) {
       var d = String(item.due);
       var cls = d.indexOf("overdue") === 0 ? "due-overdue" : (d.indexOf("due today") === 0 ? "due-today" : "");
       meta.push(span(cls, d));
     }
-    (item.categories || []).forEach(function (c) { meta.push(span("tag", c)); });
+    if (showTags) (item.categories || []).forEach(function (c) { meta.push(span("tag", c)); });
     if (item.note) meta.push(span("", item.note));
     return numberedRow(item.n, [
       el("div", { text: item.title }),
       meta.length ? el("div", { "class": "meta" }, meta) : null
     ]);
   }
-  function todoPanel(groups) {
+  function todoPanel(groups, showTags) {
     var panel = el("div", { "class": "panel" });
     (groups || []).forEach(function (g) {
       var items = g.items || [];
       if (!items.length) return;
       if (g.parent) panel.appendChild(el("div", { "class": "parent", text: g.parent }));
-      items.forEach(function (i) { panel.appendChild(todoRow(i)); });
+      items.forEach(function (i) { panel.appendChild(todoRow(i, showTags !== false)); });
     });
     return panel;
   }
@@ -363,8 +363,16 @@ tr:last-child td { border-bottom: 0; }
     var meta = [];
     if (p.owner) meta.push(span("", "Owner: " + p.owner));
     if (p.target) meta.push(span("", "Target: " + p.target));
+    var waiting = p.waiting_on || [];
+    if (waiting.length) meta.push(span("pill other", waiting.length + " waiting on others"));
     var detail = [];
     if (p.summary) detail.push(el("p", { text: p.summary }));
+    if (waiting.length) {
+      detail.push(el("p", { "class": "muted", text: "Waiting on others - " + waiting.length }));
+      detail.push(el("ul", {}, waiting.map(function (w) {
+        return el("li", {}, [w.text, w.who ? span("muted", " [" + w.who + "]") : null]);
+      })));
+    }
     if (p.stale_note) detail.push(el("p", { "class": "muted", text: p.stale_note }));
     if (p.sync_note) detail.push(el("p", {}, [span("muted", "Team sync: "), p.sync_note]));
     var gh = p.github || {};
@@ -419,9 +427,9 @@ tr:last-child td { border-bottom: 0; }
   }
   function ideasTab() {
     var out = [];
-    [["Strategic", ideas.strategic], ["Other", ideas.other]].forEach(function (s) {
+    [["Strategic", ideas.strategic], ["Operational", ideas.other]].forEach(function (s) {
       var c = countGroups(s[1]);
-      if (c) out.push(section(s[0], c, todoPanel(s[1])));
+      if (c) out.push(section(s[0], c, todoPanel(s[1], false)));
     });
     return out;
   }

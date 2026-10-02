@@ -75,6 +75,48 @@ class NumberingTest(unittest.TestCase):
             render_brief.number_items(b)
 
 
+class WaitingOnTest(unittest.TestCase):
+    def test_defaults_to_empty(self):
+        b = load()
+        del b["projects"][0]["waiting_on"]
+        brief, _ = render_brief.number_items(b)
+        self.assertEqual(brief["projects"][0]["waiting_on"], [])
+
+    def test_invalid_entries_name_the_project(self):
+        for bad in ([{"text": "", "who": "A"}], [{"who": "A"}], [{"text": "x", "who": 3}], ["x"], "x"):
+            b = load()
+            b["projects"][0]["waiting_on"] = bad
+            with self.assertRaisesRegex(ValueError, "PPP localisation"):
+                render_brief.number_items(b)
+
+    def test_who_may_be_empty_or_missing(self):
+        b = load()
+        b["projects"][0]["waiting_on"] = [{"text": "x", "who": ""}, {"text": "y"}]
+        render_brief.number_items(b)
+
+    def test_markdown_lists_entries_after_summary(self):
+        brief, _ = render_brief.number_items(load())
+        md = render_brief.to_markdown(brief)
+        self.assertIn("Bilo is finishing the move.\n\nWaiting on others (2):\n\n"
+                      "- Sign-off on the rounding copy (Simon and Baran)\n- Staging data refresh\n\n", md)
+
+    def test_markdown_omits_when_empty(self):
+        b = load()
+        b["projects"][0]["waiting_on"] = []
+        brief, _ = render_brief.number_items(b)
+        self.assertNotIn("Waiting on others", render_brief.to_markdown(brief))
+
+    def test_numbers_and_counts_unchanged(self):
+        brief, numbers = render_brief.number_items(load())
+        self.assertEqual(len(numbers), 9)
+        self.assertEqual(render_brief.counts(brief)["max_number"], 9)
+
+    def test_template_renders_waiting_on(self):
+        html = (ROOT / "scripts" / "brief_template.html").read_text()
+        self.assertIn("Waiting on others", html)
+        self.assertIn("waiting on others", html)
+
+
 class MarkdownTest(unittest.TestCase):
     def setUp(self):
         brief, _ = render_brief.number_items(load())
@@ -100,7 +142,7 @@ class MarkdownTest(unittest.TestCase):
     def test_section_order(self):
         order = ["## To do", "**Urgent today**", "**Coming up** - 1", "**Your actions**", "**Product actions**",
                  "## External meeting prep", "## PRs needing you", "## Testing", "## Ideas bank",
-                 "**Strategic** - 1", "**Other** - 1", "## Engineering progress"]
+                 "**Strategic** - 1", "**Operational** - 1", "## Engineering progress"]
         pos = [self.md.index(h) for h in order]
         self.assertEqual(pos, sorted(pos))
         for old in ("## Urgent today", "## Open action items", "## To-dos", "This week", "**Later**"):
@@ -110,7 +152,16 @@ class MarkdownTest(unittest.TestCase):
         self.assertIn("**Coming up** - 1\n\n3. Revisit round-up (due 2 Oct)  [Operational]\n", self.md)
 
     def test_ideas_parent_group(self):
-        self.assertIn("**Other** - 1\n\n*Public documentation:*\n\n9. Link to methodology PDFs  [Operational]\n", self.md)
+        self.assertIn("**Operational** - 1\n\n*Public documentation:*\n\n9. Link to methodology PDFs\n", self.md)
+
+    def test_ideas_items_have_no_category_tags_and_section_is_operational(self):
+        ideas_md = self.md.split("## Ideas bank")[1].split("## Engineering progress")[0]
+        for line in ideas_md.splitlines():
+            if re.match(r"\d+\. ", line):
+                self.assertNotIn("[", line)
+        template = (ROOT / "scripts" / "brief_template.html").read_text()
+        self.assertIn('["Operational", ideas.other]', template)
+        self.assertNotIn('["Other"', template)
 
     def test_testing_section(self):
         self.assertIn("## Testing\n\n6. [#142](https://github.com/ekko-enviroconomy/ekko-checkout/pull/142) "
@@ -139,7 +190,7 @@ class MarkdownTest(unittest.TestCase):
         b["ideas"]["strategic"] = []
         brief, _ = render_brief.number_items(b)
         md = render_brief.to_markdown(brief)
-        self.assertIn("**Other** - 1", md)
+        self.assertIn("**Operational** - 1", md)
         self.assertNotIn("**Strategic**", md)
 
     def test_empty_urgent_and_product_omitted(self):

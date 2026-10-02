@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 
 TEMPLATE = Path(__file__).resolve().parent / "brief_template.html"
-IDEA_BUCKETS = (("strategic", "Strategic"), ("other", "Other"))
+IDEA_BUCKETS = (("strategic", "Strategic"), ("other", "Operational"))
 
 
 def number_items(raw: dict) -> tuple[dict, dict]:
@@ -48,6 +48,16 @@ def number_items(raw: dict) -> tuple[dict, dict]:
     for k in ("meetings", "projects", "partners"):
         brief.setdefault(k, [])
     brief.setdefault("team_sync_notes", "")
+    for p in brief["projects"]:
+        waiting = p.setdefault("waiting_on", [])
+        name = p.get("name", "?")
+        if not isinstance(waiting, list):
+            raise ValueError(f"project '{name}' needs 'waiting_on' as a list")
+        for w in waiting:
+            if not isinstance(w, dict) or not isinstance(w.get("text"), str) or not w["text"].strip():
+                raise ValueError(f"project '{name}' has a waiting_on entry without 'text'")
+            if not isinstance(w.get("who", ""), str):
+                raise ValueError(f"project '{name}' has a waiting_on entry whose 'who' is not a string")
 
     numbers: dict[str, dict] = {}
     n = 0
@@ -95,19 +105,19 @@ def number_items(raw: dict) -> tuple[dict, dict]:
     return brief, numbers
 
 
-def _todo_line(item: dict) -> str:
+def _todo_line(item: dict, show_tags: bool = True) -> str:
     due = f" ({item['due']})" if item.get("due") else ""
-    cats = f"  [{', '.join(item.get('categories', []))}]" if item.get("categories") else ""
+    cats = f"  [{', '.join(item.get('categories', []))}]" if show_tags and item.get("categories") else ""
     note = f" ({item['note']})" if item.get("note") else ""
     return f"{item['n']}. {item['title']}{due}{cats}{note}"
 
 
-def _todo_groups_md(groups: list) -> list[str]:
+def _todo_groups_md(groups: list, show_tags: bool = True) -> list[str]:
     out: list[str] = []
     for g in groups:
         if g.get("parent"):
             out += [f"*{g['parent']}:*", ""]
-        out += [_todo_line(i) for i in g.get("items", [])]
+        out += [_todo_line(i, show_tags) for i in g.get("items", [])]
         out.append("")
     return out
 
@@ -192,7 +202,7 @@ def to_markdown(brief: dict) -> str:
         for key, label in IDEA_BUCKETS:
             groups = brief["ideas"][key]
             if _count(groups):
-                L += [f"**{label}** - {_count(groups)}", ""] + _todo_groups_md(groups)
+                L += [f"**{label}** - {_count(groups)}", ""] + _todo_groups_md(groups, show_tags=False)
 
     L += ["## Engineering progress", ""]
     for p in brief["projects"]:
@@ -202,6 +212,10 @@ def to_markdown(brief: dict) -> str:
         if p.get("target"):
             head += f", target {p['target']}"
         L += [head, "", p.get("summary", ""), ""]
+        waiting = p.get("waiting_on", [])
+        if waiting:
+            L += [f"Waiting on others ({len(waiting)}):", ""]
+            L += [f"- {w['text']} ({w['who']})" if w.get("who") else f"- {w['text']}" for w in waiting] + [""]
         if p.get("stale_note"):
             L += [p["stale_note"], ""]
         if p.get("sync_note"):

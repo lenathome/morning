@@ -79,6 +79,7 @@ Written by the model in Step 4. `render_brief.py` adds the `n` field to every ac
   "projects": [
     {"name": "PPP localisation", "slug": "ppp-localisation", "owner": "Etienne", "status": "active",
      "next": "...", "target": "2026-10-02", "summary": "...", "stale_note": "", "sync_note": "",
+     "waiting_on": [{"text": "...", "who": "Simon and Baran"}],
      "github": {"line": "0 PRs merged in last 7 days, 7 open",
                 "open": [{"number": 1258, "url": "...", "title": "...", "repo": "ekko-api", "state": "open", "updated": "yesterday"}]}}
   ],
@@ -91,6 +92,7 @@ Rules the renderer enforces (raises `ValueError` with a clear message, exit code
 - Top-level keys `date`, `weekday_label`, `focus` are present and non-empty.
 - Every to-do item has `id`; every action has `key`.
 - Optional `testing` lists merged PRs Lena can test by hand. Every item has `repo`, `number`, `url` and `title`, and `steps` is a non-empty list of strings. `live` is free text ("not deployed yet" is allowed); `inferred` is true when the steps were written from the diff rather than the PR's test plan.
+- Optional `waiting_on` on each project lists tasks that wait on other people: `[{"text": "...", "who": "Simon and Baran"}]`. Each entry needs a non-empty `text`; `who` is a string and may be empty. Entries are not numbered, not in the number map and not tick-off-able. Defaults to `[]`.
 - Missing lists default to empty. Missing optional strings default to `""`.
 
 Bucket meaning: `urgent` is every to-do due today or overdue. `todos.coming_up` is every to-do due after today, ordered by due date. `ideas` holds every to-do with no due date: `ideas.strategic` when `Category` contains Strategic, `ideas.other` for the rest.
@@ -663,7 +665,7 @@ Layout:
    - **Today**: Urgent today (numbered rows, parent groups as a small caps label), Your actions (numbered, text links to Fathom, meeting + date muted), External meeting prep cards.
    - **PRs**: Review requested, Ready to merge, Awaiting review. One card per PR: `#number` + title as the link, repo as a tag, note muted, `⚡` badge when `poke`.
    - **To-dos**: This week, Strategic, Later with counts, then Product actions. Same row style as Today.
-   - **Projects**: a filter row (All / Active / Blocked / Waiting). One card per project: name, status pill (active green, blocked red, waiting amber), owner, `next`, target date. Clicking the card expands `summary`, `stale_note`, `sync_note` and the open PR list (`<details>` is fine). Team sync notes as a card at the top. Partners as a compact table at the bottom.
+   - **Projects**: a filter row (All / Active / Blocked / Waiting). One card per project: name, status pill (active green, blocked red, waiting amber), owner, `next`, target date. Clicking the card expands `summary`, the `waiting_on` list, `stale_note`, `sync_note` and the open PR list (`<details>` is fine). Team sync notes as a card at the top. Partners as a compact table at the bottom.
 3. Every numbered row shows its number in a fixed-width column so Lena can read numbers back into chat.
 4. Empty sections are hidden. An entirely empty tab shows one muted line ("Nothing here today.").
 
