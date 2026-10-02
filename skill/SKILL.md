@@ -1,6 +1,6 @@
 ---
 name: morning
-description: Produce the daily morning brief - project updates to apply first, then urgent to-dos, PRs needing you, open action items, to-dos, external meeting prep, engineering progress per project and a one-sentence focus. Run at the start of each working day.
+description: Produce the daily morning brief - project updates to apply first, then a To do section (urgent, coming up, action items), external meeting prep, PRs needing you, an ideas bank of undated to-dos, engineering progress per project and a one-sentence focus. Run at the start of each working day.
 ---
 
 # /morning — daily brief skill
@@ -88,7 +88,7 @@ Make these tool calls in a SINGLE message (parallel tool use):
 6. **Fathom meetings** — Use the Fathom MCP tools:
    - First: `list_meetings` filtered to the last `fathom.lookback_days` days (default 7).
    - Then in parallel: `get_meeting_summary` for each meeting returned.
-   - If the MCP is unavailable, mark the "Yesterday's meetings" and "Open action items" sections as "Fathom unavailable" and continue.
+   - If the MCP is unavailable, mark the "Yesterday's meetings" and "Your actions" and "Product actions" lists as "Fathom unavailable" and continue.
 
 7. **Acknowledged action items** — Read tool: `~/morning/state/acknowledged-actions.json`. If the file is missing, treat it as `[]`. Use Read, not `cat`, so an unattended run needs no Bash approval.
 
@@ -164,9 +164,11 @@ The model writes the brief JSON (Step 4); `render_brief.py` produces the markdow
 
 > **Today's focus:** <one sentence, see Step 5 below>
 
-## Urgent today
+## To do
 
-Every to-do with `Due` ≤ today. Numbering starts at 1 here. See "To-do rules" below the template for bucket logic and parent/subtask rendering. If nothing is due, omit this section.
+**Urgent today**
+
+Every to-do with `Due` ≤ today. Numbering starts at 1 here. See "To-do rules" below the template for bucket logic and parent/subtask rendering. If nothing is due, omit this sub-heading.
 
 1. <standalone task> (due today)  [<categories>]
 
@@ -174,6 +176,23 @@ Every to-do with `Due` ≤ today. Numbering starts at 1 here. See "To-do rules" 
 
 2. <subtask> (due today)  [<categories>]
 3. <subtask> (overdue since <date>)  [<categories>]
+
+**Coming up** - N
+
+4. <standalone task> (due <date>)  [<categories>]
+
+**Your actions**
+
+5. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
+6. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
+
+**Product actions**
+
+7. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
+
+## External meeting prep
+
+<see rules below>
 
 ## PRs needing you
 
@@ -196,38 +215,19 @@ Awaiting review (N):
 
 (If both sub-lists are empty: "Nothing waiting on you. Nice.")
 
-## Open action items
-
-**Your actions**
-
-4. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
-5. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
-
-**Product actions**
-
-6. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
-
-## To-dos
-
-**This week** - N
-
-7. <standalone task> (due <date>)  [<categories>]
+## Ideas bank
 
 **Strategic** - N
 
-8. <standalone task> (<due date if any>)  [<categories>]
+8. <standalone task>  [<categories>]
 
 *<Parent name 2>:*
 
-9. <subtask> (<due date if any>)  [<categories>]
+9. <subtask>  [<categories>]
 
-**Later** - N
+**Other** - N
 
 10. <standalone task>  [<categories>]
-
-## External meeting prep
-
-<see rules below>
 
 ## Engineering progress
 
@@ -236,37 +236,38 @@ Awaiting review (N):
 
 The sections below are the rules for each part of the template above.
 
-### Urgent today and To-dos
+### To do and Ideas bank
 
-**Bucket logic** (in priority order, each task lands in the first matching bucket):
-1. **Urgent today** - has `Due` ≤ today. Renders under `## Urgent today`.
-2. **This week** - has `Due` in the rest of this calendar week.
-3. **Strategic** - `Category` contains `Strategic` (regardless of date, unless already shown above).
-4. **Later** - everything else (no date and not Strategic).
+**Bucket logic** (each task lands in the first matching bucket):
+1. **Urgent today** - has `Due` ≤ today. Renders under `**Urgent today**` in `## To do`.
+2. **Coming up** - has `Due` after today, ordered by due date. Renders under `**Coming up**` in `## To do`.
+3. **Ideas bank** - has no `Due` date. Renders under `## Ideas bank`, split into **Strategic** (`Category` contains `Strategic`) and **Other** (everything else).
 
-Buckets 2 to 4 render under `## To-dos`.
+Notion rows with `Type: Idea` are still dropped in Step 1; the Ideas bank here is undated to-dos, not parked ideas.
 
 **Parent/subtask rendering.** The Tasks DB has a self-referencing `Parent` / `Subtasks` relation. Tasks split into three kinds:
 - **Parent groupers** — `Subtasks` non-empty. These are containers, NOT actionable themselves. Do NOT render parent groupers as task lines. Use their Name as the heading for their child subtasks. If the query returns an empty `Subtasks` field on every row, that view doesn't populate it - infer parent groupers instead from the children's `Parent` relation: any page named by at least one other row's `Parent` field is a grouper, even though its own `Subtasks` field reads empty.
 - **Subtasks** — `Parent` non-empty. Bucketed individually by their own Due/Category (see below), but never rendered under more than one heading.
 - **Standalone tasks** — both `Parent` and `Subtasks` empty. Bucketed individually.
 
-**Each parent group renders exactly once across Urgent today and To-dos together** - never split across buckets, never repeated:
+**Each parent group renders exactly once across Urgent today, Coming up and the Ideas bank together** - never split across buckets, never repeated:
 1. Bucket every subtask individually, using the bucket logic above against its own Due/Category.
-2. Place the group in the bucket of its most urgent subtask: the bucket of the subtask with the earliest `Due` date. If no subtask in the group has a `Due` date, use instead the highest-priority bucket (Urgent > This week > Strategic > Later) that any subtask in the group falls into. A group whose most urgent subtask is overdue or due today renders only under Urgent today, with all its subtasks.
+2. Place the group in the bucket of its most urgent subtask: the bucket of the subtask with the earliest `Due` date. If no subtask in the group has a `Due` date, the group goes to the Ideas bank: **Strategic** if any subtask's `Category` contains `Strategic`, otherwise **Other**. A group whose most urgent subtask is overdue or due today renders only under Urgent today, with all its subtasks.
 3. Within that one bucket, render the group once, with its subtasks sorted by `Due` date (undated subtasks last). Each subtask line still shows its own due date.
 
-Within each bucket (and within Urgent today): standalone tasks first (flat, no indent, sorted by due date), then parent groups (alphabetically by parent name).
+Within each bucket (Urgent today, Coming up, Strategic, Other): standalone tasks first (flat, no indent, sorted by due date), then parent groups (alphabetically by parent name).
 
-Every bucket heading line is followed by a blank line before its first list item, and a blank line separates one list (a run of standalone tasks, or a parent group's italic name line plus its subtasks) from the next. In CommonMark, an ordered list that doesn't start at 1 cannot interrupt a preceding paragraph, so a numbered line placed right after a heading or after a parent's italic name line - with no blank line between - merges into that line instead of rendering as a list. The same blank-line rule applies to the Open action items headings.
+Every bucket heading line is followed by a blank line before its first list item, and a blank line separates one list (a run of standalone tasks, or a parent group's italic name line plus its subtasks) from the next. In CommonMark, an ordered list that doesn't start at 1 cannot interrupt a preceding paragraph, so a numbered line placed right after a heading or after a parent's italic name line - with no blank line between - merges into that line instead of rendering as a list. The same blank-line rule applies to the Your actions and Product actions headings.
 
 A parent group renders as a standalone italic line, `*<Parent name>:*`, on its own with no leading bullet, followed by a blank line, then its numbered subtasks flush-left with no indent.
 
 Each line shows the task title, its due date if any, and its categories as inline `[Tag1, Tag2]` after the title. Numbered lines have no checkbox.
 
-**Numbering.** Every actionable line across the WHOLE brief shares one running number sequence, in this order: Urgent today (starting at 1), then Open action items, then To-dos. Parent-name sub-headers are not actionable and do not consume a number; only standalone tasks, subtasks and action items do. PR lines are not numbered. The renderer assigns the numbers and writes the map to `~/morning/state/brief-map-<date>.json`; the model never numbers anything.
+**Numbering.** Every actionable line across the WHOLE brief shares one running number sequence, in page order: Urgent today (starting at 1), Coming up, Your actions, Product actions, then the Ideas bank (Strategic, then Other). Parent-name sub-headers are not actionable and do not consume a number; only standalone tasks, subtasks and action items do. PR lines are not numbered. The renderer assigns the numbers and writes the map to `~/morning/state/brief-map-<date>.json`; the model never numbers anything.
 
-If Urgent today and every To-dos bucket are empty, render `## To-dos` with "Notion DB is empty. Add tasks at <DB url>". If a To-dos bucket is empty, omit its sub-heading. If Notion is unavailable, render `## To-dos` with "Notion unavailable".
+JSON mapping: Urgent today goes in `urgent`, Coming up in `todos.coming_up`, Strategic in `ideas.strategic`, Other in `ideas.other`.
+
+If every to-do bucket is empty, render `## To do` with "Notion DB is empty. Add tasks at <DB url>". If a sub-heading's list is empty, omit it. If Notion is unavailable, render `## To do` with "Notion unavailable".
 
 ### PRs needing you
 
@@ -289,14 +290,14 @@ Per-line annotations:
 
 Omit a bucket or sub-list that is empty. If both sub-lists are empty, write "Nothing waiting on you. Nice."
 
-### Open action items
+### Your actions and Product actions
 
-Numbering continues here from wherever Urgent today left off. If Urgent today ended at 3, the first action item is 4. As in To-dos, each `**Your actions**` / `**Product actions**` heading is followed by a blank line before its numbered list starts, for the same CommonMark reason.
+These render inside `## To do`, after Coming up. Numbering continues from the last Coming up item (or from Urgent today if Coming up is empty). Each `**Your actions**` / `**Product actions**` heading is followed by a blank line before its numbered list starts, for the same CommonMark reason.
 
 **Your actions** - action items where you're the owner or named. The action text MUST be wrapped as a markdown link to the Fathom timestamp URL so you can jump into the recording at the exact moment the action was raised.
 
-4. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
-5. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
+N. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
+N+1. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
 ...
 
 (If list is empty: write "Nothing carrying over on your own actions. Clean slate.")
@@ -307,7 +308,7 @@ N+1. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
 N+2. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
 ...
 
-Numbering continues sequentially from the Your actions list, which itself continues from Urgent today. The To-dos section then continues from the last action item. Owner names are NOT shown inline because all entries in this section share the same configured owner(s); putting the name on each line just adds noise. The tick-off prompt in Step 7 accepts any number from anywhere in the brief: Urgent today, Your actions, Product actions or To-dos alike.
+Numbering continues sequentially from the Your actions list. The Ideas bank then continues from the last action item. Owner names are NOT shown inline because all entries in this section share the same configured owner(s); putting the name on each line just adds noise. The tick-off prompt in Step 7 accepts any number from anywhere in the brief: Urgent today, Coming up, Your actions, Product actions or the Ideas bank alike.
 
 (If this list is empty: skip the sub-section entirely.)
 
@@ -394,7 +395,7 @@ Examples (bad):
 
 ## Step 7: Action item tick-off
 
-If the brief has any numbered lines (Urgent today, Open action items or To-dos):
+If the brief has any numbered lines (To do or Ideas bank):
 
 1. Print exactly: `Already done any? (numbers comma-separated, blank to skip):`
 2. Wait for the user's reply in the same conversation.

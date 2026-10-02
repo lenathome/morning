@@ -217,6 +217,7 @@ tr:last-child td { border-bottom: 0; }
   var prs = brief.prs || {};
   var actions = brief.actions || {};
   var todos = brief.todos || {};
+  var ideas = brief.ideas || {};
   var meetings = brief.meetings || [];
   var projects = brief.projects || [];
   var partners = brief.partners || [];
@@ -334,10 +335,13 @@ tr:last-child td { border-bottom: 0; }
   }
 
   /* ---------- tab content ---------- */
-  function todayTab() {
+  function todoTab() {
     var out = [];
     if (urgentItems.length) out.push(section("Urgent today", urgentItems.length, todoPanel(urgent)));
+    var comingN = countGroups(todos.coming_up);
+    if (comingN) out.push(section("Coming up", comingN, todoPanel(todos.coming_up)));
     if (yours.length) out.push(section("Your actions", yours.length, actionPanel(yours)));
+    if (product.length) out.push(section("Product actions", product.length, actionPanel(product)));
     if (meetings.length) {
       out.push(section("External meeting prep", meetings.length,
         el("div", { "class": "cards" }, meetings.map(meetingCard))));
@@ -353,13 +357,12 @@ tr:last-child td { border-bottom: 0; }
       });
     return out;
   }
-  function todosTab() {
+  function ideasTab() {
     var out = [];
-    [["This week", todos.this_week], ["Strategic", todos.strategic], ["Later", todos.later]].forEach(function (s) {
+    [["Strategic", ideas.strategic], ["Other", ideas.other]].forEach(function (s) {
       var c = countGroups(s[1]);
       if (c) out.push(section(s[0], c, todoPanel(s[1])));
     });
-    if (product.length) out.push(section("Product actions", product.length, actionPanel(product)));
     return out;
   }
   var filterValue = "all";
@@ -409,20 +412,21 @@ tr:last-child td { border-bottom: 0; }
   }
 
   var TABS = [
-    { id: "today", label: "Today", build: todayTab, count: urgentItems.length + yours.length + meetings.length, empty: "Nothing here today." },
+    { id: "todo", label: "To do", build: todoTab,
+      count: urgentItems.length + countGroups(todos.coming_up) + yours.length + product.length + meetings.length,
+      empty: "Nothing to do." },
     { id: "prs", label: "PRs", build: prsTab, count: prTotal, empty: "No pull requests need you." },
-    { id: "todos", label: "To-dos", build: todosTab,
-      count: countGroups(todos.this_week) + countGroups(todos.strategic) + countGroups(todos.later) + product.length,
-      empty: "No to-dos." },
+    { id: "ideas", label: "Ideas bank", build: ideasTab,
+      count: countGroups(ideas.strategic) + countGroups(ideas.other), empty: "No ideas parked." },
     { id: "projects", label: "Projects", build: projectsTab, count: projects.length, empty: "No projects." }
   ];
 
   /* ---------- header ---------- */
   var chips = [
-    { label: "Urgent", n: urgentItems.length, tab: "today", extra: overdue > 0 ? overdue + " overdue" : "" },
+    { label: "Urgent", n: urgentItems.length, tab: "todo", extra: overdue > 0 ? overdue + " overdue" : "" },
     { label: "PRs needing you", n: prTotal, tab: "prs" },
-    { label: "Your actions", n: yours.length, tab: "today" },
-    { label: "Meetings", n: meetings.length, tab: "today" }
+    { label: "Your actions", n: yours.length, tab: "todo" },
+    { label: "Meetings", n: meetings.length, tab: "todo" }
   ];
   var header = el("header", {}, [
     el("div", { "class": "date", text: brief.weekday_label || brief.date }),
@@ -460,7 +464,7 @@ tr:last-child td { border-bottom: 0; }
   TABS.forEach(function (t) { app.appendChild(panels[t.id]); });
 
   function select(id, scrollUp) {
-    if (!panels[id]) id = "today";
+    if (!panels[id]) id = "todo";
     TABS.forEach(function (t) {
       var on = t.id === id;
       panels[t.id].hidden = !on;
@@ -482,8 +486,8 @@ tr:last-child td { border-bottom: 0; }
     e.preventDefault();
   });
 
-  var saved = "today";
-  try { saved = localStorage.getItem("morning-brief-tab") || "today"; } catch (e) { saved = "today"; }
+  var saved = "todo";
+  try { saved = localStorage.getItem("morning-brief-tab") || "todo"; } catch (e) { saved = "todo"; }
   select(saved, false);
 })();
 </script>

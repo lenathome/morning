@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 
 TEMPLATE = Path(__file__).resolve().parent / "brief_template.html"
-TODO_BUCKETS = (("this_week", "This week"), ("strategic", "Strategic"), ("later", "Later"))
+IDEA_BUCKETS = (("strategic", "Strategic"), ("other", "Other"))
 
 
 def number_items(raw: dict) -> tuple[dict, dict]:
@@ -40,8 +40,10 @@ def number_items(raw: dict) -> tuple[dict, dict]:
     actions.setdefault("yours", [])
     actions.setdefault("product", [])
     todos = brief.setdefault("todos", {})
-    for k, _ in TODO_BUCKETS:
-        todos.setdefault(k, [])
+    todos.setdefault("coming_up", [])
+    ideas = brief.setdefault("ideas", {})
+    for k, _ in IDEA_BUCKETS:
+        ideas.setdefault(k, [])
     for k in ("meetings", "projects", "partners"):
         brief.setdefault(k, [])
     brief.setdefault("team_sync_notes", "")
@@ -69,10 +71,11 @@ def number_items(raw: dict) -> tuple[dict, dict]:
             numbers[str(n)] = {"kind": "fathom", "key": a["key"]}
 
     todo_groups(brief["urgent"])
+    todo_groups(todos["coming_up"])
     action_list(actions["yours"])
     action_list(actions["product"])
-    for k, _ in TODO_BUCKETS:
-        todo_groups(todos[k])
+    for k, _ in IDEA_BUCKETS:
+        todo_groups(ideas[k])
     return brief, numbers
 
 
@@ -113,8 +116,27 @@ def to_markdown(brief: dict) -> str:
     for u in brief["unavailable"]:
         L += [f"_{u}_", ""]
 
+    L += ["## To do", ""]
     if brief["urgent"]:
-        L += ["## Urgent today", ""] + _todo_groups_md(brief["urgent"])
+        L += ["**Urgent today**", ""] + _todo_groups_md(brief["urgent"])
+    coming = brief["todos"]["coming_up"]
+    if _count(coming):
+        L += [f"**Coming up** - {_count(coming)}", ""] + _todo_groups_md(coming)
+    acts = brief["actions"]
+    L += ["**Your actions**", ""]
+    if acts["yours"]:
+        L += [_action_line(a) for a in acts["yours"]] + [""]
+    else:
+        L += ["Nothing carrying over on your own actions. Clean slate.", ""]
+    if acts["product"]:
+        L += ["**Product actions**", ""] + [_action_line(a) for a in acts["product"]] + [""]
+
+    if brief["meetings"]:
+        L += ["## External meeting prep", ""]
+        for m in brief["meetings"]:
+            L += [f"**{m['time']} - {m['title']}**", f"- Company: {m.get('company', '')}", "- Participants:"]
+            L += [f"  - {p['name']} - {p['role']}" for p in m.get("participants", [])]
+            L += [f"- {x}" for x in m.get("notes", [])] + [""]
 
     prs = brief["prs"]
     L += ["## PRs needing you", ""]
@@ -130,27 +152,12 @@ def to_markdown(brief: dict) -> str:
     if not any(prs.values()):
         L += ["Nothing waiting on you. Nice.", ""]
 
-    acts = brief["actions"]
-    L += ["## Open action items", "", "**Your actions**", ""]
-    if acts["yours"]:
-        L += [_action_line(a) for a in acts["yours"]] + [""]
-    else:
-        L += ["Nothing carrying over on your own actions. Clean slate.", ""]
-    if acts["product"]:
-        L += ["**Product actions**", ""] + [_action_line(a) for a in acts["product"]] + [""]
-
-    L += ["## To-dos", ""]
-    for key, label in TODO_BUCKETS:
-        groups = brief["todos"][key]
-        if _count(groups):
-            L += [f"**{label}** - {_count(groups)}", ""] + _todo_groups_md(groups)
-
-    if brief["meetings"]:
-        L += ["## External meeting prep", ""]
-        for m in brief["meetings"]:
-            L += [f"**{m['time']} - {m['title']}**", f"- Company: {m.get('company', '')}", "- Participants:"]
-            L += [f"  - {p['name']} - {p['role']}" for p in m.get("participants", [])]
-            L += [f"- {x}" for x in m.get("notes", [])] + [""]
+    if any(_count(brief["ideas"][k]) for k, _ in IDEA_BUCKETS):
+        L += ["## Ideas bank", ""]
+        for key, label in IDEA_BUCKETS:
+            groups = brief["ideas"][key]
+            if _count(groups):
+                L += [f"**{label}** - {_count(groups)}", ""] + _todo_groups_md(groups)
 
     L += ["## Engineering progress", ""]
     for p in brief["projects"]:
@@ -196,11 +203,14 @@ def counts(brief: dict) -> dict:
         "prs_review": len(brief["prs"]["review_requested"]),
         "prs_ready": len(brief["prs"]["ready"]),
         "prs_awaiting": len(brief["prs"]["awaiting"]),
+        "coming_up": _count(brief["todos"]["coming_up"]),
         "actions": len(brief["actions"]["yours"]),
+        "ideas": sum(_count(brief["ideas"][k]) for k, _ in IDEA_BUCKETS),
         "meetings": len(brief["meetings"]),
         "max_number": max([0] + [i["n"] for g in brief["urgent"] for i in g.get("items", [])]
                           + [a["n"] for a in brief["actions"]["yours"] + brief["actions"]["product"]]
-                          + [i["n"] for k, _ in TODO_BUCKETS for g in brief["todos"][k] for i in g.get("items", [])]),
+                          + [i["n"] for g in brief["todos"]["coming_up"] for i in g.get("items", [])]
+                          + [i["n"] for k, _ in IDEA_BUCKETS for g in brief["ideas"][k] for i in g.get("items", [])]),
     }
 
 

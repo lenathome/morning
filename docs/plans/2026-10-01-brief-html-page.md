@@ -63,9 +63,11 @@ Written by the model in Step 4. `render_brief.py` adds the `n` field to every ac
     "product": []
   },
   "todos": {
-    "this_week": [{"parent": null, "items": []}],
+    "coming_up": [{"parent": null, "items": []}]
+  },
+  "ideas": {
     "strategic": [],
-    "later": []
+    "other": []
   },
   "meetings": [
     {"time": "16:30", "title": "Catch up", "company": "...", "participants": [{"name": "...", "role": "..."}], "notes": ["Your open Moka items are 4 to 8."]}
@@ -86,7 +88,9 @@ Rules the renderer enforces (raises `ValueError` with a clear message, exit code
 - Every to-do item has `id`; every action has `key`.
 - Missing lists default to empty. Missing optional strings default to `""`.
 
-Numbering order, same as today: `urgent` (groups in the order given), then `actions.yours`, `actions.product`, then `todos.this_week`, `todos.strategic`, `todos.later`. The model is responsible for the order within each list (standalone first, then parent groups alphabetically), exactly as the current skill describes.
+Bucket meaning: `urgent` is every to-do due today or overdue. `todos.coming_up` is every to-do due after today, ordered by due date. `ideas` holds every to-do with no due date: `ideas.strategic` when `Category` contains Strategic, `ideas.other` for the rest.
+
+Numbering order, following the page: `urgent` (groups in the order given), `todos.coming_up`, `actions.yours`, `actions.product`, `ideas.strategic`, `ideas.other`. The model is responsible for the order within each list (standalone first, then parent groups alphabetically), exactly as the current skill describes.
 
 ---
 

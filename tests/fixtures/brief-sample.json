@@ -21,9 +21,11 @@
     "product": [{"key": "k2", "text": "Schedule officers' call", "url": "https://fathom.video/calls/3?timestamp=4", "meeting": "P&E team sync", "date": "30 Sep"}]
   },
   "todos": {
-    "this_week": [{"parent": null, "items": [{"id": "p3", "title": "Revisit round-up", "due": "due 2 Oct", "categories": ["Operational"], "note": ""}]}],
+    "coming_up": [{"parent": null, "items": [{"id": "p3", "title": "Revisit round-up", "due": "due 2 Oct", "categories": ["Operational"], "note": ""}]}]
+  },
+  "ideas": {
     "strategic": [{"parent": null, "items": [{"id": "p4", "title": "Travel calculator", "due": "", "categories": ["Strategic"], "note": ""}]}],
-    "later": [{"parent": "Public documentation", "items": [{"id": "p5", "title": "Link to methodology PDFs", "due": "", "categories": ["Operational"], "note": ""}]}]
+    "other": [{"parent": "Public documentation", "items": [{"id": "p5", "title": "Link to methodology PDFs", "due": "", "categories": ["Operational"], "note": ""}]}]
   },
   "meetings": [{"time": "16:30", "title": "Partner call", "company": "Acme - payments", "participants": [{"name": "Jo Bloggs", "role": "likely Head of Product"}], "notes": []}],
   "projects": [{"name": "PPP localisation", "slug": "ppp-localisation", "owner": "Etienne", "status": "active", "next": "Flag on", "target": "2026-10-02", "summary": "Bilo is finishing the move.", "stale_note": "", "sync_note": "",
