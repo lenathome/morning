@@ -1,6 +1,6 @@
 ---
 name: morning
-description: Produce the daily morning brief - project updates to apply first, then a To do section (urgent, coming up, action items), external meeting prep, PRs needing you, an ideas bank of undated to-dos, engineering progress per project and a one-sentence focus. Run at the start of each working day.
+description: Produce the daily morning brief - project updates to apply first, then a To do section (urgent, coming up, action items), external meeting prep, PRs needing you, recently merged PRs to test by hand, an ideas bank of undated to-dos, engineering progress per project and a one-sentence focus. Run at the start of each working day.
 ---
 
 # /morning — daily brief skill
@@ -95,6 +95,8 @@ Make these tool calls in a SINGLE message (parallel tool use):
 8. **Acknowledged PRs state** — Read tool: `~/morning/state/acknowledged-prs.json`. If the file is missing, treat it as `[]`.
 
 9. **Your own open PRs** — Bash: `~/github/morning/scripts/fetch_github.sh authored`. Returns non-draft PRs you authored, enriched with `review_decision`, `reviewers_requested`, `latest_approvals`, `mergeable`. Used by "Yours to chase" in the PRs needing you section.
+
+10. **Recently merged PRs** — Bash: `~/github/morning/scripts/fetch_merged.sh "<repos comma-joined>" 3`, where the repos are the union of every non-done project's `repos` and config `github.ekko_repos`. Returns merged PRs from the last 3 days, each with `repo, number, title, url, body, mergedAt, author, files` and `deploys` (the deploy, release and publish runs on the merge commit, with their jobs). Used by the Testing section. Also read `~/morning/state/acknowledged-tests.json` with the Read tool; if the file is missing, treat it as `[]`.
 
 
 ## Step 2: Per-project data fetch (parallel)
@@ -263,7 +265,7 @@ A parent group renders as a standalone italic line, `*<Parent name>:*`, on its o
 
 Each line shows the task title, its due date if any, and its categories as inline `[Tag1, Tag2]` after the title. Numbered lines have no checkbox.
 
-**Numbering.** Every actionable line across the WHOLE brief shares one running number sequence, in page order: Urgent today (starting at 1), Coming up, Your actions, Product actions, then the Ideas bank (Strategic, then Other). Parent-name sub-headers are not actionable and do not consume a number; only standalone tasks, subtasks and action items do. PR lines are not numbered. The renderer assigns the numbers and writes the map to `~/morning/state/brief-map-<date>.json`; the model never numbers anything.
+**Numbering.** Every actionable line across the WHOLE brief shares one running number sequence, in page order: Urgent today (starting at 1), Coming up, Your actions, Product actions, Testing, then the Ideas bank (Strategic, then Other). Parent-name sub-headers are not actionable and do not consume a number; only standalone tasks, subtasks and action items do. PR lines are not numbered. The renderer assigns the numbers and writes the map to `~/morning/state/brief-map-<date>.json`; the model never numbers anything.
 
 JSON mapping: Urgent today goes in `urgent`, Coming up in `todos.coming_up`, Strategic in `ideas.strategic`, Other in `ideas.other`.
 
@@ -308,9 +310,20 @@ N+1. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
 N+2. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
 ...
 
-Numbering continues sequentially from the Your actions list. The Ideas bank then continues from the last action item. Owner names are NOT shown inline because all entries in this section share the same configured owner(s); putting the name on each line just adds noise. The tick-off prompt in Step 7 accepts any number from anywhere in the brief: Urgent today, Coming up, Your actions, Product actions or the Ideas bank alike.
+Numbering continues sequentially from the Your actions list. Testing then continues from the last action item, and the Ideas bank from the last Testing item. Owner names are NOT shown inline because all entries in this section share the same configured owner(s); putting the name on each line just adds noise. The tick-off prompt in Step 7 accepts any number from anywhere in the brief: Urgent today, Coming up, Your actions, Product actions, Testing or the Ideas bank alike.
 
 (If this list is empty: skip the sub-section entirely.)
+
+### Testing
+
+Merged PRs Lena can try by hand. Write them into the `testing` key of the brief JSON, newest merge first.
+
+- Keep only PRs from Step 1.10 whose key `<repo>#<number>` is not in the acknowledged-tests list and that change something visible or clickable. Drop CI, infra, refactor, test-only and docs PRs.
+- `live` comes from the `deploys` the fetch returns for the merge commit, never from the merge itself. Name the environments whose deploy jobs succeeded (for example `dev, staging, prod`). If no deploy run succeeded, write `not deployed yet`; if a run is still going, say so.
+- `steps` come from the PR body's test plan when it has one (`inferred: false`). Otherwise write them from the diff and the `files` list (`inferred: true`). Give 2 to 4 steps, each with the environment URL and any test data needed.
+- Say plainly when something cannot be tested by hand, for example a change that only runs behind a feature flag or a backend job. Do not invent steps.
+- `project` is the name of the project the PR belongs to (match on repo and keywords), or an empty string.
+- If there are none, leave `testing` as `[]` and the section is omitted.
 
 ### External meeting prep
 
@@ -395,15 +408,16 @@ Examples (bad):
 
 ## Step 7: Action item tick-off
 
-If the brief has any numbered lines (To do or Ideas bank):
+If the brief has any numbered lines (To do, Testing or Ideas bank):
 
 1. Print exactly: `Already done any? (numbers comma-separated, blank to skip):`
 2. Wait for the user's reply in the same conversation.
 3. Parse the response: split on commas, strip whitespace, drop anything that isn't a positive integer or that exceeds `max_number` from the renderer's counts (also derivable as the largest key in the map).
-4. For each valid number, look it up in `~/morning/state/brief-map-<date>.json` (`numbers[<n>]` gives `{kind: notion, id}` or `{kind: fathom, key}`).
+4. For each valid number, look it up in `~/morning/state/brief-map-<date>.json` (`numbers[<n>]` gives `{kind: notion, id}`, `{kind: fathom, key}` or `{kind: test, key}`).
 5. For a Notion to-do: update that page's `Status` property to `Done` via the Notion MCP.
 6. For a Fathom action: run `python3 ~/github/morning/scripts/ack_action.py <key1> <key2> ...` (batch all such keys into one call).
-7. Confirm to the user: `Marked N item(s) done. They won't appear tomorrow.`
+7. For a Testing item (kind `test`): run `python3 ~/github/morning/scripts/ack_test.py <key1> <key2> ...` (batch all such keys into one call).
+8. Confirm to the user: `Marked N item(s) done. They won't appear tomorrow.`
 
 If the brief had no numbered lines, skip this step entirely.
 

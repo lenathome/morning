@@ -88,6 +88,7 @@ button { font: inherit; color: inherit; }
 header { display: flex; flex-direction: column; gap: 10px; }
 .date { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 .focus { font-family: var(--font-display); font-weight: 500; font-size: 26px; line-height: 1.2; margin: 0; text-wrap: balance; }
+.focus-line { margin: 0; font-size: 15px; color: var(--muted); }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip {
   display: inline-flex; align-items: baseline; gap: 6px;
@@ -135,6 +136,13 @@ h2 .count { font-family: var(--font-mono); font-weight: 400; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .prtitle { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
 .poke { font-size: 12px; background: var(--warn-soft); color: var(--warn); border-radius: 4px; padding: 1px 6px; font-weight: 600; }
+
+/* testing */
+.testrow { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 8px; align-items: baseline; }
+.live { font-size: 12.5px; font-weight: 600; border-radius: 4px; padding: 1px 6px; align-self: flex-start; }
+.live.good { background: var(--good-soft); color: var(--good); }
+.live.warn { background: var(--warn-soft); color: var(--warn); }
+.steps { margin: 0; padding-left: 20px; font-size: 13.5px; display: flex; flex-direction: column; gap: 2px; }
 
 /* meetings */
 .mtime { font-family: var(--font-mono); font-size: 13px; color: var(--accent); }
@@ -223,6 +231,7 @@ tr:last-child td { border-bottom: 0; }
   var partners = brief.partners || [];
   var yours = actions.yours || [];
   var product = actions.product || [];
+  var testing = brief.testing || [];
 
   function groupItems(groups) {
     return (groups || []).reduce(function (a, g) { return a.concat(g.items || []); }, []);
@@ -285,6 +294,25 @@ tr:last-child td { border-bottom: 0; }
         pr.poke ? span("poke", "⚡ poke") : null
       ]),
       pr.note ? el("div", { "class": "meta", text: pr.note }) : null
+    ]);
+  }
+  function testCard(t) {
+    var live = String(t.live || "");
+    return el("div", { "class": "card" }, [
+      el("div", { "class": "testrow" }, [
+        span("num", String(t.n)),
+        el("div", { "class": "rowbody" }, [
+          el("div", { "class": "prtitle" }, [
+            link(safeUrl(t.url), "#" + t.number + " " + t.title),
+            span("tag", t.repo),
+            t.project ? span("tag", t.project) : null
+          ]),
+          t.merged ? el("div", { "class": "meta", text: "merged " + t.merged }) : null,
+          live ? span("live " + (live.indexOf("prod") >= 0 ? "good" : "warn"), "live: " + live) : null,
+          el("ol", { "class": "steps" }, (t.steps || []).map(function (s) { return el("li", { text: s }); })),
+          t.inferred ? el("div", { "class": "meta", text: "steps inferred from the diff" }) : null
+        ])
+      ])
     ]);
   }
   function meetingCard(m) {
@@ -357,6 +385,9 @@ tr:last-child td { border-bottom: 0; }
       });
     return out;
   }
+  function testingTab() {
+    return testing.length ? [section("Recently merged", testing.length, el("div", { "class": "cards" }, testing.map(testCard)))] : [];
+  }
   function ideasTab() {
     var out = [];
     [["Strategic", ideas.strategic], ["Other", ideas.other]].forEach(function (s) {
@@ -416,6 +447,8 @@ tr:last-child td { border-bottom: 0; }
       count: urgentItems.length + countGroups(todos.coming_up) + yours.length + product.length + meetings.length,
       empty: "Nothing to do." },
     { id: "prs", label: "PRs", build: prsTab, count: prTotal, empty: "No pull requests need you." },
+    { id: "testing", label: "Testing", build: testingTab, count: testing.length,
+      empty: "Nothing merged recently that needs a manual test." },
     { id: "ideas", label: "Ideas bank", build: ideasTab,
       count: countGroups(ideas.strategic) + countGroups(ideas.other), empty: "No ideas parked." },
     { id: "projects", label: "Projects", build: projectsTab, count: projects.length, empty: "No projects." }
@@ -426,11 +459,13 @@ tr:last-child td { border-bottom: 0; }
     { label: "Urgent", n: urgentItems.length, tab: "todo", extra: overdue > 0 ? overdue + " overdue" : "" },
     { label: "PRs needing you", n: prTotal, tab: "prs" },
     { label: "Your actions", n: yours.length, tab: "todo" },
-    { label: "Meetings", n: meetings.length, tab: "todo" }
+    { label: "Meetings", n: meetings.length, tab: "todo" },
+    { label: "To test", n: testing.length, tab: "testing" }
   ];
   var header = el("header", {}, [
     el("div", { "class": "date", text: brief.weekday_label || brief.date }),
-    el("h1", { "class": "focus", text: brief.focus }),
+    el("h1", { "class": "focus", text: "Morning brief" }),
+    el("p", { "class": "focus-line", text: brief.focus }),
     el("div", { "class": "chips" }, chips.map(function (c) {
       return el("button", { "class": "chip", type: "button", onclick: function () { select(c.tab, true); } }, [
         span("", c.label), el("b", { text: String(c.n) }),

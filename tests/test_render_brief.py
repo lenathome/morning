@@ -25,19 +25,25 @@ class NumberingTest(unittest.TestCase):
         self.assertEqual(brief["todos"]["coming_up"][0]["items"][0]["n"], 3)
         self.assertEqual(brief["actions"]["yours"][0]["n"], 4)
         self.assertEqual(brief["actions"]["product"][0]["n"], 5)
-        self.assertEqual(brief["ideas"]["strategic"][0]["items"][0]["n"], 6)
-        self.assertEqual(brief["ideas"]["other"][0]["items"][0]["n"], 7)
+        self.assertEqual(brief["testing"][0]["n"], 6)
+        self.assertEqual(brief["testing"][1]["n"], 7)
+        self.assertEqual(brief["ideas"]["strategic"][0]["items"][0]["n"], 8)
+        self.assertEqual(brief["ideas"]["other"][0]["items"][0]["n"], 9)
 
     def test_number_map(self):
         _, numbers = render_brief.number_items(load())
         self.assertEqual(numbers["1"], {"kind": "notion", "id": "p1"})
         self.assertEqual(numbers["3"], {"kind": "notion", "id": "p3"})
         self.assertEqual(numbers["4"], {"kind": "fathom", "key": "k1"})
-        self.assertEqual(len(numbers), 7)
+        self.assertEqual(numbers["6"], {"kind": "test", "key": "ekko-checkout#142"})
+        self.assertEqual(numbers["7"], {"kind": "test", "key": "ekko-api#1300"})
+        self.assertEqual(numbers["8"], {"kind": "notion", "id": "p4"})
+        self.assertEqual(len(numbers), 9)
 
     def test_missing_lists_default_to_empty(self):
-        _, numbers = render_brief.number_items({"date": "d", "weekday_label": "w", "focus": "f"})
+        brief, numbers = render_brief.number_items({"date": "d", "weekday_label": "w", "focus": "f"})
         self.assertEqual(numbers, {})
+        self.assertEqual(brief["testing"], [])
 
     def test_missing_focus_is_rejected(self):
         with self.assertRaises(ValueError):
@@ -47,6 +53,25 @@ class NumberingTest(unittest.TestCase):
         b = load()
         del b["urgent"][0]["items"][0]["id"]
         with self.assertRaises(ValueError):
+            render_brief.number_items(b)
+
+
+    def test_testing_item_missing_field_is_rejected(self):
+        for k in ("repo", "number", "url", "title"):
+            b = load()
+            del b["testing"][0][k]
+            with self.assertRaisesRegex(ValueError, f"has no '{k}'"):
+                render_brief.number_items(b)
+
+    def test_testing_steps_must_be_non_empty_list_of_strings(self):
+        for bad in (None, [], "one step", [1], [""]):
+            b = load()
+            b["testing"][0]["steps"] = bad
+            with self.assertRaisesRegex(ValueError, "ekko-checkout#142.*steps"):
+                render_brief.number_items(b)
+        b = load()
+        del b["testing"][0]["steps"]
+        with self.assertRaisesRegex(ValueError, "steps"):
             render_brief.number_items(b)
 
 
@@ -74,7 +99,7 @@ class MarkdownTest(unittest.TestCase):
 
     def test_section_order(self):
         order = ["## To do", "**Urgent today**", "**Coming up** - 1", "**Your actions**", "**Product actions**",
-                 "## External meeting prep", "## PRs needing you", "## Ideas bank",
+                 "## External meeting prep", "## PRs needing you", "## Testing", "## Ideas bank",
                  "**Strategic** - 1", "**Other** - 1", "## Engineering progress"]
         pos = [self.md.index(h) for h in order]
         self.assertEqual(pos, sorted(pos))
@@ -85,7 +110,23 @@ class MarkdownTest(unittest.TestCase):
         self.assertIn("**Coming up** - 1\n\n3. Revisit round-up (due 2 Oct)  [Operational]\n", self.md)
 
     def test_ideas_parent_group(self):
-        self.assertIn("**Other** - 1\n\n*Public documentation:*\n\n7. Link to methodology PDFs  [Operational]\n", self.md)
+        self.assertIn("**Other** - 1\n\n*Public documentation:*\n\n9. Link to methodology PDFs  [Operational]\n", self.md)
+
+    def test_testing_section(self):
+        self.assertIn("## Testing\n\n6. [#142](https://github.com/ekko-enviroconomy/ekko-checkout/pull/142) "
+                      "feat(sdk): translated checkout strings (ekko-checkout, Checkout translation pipeline)"
+                      " - merged 1 Oct, live: dev, staging, prod\n"
+                      "   - Open the staging checkout in tr-TR\n"
+                      "   - Check the contribution line reads in Turkish\n"
+                      "7. [#1300](", self.md)
+        self.assertIn("   - Request a quote for 12.34 EUR on dev\n   - (steps inferred from the diff)\n", self.md)
+        self.assertEqual(self.md.count("(steps inferred from the diff)"), 1)
+
+    def test_empty_testing_section_omitted(self):
+        b = load()
+        b["testing"] = []
+        brief, _ = render_brief.number_items(b)
+        self.assertNotIn("## Testing", render_brief.to_markdown(brief))
 
     def test_empty_ideas_section_omitted(self):
         b = load()
@@ -123,7 +164,8 @@ class CountsTest(unittest.TestCase):
         c = render_brief.counts(brief)
         self.assertEqual(c["coming_up"], 1)
         self.assertEqual(c["ideas"], 2)
-        self.assertEqual(c["max_number"], 7)
+        self.assertEqual(c["testing"], 2)
+        self.assertEqual(c["max_number"], 9)
         self.assertEqual(c["urgent"], 2)
 
 
@@ -136,10 +178,22 @@ class HtmlTest(unittest.TestCase):
         self.assertIn("DNS \\u003crecords>", html)
         self.assertIn("<title>Morning brief</title>", html)
 
-    def test_tabs_are_todo_prs_ideas_projects(self):
+    def test_testing_tab_chip_and_escaped_step(self):
+        b = load()
+        b["testing"][0]["steps"] = ["<script>alert(1)</script>"]
+        brief, _ = render_brief.number_items(b)
+        html = render_brief.to_html(brief)
+        self.assertNotIn("<script>alert(1)", html)
+        self.assertIn("\\u003cscript>alert(1)", html)
+        self.assertIn('id: "testing", label: "Testing"', html)
+        self.assertIn('label: "To test"', html)
+        self.assertIn("Nothing merged recently that needs a manual test.", html)
+
+    def test_tabs_are_todo_prs_testing_ideas_projects(self):
         html = (ROOT / "scripts" / "brief_template.html").read_text()
         ids = re.findall(r'\{ id: "(\w+)", label: "([^"]+)"', html)
-        self.assertEqual(ids, [("todo", "To do"), ("prs", "PRs"), ("ideas", "Ideas bank"), ("projects", "Projects")])
+        self.assertEqual(ids, [("todo", "To do"), ("prs", "PRs"), ("testing", "Testing"),
+                               ("ideas", "Ideas bank"), ("projects", "Projects")])
         self.assertNotIn('tab: "today"', html)
 
 
@@ -156,7 +210,7 @@ class CliTest(unittest.TestCase):
             self.assertIn("brief-data", (d / "b.html").read_text())
             m = json.loads((d / "m.json").read_text())
             self.assertEqual(m["date"], "2026-10-01")
-            self.assertEqual(m["numbers"]["7"], {"kind": "notion", "id": "p5"})
+            self.assertEqual(m["numbers"]["9"], {"kind": "notion", "id": "p5"})
             self.assertIn('"urgent": 2', r.stdout)
 
     def test_bad_input_exits_1(self):

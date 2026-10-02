@@ -23,6 +23,10 @@
   "todos": {
     "coming_up": [{"parent": null, "items": [{"id": "p3", "title": "Revisit round-up", "due": "due 2 Oct", "categories": ["Operational"], "note": ""}]}]
   },
+  "testing": [
+    {"repo": "ekko-checkout", "number": 142, "url": "https://github.com/ekko-enviroconomy/ekko-checkout/pull/142", "title": "feat(sdk): translated checkout strings", "project": "Checkout translation pipeline", "merged": "1 Oct", "live": "dev, staging, prod", "steps": ["Open the staging checkout in tr-TR", "Check the contribution line reads in Turkish"], "inferred": false},
+    {"repo": "ekko-api", "number": 1300, "url": "https://github.com/ekko-enviroconomy/ekko-api/pull/1300", "title": "fix(funds): <b>round</b> up", "project": "", "merged": "30 Sep", "live": "not deployed yet", "steps": ["Request a quote for 12.34 EUR on dev"], "inferred": true}
+  ],
   "ideas": {
     "strategic": [{"parent": null, "items": [{"id": "p4", "title": "Travel calculator", "due": "", "categories": ["Strategic"], "note": ""}]}],
     "other": [{"parent": "Public documentation", "items": [{"id": "p5", "title": "Link to methodology PDFs", "due": "", "categories": ["Operational"], "note": ""}]}]

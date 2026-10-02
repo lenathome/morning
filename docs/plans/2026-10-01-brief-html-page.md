@@ -65,6 +65,10 @@ Written by the model in Step 4. `render_brief.py` adds the `n` field to every ac
   "todos": {
     "coming_up": [{"parent": null, "items": []}]
   },
+  "testing": [
+    {"repo": "ekko-checkout", "number": 142, "url": "https://github.com/...", "title": "...", "project": "Checkout translation pipeline",
+     "merged": "1 Oct", "live": "dev, staging, prod", "steps": ["Open the staging checkout in tr-TR", "..."], "inferred": false}
+  ],
   "ideas": {
     "strategic": [],
     "other": []
@@ -86,11 +90,12 @@ Written by the model in Step 4. `render_brief.py` adds the `n` field to every ac
 Rules the renderer enforces (raises `ValueError` with a clear message, exit code 1):
 - Top-level keys `date`, `weekday_label`, `focus` are present and non-empty.
 - Every to-do item has `id`; every action has `key`.
+- Optional `testing` lists merged PRs Lena can test by hand. Every item has `repo`, `number`, `url` and `title`, and `steps` is a non-empty list of strings. `live` is free text ("not deployed yet" is allowed); `inferred` is true when the steps were written from the diff rather than the PR's test plan.
 - Missing lists default to empty. Missing optional strings default to `""`.
 
 Bucket meaning: `urgent` is every to-do due today or overdue. `todos.coming_up` is every to-do due after today, ordered by due date. `ideas` holds every to-do with no due date: `ideas.strategic` when `Category` contains Strategic, `ideas.other` for the rest.
 
-Numbering order, following the page: `urgent` (groups in the order given), `todos.coming_up`, `actions.yours`, `actions.product`, `ideas.strategic`, `ideas.other`. The model is responsible for the order within each list (standalone first, then parent groups alphabetically), exactly as the current skill describes.
+Numbering order, following the page: `urgent` (groups in the order given), `todos.coming_up`, `actions.yours`, `actions.product`, `testing`, `ideas.strategic`, `ideas.other`. A testing item's map entry is `{"kind": "test", "key": "<repo>#<number>"}`. The model is responsible for the order within each list (standalone first, then parent groups alphabetically), exactly as the current skill describes.
 
 ---
 

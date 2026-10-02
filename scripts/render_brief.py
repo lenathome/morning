@@ -41,6 +41,7 @@ def number_items(raw: dict) -> tuple[dict, dict]:
     actions.setdefault("product", [])
     todos = brief.setdefault("todos", {})
     todos.setdefault("coming_up", [])
+    brief.setdefault("testing", [])
     ideas = brief.setdefault("ideas", {})
     for k, _ in IDEA_BUCKETS:
         ideas.setdefault(k, [])
@@ -70,10 +71,25 @@ def number_items(raw: dict) -> tuple[dict, dict]:
             a["n"] = n
             numbers[str(n)] = {"kind": "fathom", "key": a["key"]}
 
+    def testing_list(items: list) -> None:
+        nonlocal n
+        for t in items:
+            ref = f"{t.get('repo', '?')}#{t.get('number', '?')}"
+            for k in ("repo", "number", "url", "title"):
+                if not t.get(k):
+                    raise ValueError(f"testing item '{ref}' has no '{k}'")
+            steps = t.get("steps")
+            if not isinstance(steps, list) or not steps or not all(isinstance(x, str) and x.strip() for x in steps):
+                raise ValueError(f"testing item '{ref}' needs 'steps' as a non-empty list of strings")
+            n += 1
+            t["n"] = n
+            numbers[str(n)] = {"kind": "test", "key": f"{t['repo']}#{t['number']}"}
+
     todo_groups(brief["urgent"])
     todo_groups(todos["coming_up"])
     action_list(actions["yours"])
     action_list(actions["product"])
+    testing_list(brief["testing"])
     for k, _ in IDEA_BUCKETS:
         todo_groups(ideas[k])
     return brief, numbers
@@ -104,6 +120,19 @@ def _pr_line(pr: dict) -> str:
 
 def _action_line(a: dict) -> str:
     return f"{a['n']}. [{a['text']}]({a['url']}) (from \"{a['meeting']}\", {a['date']})"
+
+
+def _testing_md(t: dict) -> list[str]:
+    where = f"{t['repo']}, {t['project']}" if t.get("project") else t["repo"]
+    head = f"{t['n']}. [#{t['number']}]({t['url']}) {t['title']} ({where})"
+    if t.get("merged"):
+        head += f" - merged {t['merged']}"
+    if t.get("live"):
+        head += f", live: {t['live']}" if t.get("merged") else f" - live: {t['live']}"
+    out = [head] + [f"   - {s}" for s in t["steps"]]
+    if t.get("inferred"):
+        out.append("   - (steps inferred from the diff)")
+    return out
 
 
 def _count(groups: list) -> int:
@@ -151,6 +180,12 @@ def to_markdown(brief: dict) -> str:
             L += [f"Awaiting review ({len(prs['awaiting'])}):", ""] + [_pr_line(p) for p in prs["awaiting"]] + [""]
     if not any(prs.values()):
         L += ["Nothing waiting on you. Nice.", ""]
+
+    if brief["testing"]:
+        L += ["## Testing", ""]
+        for t in brief["testing"]:
+            L += _testing_md(t)
+        L += [""]
 
     if any(_count(brief["ideas"][k]) for k, _ in IDEA_BUCKETS):
         L += ["## Ideas bank", ""]
@@ -205,11 +240,13 @@ def counts(brief: dict) -> dict:
         "prs_awaiting": len(brief["prs"]["awaiting"]),
         "coming_up": _count(brief["todos"]["coming_up"]),
         "actions": len(brief["actions"]["yours"]),
+        "testing": len(brief["testing"]),
         "ideas": sum(_count(brief["ideas"][k]) for k, _ in IDEA_BUCKETS),
         "meetings": len(brief["meetings"]),
         "max_number": max([0] + [i["n"] for g in brief["urgent"] for i in g.get("items", [])]
                           + [a["n"] for a in brief["actions"]["yours"] + brief["actions"]["product"]]
                           + [i["n"] for g in brief["todos"]["coming_up"] for i in g.get("items", [])]
+                          + [t["n"] for t in brief["testing"]]
                           + [i["n"] for k, _ in IDEA_BUCKETS for g in brief["ideas"][k] for i in g.get("items", [])]),
     }
 
