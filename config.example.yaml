@@ -37,6 +37,10 @@ calendar:
   external_meeting_attendee_cap: 10
   # Path used by gcalcli for OAuth credentials. Default usually fine.
   gcalcli_oauth_path: "~/.gcalcli_oauth"
+  # Personal contacts outside the ekko domain (old colleagues, friends). A
+  # meeting with only these people plus ekko colleagues is not external, so it
+  # gets no company research and no prep block.
+  internal_contacts: []
 
 github:
   # Repos to scan for "awaiting your input" (review requests, mentions).
@@ -71,6 +75,9 @@ fathom:
 
 output:
   briefs_dir: "~/morning/briefs"
+  # claude.ai artifact the brief page is published to every morning. Leave
+  # empty for the first run; the skill prints the new URL to paste here.
+  artifact_url: ""
 
 paths:
   # Directory of per-project markdown files with YAML frontmatter.

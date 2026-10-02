@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Morning brief</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one narrow reading column. Header with focus and counter chips, a sticky
+   tab bar, then dense rows with a fixed-width number column so numbers can be read back.
+   From 1100px wide it becomes two columns: brief on the left, Projects panel pinned on the right. */
+:root {
+  --bg: #f4f6f4;
+  --surface: #ffffff;
+  --surface-2: #eaeeea;
+  --fg: #1d2622;
+  --muted: #5c6b64;
+  --line: #d6dcd7;
+  --accent: #1f6b52;
+  --accent-soft: #dcece4;
+  --good: #1f7a4d;
+  --good-soft: #d9efe2;
+  --bad: #b3261e;
+  --bad-soft: #f8dcd9;
+  --warn: #8a5a00;
+  --warn-soft: #f6e8c6;
+  --font-display: "Fraunces", Georgia, "Times New Roman", serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #131a17;
+    --surface: #1b2420;
+    --surface-2: #232e29;
+    --fg: #e6ece8;
+    --muted: #9aaba2;
+    --line: #2f3c36;
+    --accent: #5fc79f;
+    --accent-soft: #1d3a2f;
+    --good: #5fc79f;
+    --good-soft: #1d3a2f;
+    --bad: #ff8a80;
+    --bad-soft: #4a2320;
+    --warn: #f0c36a;
+    --warn-soft: #43360f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #131a17;
+  --surface: #1b2420;
+  --surface-2: #232e29;
+  --fg: #e6ece8;
+  --muted: #9aaba2;
+  --line: #2f3c36;
+  --accent: #5fc79f;
+  --accent-soft: #1d3a2f;
+  --good: #5fc79f;
+  --good-soft: #1d3a2f;
+  --bad: #ff8a80;
+  --bad-soft: #4a2320;
+  --warn: #f0c36a;
+  --warn-soft: #43360f;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.45;
+  padding-inline: 16px;
+  padding-block: 20px 48px;
+  overflow-wrap: anywhere;
+}
+.wrap { max-width: 760px; margin-inline: auto; display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.main { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.side { min-width: 0; }
+.tabpanel { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+a:hover { text-decoration-thickness: 2px; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.muted { color: var(--muted); }
+
+/* header */
+header { display: flex; flex-direction: column; gap: 10px; }
+.date { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.focus { font-family: var(--font-display); font-weight: 500; font-size: 26px; line-height: 1.2; margin: 0; text-wrap: balance; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+  padding: 6px 12px; cursor: pointer; font-size: 13px;
+}
+.chip:hover { border-color: var(--accent); }
+.chip b { font-family: var(--font-mono); font-weight: 500; font-variant-numeric: tabular-nums; }
+.chip .overdue { color: var(--bad); font-weight: 600; }
+.banner { background: var(--surface-2); color: var(--muted); border-radius: 8px; padding: 8px 12px; font-size: 13px; display: flex; flex-direction: column; gap: 2px; }
+
+/* tabs */
+.tabs {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 2;
+  background: var(--bg); border-bottom: 1px solid var(--line);
+  display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none;
+  margin-inline: -16px; padding-inline: 16px;
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tab {
+  background: none; border: 0; border-bottom: 2px solid transparent;
+  padding: 10px 12px; cursor: pointer; white-space: nowrap; color: var(--muted); font-weight: 500;
+}
+.tab[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
+.tab .count { font-family: var(--font-mono); font-size: 12px; margin-left: 4px; font-variant-numeric: tabular-nums; }
+
+/* sections and rows */
+section.group { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+h2 { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0; display: flex; gap: 8px; align-items: baseline; }
+h2 .count { font-family: var(--font-mono); font-weight: 400; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; min-width: 0; }
+.parent { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); padding: 10px 12px 2px 56px; }
+.row { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 8px; padding: 8px 12px; align-items: baseline; }
+.row + .row, .parent { border-top: 1px solid var(--line); }
+.parent + .row { border-top: 0; }
+.num { font-family: var(--font-mono); font-weight: 500; font-size: 13px; color: var(--accent); text-align: right; font-variant-numeric: tabular-nums; }
+.rowbody { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 4px 8px; font-size: 12.5px; color: var(--muted); }
+.due-overdue { color: var(--bad); font-weight: 600; }
+.due-today { color: var(--warn); font-weight: 600; }
+.tag { font-family: var(--font-mono); font-size: 11.5px; background: var(--surface-2); color: var(--muted); border-radius: 4px; padding: 1px 6px; }
+
+/* prs */
+.cards { display: flex; flex-direction: column; gap: 8px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.prtitle { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.poke { font-size: 12px; background: var(--warn-soft); color: var(--warn); border-radius: 4px; padding: 1px 6px; font-weight: 600; }
+
+/* testing */
+.testrow { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 8px; align-items: baseline; }
+.live { font-size: 12.5px; font-weight: 600; border-radius: 4px; padding: 1px 6px; align-self: flex-start; }
+.live.good { background: var(--good-soft); color: var(--good); }
+.live.warn { background: var(--warn-soft); color: var(--warn); }
+.steps { margin: 0; padding-left: 20px; font-size: 13.5px; display: flex; flex-direction: column; gap: 2px; }
+
+/* meetings */
+.mtime { font-family: var(--font-mono); font-size: 13px; color: var(--accent); }
+.card h3 { font-size: 15px; margin: 0; font-weight: 600; }
+.plist { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 1px; font-size: 13.5px; }
+.nlist { margin: 0; padding-left: 18px; font-size: 13.5px; }
+
+/* projects */
+.filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.filter { background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; cursor: pointer; font-size: 13px; }
+.filter[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--fg); font-weight: 600; }
+details.prow > summary { cursor: pointer; list-style: none; display: grid; grid-template-columns: minmax(0, 1fr) 20px; gap: 8px; align-items: start; padding: 10px 12px; }
+details.prow > summary::-webkit-details-marker { display: none; }
+.prow + .prow { border-top: 1px solid var(--line); }
+.psum { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.pnext { font-size: 13.5px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+details.prow[open] .pnext { display: block; -webkit-line-clamp: unset; line-clamp: unset; overflow: visible; }
+.chev { width: 20px; height: 20px; position: relative; margin-top: 1px; }
+.chev::before {
+  content: ""; position: absolute; left: 6px; top: 4px; width: 7px; height: 7px;
+  border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(-45deg);
+}
+details.prow[open] .chev::before { transform: rotate(45deg); top: 3px; }
+details.prow > summary:hover .chev::before { border-color: var(--accent); }
+details.prow > summary:focus-visible { outline-offset: -2px; border-radius: 8px; }
+.prows { overflow: hidden; }
+details.prow .detail { margin: 0 12px 10px; }
+.phead { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.pname { font-weight: 600; }
+.pill { font-size: 11.5px; font-weight: 600; border-radius: 999px; padding: 1px 8px; text-transform: lowercase; }
+.pill.active { background: var(--good-soft); color: var(--good); }
+.pill.blocked { background: var(--bad-soft); color: var(--bad); }
+.pill.waiting { background: var(--warn-soft); color: var(--warn); }
+.pill.other { background: var(--surface-2); color: var(--muted); }
+.detail { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; margin-top: 8px; border-top: 1px solid var(--line); font-size: 13.5px; }
+.detail p { margin: 0; }
+.detail ul { margin: 0; padding-left: 18px; }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; min-width: 520px; font-size: 13.5px; }
+th { text-align: left; font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+th, td { padding: 6px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+td.nextcol { min-width: 160px; }
+tr:last-child td { border-bottom: 0; }
+.empty { color: var(--muted); padding: 24px 0; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .chip, .filter, .tab { transition: border-color 0.12s, background 0.12s; }
+}
+@media (max-width: 420px) {
+  .focus { font-size: 22px; }
+}
+.side { display: none; }
+@media (min-width: 1100px) {
+  body { padding-inline: 24px; }
+  .wrap { max-width: 1400px; display: grid; grid-template-columns: minmax(0, 11fr) minmax(0, 9fr); gap: 28px; align-items: start; }
+  .side {
+    display: block; position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px;
+  }
+  .side .prows { border: 0; background: none; border-radius: 0; }
+  .side .tabpanel { gap: 14px; }
+  .tabs { margin-inline: 0; padding-inline: 0; }
+}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<script id="brief-data" type="application/json">/*__BRIEF_JSON__*/null</script>
+<script>
+(function () {
+  "use strict";
+
+  function el(tag, props, children) {
+    var node = document.createElement(tag);
+    if (props) {
+      for (var k in props) {
+        if (k === "class") node.className = props[k];
+        else if (k === "text") node.textContent = props[k];
+        else if (k.slice(0, 2) === "on") node.addEventListener(k.slice(2), props[k]);
+        else node.setAttribute(k, props[k]);
+      }
+    }
+    (children || []).forEach(function (c) {
+      if (c == null || c === false) return;
+      node.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+    });
+    return node;
+  }
+  function span(cls, text) { return el("span", { "class": cls, text: text }); }
+  function link(href, text) {
+    return el("a", { href: href, target: "_blank", rel: "noopener noreferrer", text: text });
+  }
+  function safeUrl(u) { return /^https?:\/\//i.test(String(u || "")) ? u : "#"; }
+
+  var app = document.getElementById("app");
+  var brief = null;
+  try { brief = JSON.parse(document.getElementById("brief-data").textContent); } catch (e) { brief = null; }
+  if (!brief) {
+    app.appendChild(el("p", { "class": "empty", text: "No brief data in this page." }));
+    return;
+  }
+
+  var urgent = brief.urgent || [];
+  var prs = brief.prs || {};
+  var actions = brief.actions || {};
+  var todos = brief.todos || {};
+  var ideas = brief.ideas || {};
+  var meetings = brief.meetings || [];
+  var projects = brief.projects || [];
+  var partners = brief.partners || [];
+  var yours = actions.yours || [];
+  var product = actions.product || [];
+  var testing = brief.testing || [];
+
+  function groupItems(groups) {
+    return (groups || []).reduce(function (a, g) { return a.concat(g.items || []); }, []);
+  }
+  function countGroups(groups) { return groupItems(groups).length; }
+
+  var urgentItems = groupItems(urgent);
+  var overdue = urgentItems.filter(function (i) { return String(i.due || "").indexOf("overdue") === 0; }).length;
+  var prTotal = (prs.review_requested || []).length + (prs.ready || []).length + (prs.awaiting || []).length;
+
+  /* ---------- builders ---------- */
+  function numberedRow(n, body) {
+    return el("div", { "class": "row" }, [span("num", String(n)), el("div", { "class": "rowbody" }, body)]);
+  }
+  function todoRow(item) {
+    var meta = [];
+    if (item.due) {
+      var d = String(item.due);
+      var cls = d.indexOf("overdue") === 0 ? "due-overdue" : (d.indexOf("due today") === 0 ? "due-today" : "");
+      meta.push(span(cls, d));
+    }
+    (item.categories || []).forEach(function (c) { meta.push(span("tag", c)); });
+    if (item.note) meta.push(span("", item.note));
+    return numberedRow(item.n, [
+      el("div", { text: item.title }),
+      meta.length ? el("div", { "class": "meta" }, meta) : null
+    ]);
+  }
+  function todoPanel(groups) {
+    var panel = el("div", { "class": "panel" });
+    (groups || []).forEach(function (g) {
+      var items = g.items || [];
+      if (!items.length) return;
+      if (g.parent) panel.appendChild(el("div", { "class": "parent", text: g.parent }));
+      items.forEach(function (i) { panel.appendChild(todoRow(i)); });
+    });
+    return panel;
+  }
+  function actionPanel(list) {
+    var panel = el("div", { "class": "panel" });
+    list.forEach(function (a) {
+      panel.appendChild(numberedRow(a.n, [
+        el("div", {}, [link(safeUrl(a.url), a.text)]),
+        el("div", { "class": "meta" }, [span("", a.meeting + ", " + a.date)])
+      ]));
+    });
+    return panel;
+  }
+  function section(title, count, content) {
+    return el("section", { "class": "group" }, [
+      el("h2", {}, [title, count != null ? span("count", String(count)) : null]),
+      content
+    ]);
+  }
+  function prCard(pr) {
+    return el("div", { "class": "card" }, [
+      el("div", { "class": "prtitle" }, [
+        link(safeUrl(pr.url), "#" + pr.number + " " + pr.title),
+        span("tag", pr.repo),
+        pr.poke ? span("poke", "⚡ poke") : null
+      ]),
+      pr.note ? el("div", { "class": "meta", text: pr.note }) : null
+    ]);
+  }
+  function testCard(t) {
+    var live = String(t.live || "");
+    return el("div", { "class": "card" }, [
+      el("div", { "class": "testrow" }, [
+        span("num", String(t.n)),
+        el("div", { "class": "rowbody" }, [
+          el("div", { "class": "prtitle" }, [
+            link(safeUrl(t.url), "#" + t.number + " " + t.title),
+            span("tag", t.repo),
+            t.project ? span("tag", t.project) : null
+          ]),
+          t.merged ? el("div", { "class": "meta", text: "merged " + t.merged }) : null,
+          live ? span("live " + (live.indexOf("prod") >= 0 ? "good" : "warn"), "live: " + live) : null,
+          el("ol", { "class": "steps" }, (t.steps || []).map(function (s) { return el("li", { text: s }); })),
+          t.inferred ? el("div", { "class": "meta", text: "steps inferred from the diff" }) : null
+        ])
+      ])
+    ]);
+  }
+  function meetingCard(m) {
+    var parts = (m.participants || []).map(function (p) {
+      return el("li", {}, [p.name, p.role ? span("muted", " - " + p.role) : null]);
+    });
+    var notes = (m.notes || []).map(function (n) { return el("li", { text: n }); });
+    return el("div", { "class": "card" }, [
+      el("div", { "class": "phead" }, [span("mtime", m.time), el("h3", { text: m.title })]),
+      m.company ? el("div", { "class": "meta", text: m.company }) : null,
+      parts.length ? el("ul", { "class": "plist" }, parts) : null,
+      notes.length ? el("ul", { "class": "nlist" }, notes) : null
+    ]);
+  }
+  function statusPill(status) {
+    var s = String(status || "").toLowerCase();
+    var cls = s === "active" || s === "blocked" || s === "waiting" ? s : "other";
+    return span("pill " + cls, s || "unknown");
+  }
+  function projectCard(p) {
+    var s = String(p.status || "").toLowerCase();
+    var meta = [];
+    if (p.owner) meta.push(span("", "Owner: " + p.owner));
+    if (p.target) meta.push(span("", "Target: " + p.target));
+    var detail = [];
+    if (p.summary) detail.push(el("p", { text: p.summary }));
+    if (p.stale_note) detail.push(el("p", { "class": "muted", text: p.stale_note }));
+    if (p.sync_note) detail.push(el("p", {}, [span("muted", "Team sync: "), p.sync_note]));
+    var gh = p.github || {};
+    if (gh.line) detail.push(el("p", { "class": "muted", text: gh.line }));
+    if ((gh.open || []).length) {
+      detail.push(el("ul", {}, gh.open.map(function (pr) {
+        return el("li", {}, [link(safeUrl(pr.url), "#" + pr.number + " " + pr.title), " ",
+          span("tag", pr.repo), pr.updated ? span("muted", " updated " + pr.updated) : null]);
+      })));
+    }
+    if (!detail.length) detail.push(el("p", { "class": "muted", text: "No more detail." }));
+    var card = el("details", { "class": "prow" }, [
+      el("summary", {}, [
+        el("div", { "class": "psum" }, [
+          el("div", { "class": "phead" }, [span("pname", p.name), statusPill(p.status)]),
+          meta.length ? el("div", { "class": "meta" }, meta) : null,
+          p.next ? el("div", { "class": "pnext", text: p.next }) : null
+        ]),
+        el("span", { "class": "chev", "aria-hidden": "true" })
+      ]),
+      el("div", { "class": "detail" }, detail)
+    ]);
+    card.setAttribute("data-status", s);
+    return card;
+  }
+
+  /* ---------- tab content ---------- */
+  function todoTab() {
+    var out = [];
+    if (urgentItems.length) out.push(section("Urgent today", urgentItems.length, todoPanel(urgent)));
+    var comingN = countGroups(todos.coming_up);
+    if (comingN) out.push(section("Coming up", comingN, todoPanel(todos.coming_up)));
+    if (yours.length) out.push(section("Your actions", yours.length, actionPanel(yours)));
+    if (product.length) out.push(section("Product actions", product.length, actionPanel(product)));
+    if (meetings.length) {
+      out.push(section("External meeting prep", meetings.length,
+        el("div", { "class": "cards" }, meetings.map(meetingCard))));
+    }
+    return out;
+  }
+  function prsTab() {
+    var out = [];
+    [["Review requested", prs.review_requested], ["Ready to merge", prs.ready], ["Awaiting review", prs.awaiting]]
+      .forEach(function (s) {
+        var list = s[1] || [];
+        if (list.length) out.push(section(s[0], list.length, el("div", { "class": "cards" }, list.map(prCard))));
+      });
+    return out;
+  }
+  function testingTab() {
+    return testing.length ? [section("Recently merged", testing.length, el("div", { "class": "cards" }, testing.map(testCard)))] : [];
+  }
+  function ideasTab() {
+    var out = [];
+    [["Strategic", ideas.strategic], ["Other", ideas.other]].forEach(function (s) {
+      var c = countGroups(s[1]);
+      if (c) out.push(section(s[0], c, todoPanel(s[1])));
+    });
+    return out;
+  }
+  var filterValue = "all";
+  function projectsTab() {
+    var out = [];
+    if (brief.team_sync_notes) {
+      out.push(section("Team sync notes", null, el("div", { "class": "card", text: brief.team_sync_notes })));
+    }
+    if (projects.length) {
+      var list = el("div", { "class": "panel prows" }, projects.map(projectCard));
+      var buttons = [];
+      var emptyMsg = el("p", { "class": "empty", text: "No projects with this status.", hidden: "" });
+      function apply() {
+        var shown = 0;
+        Array.prototype.forEach.call(list.children, function (c) {
+          var ok = filterValue === "all" || c.getAttribute("data-status") === filterValue;
+          c.hidden = !ok;
+          if (ok) shown++;
+        });
+        emptyMsg.hidden = shown > 0;
+        buttons.forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-f") === filterValue)); });
+      }
+      var filters = el("div", { "class": "filters", role: "group", "aria-label": "Filter projects by status" });
+      ["all", "active", "blocked", "waiting"].forEach(function (f) {
+        var b = el("button", { "class": "filter", type: "button", "data-f": f,
+          text: f.charAt(0).toUpperCase() + f.slice(1),
+          onclick: function () { filterValue = f; apply(); } });
+        buttons.push(b);
+        filters.appendChild(b);
+      });
+      out.push(section("Projects", projects.length, el("div", { "class": "cards" }, [filters, list, emptyMsg])));
+      apply();
+    }
+    if (partners.length) {
+      var rows = partners.map(function (x) {
+        return el("tr", {}, [el("td", { text: x.name }), el("td", { text: x.owner || "" }),
+          el("td", {}, [statusPill(x.status)]), el("td", { "class": "nextcol", text: x.next || "" }),
+          el("td", { text: x.target || "" })]);
+      });
+      var table = el("table", {}, [
+        el("thead", {}, [el("tr", {}, ["Partner", "Owner", "Status", "Next", "Target"].map(function (h) { return el("th", { text: h }); }))]),
+        el("tbody", {}, rows)
+      ]);
+      out.push(section("Partners", partners.length, el("div", { "class": "panel tablewrap" }, [table])));
+    }
+    return out;
+  }
+
+  var TABS = [
+    { id: "todo", label: "To do", build: todoTab,
+      count: urgentItems.length + countGroups(todos.coming_up) + yours.length + product.length + meetings.length,
+      empty: "Nothing to do." },
+    { id: "prs", label: "PRs", build: prsTab, count: prTotal, empty: "No pull requests need you." },
+    { id: "testing", label: "Testing", build: testingTab, count: testing.length,
+      empty: "Nothing merged recently that needs a manual test." },
+    { id: "ideas", label: "Ideas bank", build: ideasTab,
+      count: countGroups(ideas.strategic) + countGroups(ideas.other), empty: "No ideas parked." },
+    { id: "projects", label: "Projects", build: projectsNodes, count: projects.length, empty: "No projects." }
+  ];
+  /* Projects content is built once and moved between the Projects tab (narrow) and the side panel (wide). */
+  var projectsContent = projectsTab();
+  var projectsNode = el("div", { "class": "tabpanel" },
+    projectsContent.length ? projectsContent : [el("p", { "class": "empty", text: "No projects." })]);
+  function projectsNodes() { return [projectsNode]; }
+
+  /* ---------- header ---------- */
+  var chips = [
+    { label: "Urgent", n: urgentItems.length, tab: "todo", extra: overdue > 0 ? overdue + " overdue" : "" },
+    { label: "PRs needing you", n: prTotal, tab: "prs" },
+    { label: "Your actions", n: yours.length, tab: "todo" },
+    { label: "Meetings", n: meetings.length, tab: "todo" },
+    { label: "To test", n: testing.length, tab: "testing" }
+  ];
+  var header = el("header", {}, [
+    el("div", { "class": "date", text: brief.weekday_label || brief.date }),
+    el("h1", { "class": "focus", text: "Morning brief" }),
+    el("div", { "class": "chips" }, chips.map(function (c) {
+      return el("button", { "class": "chip", type: "button", onclick: function () { select(c.tab, true); } }, [
+        span("", c.label), el("b", { text: String(c.n) }),
+        c.extra ? span("overdue", c.extra) : null
+      ]);
+    }))
+  ]);
+  var main = el("div", { "class": "main" });
+  var side = el("aside", { "class": "side", "aria-label": "Projects", hidden: "" });
+  app.appendChild(main);
+  app.appendChild(side);
+  main.appendChild(header);
+  if ((brief.unavailable || []).length) {
+    main.appendChild(el("div", { "class": "banner", role: "status" },
+      brief.unavailable.map(function (u) { return el("div", { text: u }); })));
+  }
+
+  /* ---------- tabs ---------- */
+  var tablist = el("div", { "class": "tabs", role: "tablist", "aria-label": "Brief sections" });
+  var panels = {};
+  var tabButtons = {};
+  TABS.forEach(function (t) {
+    var b = el("button", { "class": "tab", role: "tab", type: "button", id: "tab-" + t.id,
+      "aria-controls": "panel-" + t.id, "aria-selected": "false",
+      onclick: function () { select(t.id, false); } },
+      [t.label, t.count ? span("count", String(t.count)) : null]);
+    tabButtons[t.id] = b;
+    tablist.appendChild(b);
+    var content = t.build();
+    var p = el("div", { "class": "tabpanel", role: "tabpanel", id: "panel-" + t.id, "aria-labelledby": "tab-" + t.id, hidden: "" },
+      content.length ? content : [el("p", { "class": "empty", text: t.empty })]);
+    panels[t.id] = p;
+  });
+  main.appendChild(tablist);
+  TABS.forEach(function (t) { main.appendChild(panels[t.id]); });
+
+  var wideQuery = window.matchMedia("(min-width: 1100px)");
+  function visibleTabIds() {
+    return TABS.map(function (t) { return t.id; })
+      .filter(function (id) { return !(wideQuery.matches && id === "projects"); });
+  }
+  var current = "todo";
+  function select(id, scrollUp) {
+    if (!panels[id] || visibleTabIds().indexOf(id) < 0) id = "todo";
+    current = id;
+    TABS.forEach(function (t) {
+      var on = t.id === id;
+      panels[t.id].hidden = !on;
+      tabButtons[t.id].setAttribute("aria-selected", String(on));
+      tabButtons[t.id].tabIndex = on ? 0 : -1;
+    });
+    try { localStorage.setItem("morning-brief-tab", id); } catch (e) { /* storage unavailable */ }
+    if (scrollUp) tablist.scrollIntoView({ block: "start" });
+  }
+  tablist.addEventListener("keydown", function (e) {
+    var ids = visibleTabIds();
+    var cur = ids.indexOf(document.activeElement && document.activeElement.id.replace("tab-", ""));
+    if (cur < 0) return;
+    var next = e.key === "ArrowRight" ? cur + 1 : e.key === "ArrowLeft" ? cur - 1 : null;
+    if (next == null) return;
+    next = (next + ids.length) % ids.length;
+    select(ids[next], false);
+    tabButtons[ids[next]].focus();
+    e.preventDefault();
+  });
+
+  function place() {
+    var wide = wideQuery.matches;
+    (wide ? side : panels.projects).appendChild(projectsNode);
+    side.hidden = !wide;
+    tabButtons.projects.hidden = wide;
+    if (wide && current === "projects") select("todo", false);
+  }
+  if (wideQuery.addEventListener) wideQuery.addEventListener("change", place);
+  else if (wideQuery.addListener) wideQuery.addListener(place);
+
+  var saved = "todo";
+  try { saved = localStorage.getItem("morning-brief-tab") || "todo"; } catch (e) { saved = "todo"; }
+  place();
+  select(saved, false);
+})();
+</script>
+</body>
+</html>

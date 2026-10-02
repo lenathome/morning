@@ -1,6 +1,6 @@
 ---
 name: morning
-description: Produce the daily morning brief - project updates to apply first, then urgent to-dos, PRs needing you, open action items, to-dos, external meeting prep, engineering progress per project and a one-sentence focus. Run at the start of each working day.
+description: Produce the daily morning brief - project updates to apply first, then a To do section (urgent, coming up, action items), external meeting prep, PRs needing you, recently merged PRs to test by hand, an ideas bank of undated to-dos, engineering progress per project and a one-sentence focus. Run at the start of each working day.
 ---
 
 # /morning — daily brief skill
@@ -77,7 +77,7 @@ Make these tool calls in a SINGLE message (parallel tool use):
 
 1. **To-dos** — Notion MCP. Use `notion-search` with `data_source_url: collection://<todo_database_id from config's data source>` to list pages in the Tasks DB. Increase `page_size` to 25 (max) and `max_highlight_length: 0`. Then `notion-fetch` each page to read properties (Name, Due, Status, Category, Type, Client, Area, Parent, Subtasks). Filter out `Status: Done` and filter out `Type: Idea`. An Idea is not a to-do: parked ideas live in `~/product-os/backlog.md` and are reviewed at the cycle boundary, so surfacing them daily buries the actionable rows. Rows with no `Type` set are kept, because an unset Type is missing data rather than a decision. Keep `Parent` and `Subtasks` fields — they drive the parent/subtask rendering in the brief. If MCP unavailable, mark to-dos section as "Notion unavailable".
 
-2. **Calendar** — Bash: `python3 ~/github/morning/scripts/fetch_calendar.py "<ekko_email_domain>" "<primary_calendar>"` (both values from config; second arg restricts gcalcli to your own calendar so shared calendars don't clutter the brief)
+2. **Calendar** — Bash: `python3 ~/github/morning/scripts/fetch_calendar.py "<ekko_email_domain>" "<primary_calendar>" "<calendar.internal_contacts comma-joined, or empty string>"` (values from config; second arg restricts gcalcli to your own calendar so shared calendars don't clutter the brief; third arg lists personal contacts who do not make a meeting external)
 
 3. **Projects index** — Bash: `python3 ~/github/morning/scripts/parse_projects.py "<paths.projects_dir from config>"`. Returns a JSON array of live projects from `~/product-os/projects/*.md`, each with `slug, name, status, owner, repos, keywords, notion, next_milestone, target_date, last_reviewed, stale, body`. If the command exits non-zero, render the Engineering progress section as "Projects unavailable: <first line of stderr>" and continue.
 
@@ -88,13 +88,15 @@ Make these tool calls in a SINGLE message (parallel tool use):
 6. **Fathom meetings** — Use the Fathom MCP tools:
    - First: `list_meetings` filtered to the last `fathom.lookback_days` days (default 7).
    - Then in parallel: `get_meeting_summary` for each meeting returned.
-   - If the MCP is unavailable, mark the "Yesterday's meetings" and "Open action items" sections as "Fathom unavailable" and continue.
+   - If the MCP is unavailable, mark the "Yesterday's meetings" and "Your actions" and "Product actions" lists as "Fathom unavailable" and continue.
 
 7. **Acknowledged action items** — Read tool: `~/morning/state/acknowledged-actions.json`. If the file is missing, treat it as `[]`. Use Read, not `cat`, so an unattended run needs no Bash approval.
 
 8. **Acknowledged PRs state** — Read tool: `~/morning/state/acknowledged-prs.json`. If the file is missing, treat it as `[]`.
 
 9. **Your own open PRs** — Bash: `~/github/morning/scripts/fetch_github.sh authored`. Returns non-draft PRs you authored, enriched with `review_decision`, `reviewers_requested`, `latest_approvals`, `mergeable`. Used by "Yours to chase" in the PRs needing you section.
+
+10. **Recently merged PRs** — Bash: `~/github/morning/scripts/fetch_merged.sh "<repos comma-joined>" 3`, where the repos are the union of every non-done project's `repos` and config `github.ekko_repos`. Returns merged PRs from the last 3 days, each with `repo, number, title, url, body, mergedAt, author, files` and `deploys` (the deploy, release and publish runs on the merge commit, with their jobs). Used by the Testing section. Also read `~/morning/state/acknowledged-tests.json` with the Read tool; if the file is missing, treat it as `[]`.
 
 
 ## Step 2: Per-project data fetch (parallel)
@@ -137,7 +139,13 @@ Loop over the meetings returned in Step 1.6:
 
 ## Step 4: Render the brief
 
-Use the voice guide section above. The full brief structure is in the next section of this skill file (continued in part 2).
+Write the brief's content as JSON to `<briefs_dir>/<YYYY-MM-DD>.json`, following the contract in `docs/plans/2026-10-01-brief-html-page.md` (section "The brief JSON contract"). That contract lives in this repo; the skill reads it from `~/github/morning/docs/plans/2026-10-01-brief-html-page.md`. Do not number anything: the renderer does. Put every list in final display order (standalone tasks first, then parent groups alphabetically). Apply the voice guide to every string you write. Then run:
+
+`python3 ~/github/morning/scripts/render_brief.py <briefs_dir>/<date>.json --md <briefs_dir>/<date>.md --html <briefs_dir>/<date>.html --map ~/morning/state/brief-map-<date>.json`
+
+It prints one JSON line of counts; keep it for Step 6. If it exits 1, fix the JSON it names and run it again.
+
+The "Brief structure" section below still defines what goes in each list.
 
 ## Error handling
 
@@ -149,18 +157,20 @@ If the entire orchestration fails before rendering, write a one-line error to `~
 
 ## Brief structure
 
-Produce the brief as a single markdown file. Apply the voice guide at every step.
+The model writes the brief JSON (Step 4); `render_brief.py` produces the markdown archive and the page from it. Apply the voice guide at every step.
 
-### Template
+### Markdown archive layout (produced by render_brief.py)
 
 ```markdown
 # Morning brief — <Weekday DD MMM YYYY>
 
 > **Today's focus:** <one sentence, see Step 5 below>
 
-## Urgent today
+## To do
 
-Every to-do with `Due` ≤ today. Numbering starts at 1 here. See "To-do rules" below the template for bucket logic and parent/subtask rendering. If nothing is due, omit this section.
+**Urgent today**
+
+Every to-do with `Due` ≤ today. Numbering starts at 1 here. See "To-do rules" below the template for bucket logic and parent/subtask rendering. If nothing is due, omit this sub-heading.
 
 1. <standalone task> (due today)  [<categories>]
 
@@ -168,6 +178,23 @@ Every to-do with `Due` ≤ today. Numbering starts at 1 here. See "To-do rules" 
 
 2. <subtask> (due today)  [<categories>]
 3. <subtask> (overdue since <date>)  [<categories>]
+
+**Coming up** - N
+
+4. <standalone task> (due <date>)  [<categories>]
+
+**Your actions**
+
+5. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
+6. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
+
+**Product actions**
+
+7. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
+
+## External meeting prep
+
+<see rules below>
 
 ## PRs needing you
 
@@ -190,38 +217,19 @@ Awaiting review (N):
 
 (If both sub-lists are empty: "Nothing waiting on you. Nice.")
 
-## Open action items
-
-**Your actions**
-
-4. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
-5. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
-
-**Product actions**
-
-6. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
-
-## To-dos
-
-**This week** - N
-
-7. <standalone task> (due <date>)  [<categories>]
+## Ideas bank
 
 **Strategic** - N
 
-8. <standalone task> (<due date if any>)  [<categories>]
+8. <standalone task>  [<categories>]
 
 *<Parent name 2>:*
 
-9. <subtask> (<due date if any>)  [<categories>]
+9. <subtask>  [<categories>]
 
-**Later** - N
+**Other** - N
 
 10. <standalone task>  [<categories>]
-
-## External meeting prep
-
-<see rules below>
 
 ## Engineering progress
 
@@ -230,37 +238,38 @@ Awaiting review (N):
 
 The sections below are the rules for each part of the template above.
 
-### Urgent today and To-dos
+### To do and Ideas bank
 
-**Bucket logic** (in priority order, each task lands in the first matching bucket):
-1. **Urgent today** - has `Due` ≤ today. Renders under `## Urgent today`.
-2. **This week** - has `Due` in the rest of this calendar week.
-3. **Strategic** - `Category` contains `Strategic` (regardless of date, unless already shown above).
-4. **Later** - everything else (no date and not Strategic).
+**Bucket logic** (each task lands in the first matching bucket):
+1. **Urgent today** - has `Due` ≤ today. Renders under `**Urgent today**` in `## To do`.
+2. **Coming up** - has `Due` after today, ordered by due date. Renders under `**Coming up**` in `## To do`.
+3. **Ideas bank** - has no `Due` date. Renders under `## Ideas bank`, split into **Strategic** (`Category` contains `Strategic`) and **Other** (everything else).
 
-Buckets 2 to 4 render under `## To-dos`.
+Notion rows with `Type: Idea` are still dropped in Step 1; the Ideas bank here is undated to-dos, not parked ideas.
 
 **Parent/subtask rendering.** The Tasks DB has a self-referencing `Parent` / `Subtasks` relation. Tasks split into three kinds:
 - **Parent groupers** — `Subtasks` non-empty. These are containers, NOT actionable themselves. Do NOT render parent groupers as task lines. Use their Name as the heading for their child subtasks. If the query returns an empty `Subtasks` field on every row, that view doesn't populate it - infer parent groupers instead from the children's `Parent` relation: any page named by at least one other row's `Parent` field is a grouper, even though its own `Subtasks` field reads empty.
 - **Subtasks** — `Parent` non-empty. Bucketed individually by their own Due/Category (see below), but never rendered under more than one heading.
 - **Standalone tasks** — both `Parent` and `Subtasks` empty. Bucketed individually.
 
-**Each parent group renders exactly once across Urgent today and To-dos together** - never split across buckets, never repeated:
+**Each parent group renders exactly once across Urgent today, Coming up and the Ideas bank together** - never split across buckets, never repeated:
 1. Bucket every subtask individually, using the bucket logic above against its own Due/Category.
-2. Place the group in the bucket of its most urgent subtask: the bucket of the subtask with the earliest `Due` date. If no subtask in the group has a `Due` date, use instead the highest-priority bucket (Urgent > This week > Strategic > Later) that any subtask in the group falls into. A group whose most urgent subtask is overdue or due today renders only under Urgent today, with all its subtasks.
+2. Place the group in the bucket of its most urgent subtask: the bucket of the subtask with the earliest `Due` date. If no subtask in the group has a `Due` date, the group goes to the Ideas bank: **Strategic** if any subtask's `Category` contains `Strategic`, otherwise **Other**. A group whose most urgent subtask is overdue or due today renders only under Urgent today, with all its subtasks.
 3. Within that one bucket, render the group once, with its subtasks sorted by `Due` date (undated subtasks last). Each subtask line still shows its own due date.
 
-Within each bucket (and within Urgent today): standalone tasks first (flat, no indent, sorted by due date), then parent groups (alphabetically by parent name).
+Within each bucket (Urgent today, Coming up, Strategic, Other): standalone tasks first (flat, no indent, sorted by due date), then parent groups (alphabetically by parent name).
 
-Every bucket heading line is followed by a blank line before its first list item, and a blank line separates one list (a run of standalone tasks, or a parent group's italic name line plus its subtasks) from the next. In CommonMark, an ordered list that doesn't start at 1 cannot interrupt a preceding paragraph, so a numbered line placed right after a heading or after a parent's italic name line - with no blank line between - merges into that line instead of rendering as a list. The same blank-line rule applies to the Open action items headings.
+Every bucket heading line is followed by a blank line before its first list item, and a blank line separates one list (a run of standalone tasks, or a parent group's italic name line plus its subtasks) from the next. In CommonMark, an ordered list that doesn't start at 1 cannot interrupt a preceding paragraph, so a numbered line placed right after a heading or after a parent's italic name line - with no blank line between - merges into that line instead of rendering as a list. The same blank-line rule applies to the Your actions and Product actions headings.
 
 A parent group renders as a standalone italic line, `*<Parent name>:*`, on its own with no leading bullet, followed by a blank line, then its numbered subtasks flush-left with no indent.
 
 Each line shows the task title, its due date if any, and its categories as inline `[Tag1, Tag2]` after the title. Numbered lines have no checkbox.
 
-**Numbering.** Every actionable line across the WHOLE brief shares one running number sequence, in this order: Urgent today (starting at 1), then Open action items, then To-dos. Parent-name sub-headers are not actionable and do not consume a number; only standalone tasks, subtasks and action items do. PR lines are not numbered. Keep an ordered lookup as you number: for each number, record whether it is a Notion to-do (its page id) or a Fathom action (its stable key). Step 7 needs this to know what to update when Lena replies with bare numbers.
+**Numbering.** Every actionable line across the WHOLE brief shares one running number sequence, in page order: Urgent today (starting at 1), Coming up, Your actions, Product actions, Testing, then the Ideas bank (Strategic, then Other). Parent-name sub-headers are not actionable and do not consume a number; only standalone tasks, subtasks and action items do. PR lines are not numbered. The renderer assigns the numbers and writes the map to `~/morning/state/brief-map-<date>.json`; the model never numbers anything.
 
-If Urgent today and every To-dos bucket are empty, render `## To-dos` with "Notion DB is empty. Add tasks at <DB url>". If a To-dos bucket is empty, omit its sub-heading. If Notion is unavailable, render `## To-dos` with "Notion unavailable".
+JSON mapping: Urgent today goes in `urgent`, Coming up in `todos.coming_up`, Strategic in `ideas.strategic`, Other in `ideas.other`.
+
+If every to-do bucket is empty, render `## To do` with "Notion DB is empty. Add tasks at <DB url>". If a sub-heading's list is empty, omit it. If Notion is unavailable, render `## To do` with "Notion unavailable".
 
 ### PRs needing you
 
@@ -283,14 +292,14 @@ Per-line annotations:
 
 Omit a bucket or sub-list that is empty. If both sub-lists are empty, write "Nothing waiting on you. Nice."
 
-### Open action items
+### Your actions and Product actions
 
-Numbering continues here from wherever Urgent today left off. If Urgent today ended at 3, the first action item is 4. As in To-dos, each `**Your actions**` / `**Product actions**` heading is followed by a blank line before its numbered list starts, for the same CommonMark reason.
+These render inside `## To do`, after Coming up. Numbering continues from the last Coming up item (or from Urgent today if Coming up is empty). Each `**Your actions**` / `**Product actions**` heading is followed by a blank line before its numbered list starts, for the same CommonMark reason.
 
 **Your actions** - action items where you're the owner or named. The action text MUST be wrapped as a markdown link to the Fathom timestamp URL so you can jump into the recording at the exact moment the action was raised.
 
-4. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
-5. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
+N. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
+N+1. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
 ...
 
 (If list is empty: write "Nothing carrying over on your own actions. Clean slate.")
@@ -301,9 +310,20 @@ N+1. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
 N+2. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
 ...
 
-Numbering continues sequentially from the Your actions list, which itself continues from Urgent today. The To-dos section then continues from the last action item. Owner names are NOT shown inline because all entries in this section share the same configured owner(s); putting the name on each line just adds noise. The tick-off prompt in Step 7 accepts any number from anywhere in the brief: Urgent today, Your actions, Product actions or To-dos alike.
+Numbering continues sequentially from the Your actions list. Testing then continues from the last action item, and the Ideas bank from the last Testing item. Owner names are NOT shown inline because all entries in this section share the same configured owner(s); putting the name on each line just adds noise. The tick-off prompt in Step 7 accepts any number from anywhere in the brief: Urgent today, Coming up, Your actions, Product actions, Testing or the Ideas bank alike.
 
 (If this list is empty: skip the sub-section entirely.)
+
+### Testing
+
+Merged PRs Lena can try by hand. Write them into the `testing` key of the brief JSON, newest merge first.
+
+- Keep only PRs from Step 1.10 whose key `<repo>#<number>` is not in the acknowledged-tests list and that change something visible or clickable. Drop CI, infra, refactor, test-only and docs PRs.
+- `live` comes from the `deploys` the fetch returns for the merge commit, never from the merge itself. Name the environments whose deploy jobs succeeded (for example `dev, staging, prod`). If no deploy run succeeded, write `not deployed yet`; if a run is still going, say so.
+- `steps` come from the PR body's test plan when it has one (`inferred: false`). Otherwise write them from the diff and the `files` list (`inferred: true`). Give 2 to 4 steps, each with the environment URL and any test data needed.
+- Say plainly when something cannot be tested by hand, for example a change that only runs behind a feature flag or a backend job. Do not invent steps.
+- `project` is the name of the project the PR belongs to (match on repo and keywords), or an empty string.
+- If there are none, leave `testing` as `[]` and the section is omitted.
 
 ### External meeting prep
 
@@ -376,25 +396,28 @@ Examples (bad):
 - "Focus on engineering progress." (vague)
 - "Do the things from your to-do list." (useless)
 
-## Step 6: Save and present
+## Step 6: Publish and present
 
-
-1. Save the rendered brief to: `<briefs_dir from config>/<YYYY-MM-DD>.md`
-2. Print the ENTIRE brief, verbatim, in the chat message itself — every section, in full. Never substitute a condensed summary, a "highlights" version, or a pointer to the file in place of any section's content. The file is a copy for later, not the primary way Lena reads it; she reads it in the conversation, so nothing gets shortened, cut, or replaced with "see the saved brief" on the assumption she'll open the file.
-3. End with the file path so she can re-open the brief later.
-
+1. Publish `<briefs_dir>/<date>.html` with the Artifact tool. If `output.artifact_url` is set: first `read` that URL (a publish to an artifact this conversation hasn't read is refused), then publish with `url` set to it, no `icon`. If it is empty: publish without `url`, with `icon: "calendar"` and `description: "Lena's daily morning brief"`, and tell Lena to paste the returned URL into `output.artifact_url` in `~/morning/config.yaml`.
+2. Print only this in chat:
+   - `**<weekday_label>** - <focus>`
+   - one line of counters from the renderer: `Urgent N (M overdue) · PRs: R to review, K ready, A awaiting · Your actions N · Meetings N` (drop any part that is 0, except Urgent)
+   - the artifact link
+   - `Saved: <briefs_dir>/<date>.md`
+3. If publishing fails for any reason, say so in one line and print the full markdown archive inline instead, verbatim. Lena must never end up with neither.
 
 ## Step 7: Action item tick-off
 
-If the brief has any numbered lines (Urgent today, Open action items or To-dos):
+If the brief has any numbered lines (To do, Testing or Ideas bank):
 
 1. Print exactly: `Already done any? (numbers comma-separated, blank to skip):`
 2. Wait for the user's reply in the same conversation.
-3. Parse the response: split on commas, strip whitespace, drop anything that isn't a positive integer or that exceeds the highest number used in the brief.
-4. For each valid number, look it up in the running number→item map you built while rendering (Step 4's numbering note): it resolves to either a Notion to-do (page id) or a Fathom action (stable key).
+3. Parse the response: split on commas, strip whitespace, drop anything that isn't a positive integer or that exceeds `max_number` from the renderer's counts (also derivable as the largest key in the map).
+4. For each valid number, look it up in `~/morning/state/brief-map-<date>.json` (`numbers[<n>]` gives `{kind: notion, id}`, `{kind: fathom, key}` or `{kind: test, key}`).
 5. For a Notion to-do: update that page's `Status` property to `Done` via the Notion MCP.
 6. For a Fathom action: run `python3 ~/github/morning/scripts/ack_action.py <key1> <key2> ...` (batch all such keys into one call).
-7. Confirm to the user: `Marked N item(s) done. They won't appear tomorrow.`
+7. For a Testing item (kind `test`): run `python3 ~/github/morning/scripts/ack_test.py <key1> <key2> ...` (batch all such keys into one call).
+8. Confirm to the user: `Marked N item(s) done. They won't appear tomorrow.`
 
 If the brief had no numbered lines, skip this step entirely.
 
@@ -417,4 +440,4 @@ If no PRs surfaced, skip this step entirely.
 
 Print one summary line like: `Done.`
 
-No other follow-up questions. No "would you like me to..." offers. The brief is the deliverable.
+No other follow-up questions. No "would you like me to..." offers. The page link is the deliverable.

@@ -2,12 +2,14 @@
 """fetch_calendar.py — emit today's calendar events as JSON.
 
 Usage:
-    python3 fetch_calendar.py <ekko_email_domain> [<primary_calendar>]
+    python3 fetch_calendar.py <ekko_email_domain> [<primary_calendar>] [<internal_contacts comma-joined>]
     e.g. python3 fetch_calendar.py @ekko.earth lena.thome@ekko.earth
 
 If <primary_calendar> is provided, the gcalcli query is restricted to that
 single calendar so events you're only subscribed to (other people's standups,
 team OOO calendars, etc.) are filtered out. Recommended.
+
+Attendees in <internal_contacts> are personal contacts and never make a meeting external.
 
 Output (stdout): JSON array of events. Each event has:
     {
@@ -150,12 +152,30 @@ def parse_agenda(text: str, year: int) -> list[dict]:
     return out
 
 
+def parse_contacts(arg: str) -> list[str]:
+    """Comma-joined emails -> lowercased list, blanks dropped."""
+    return [e.strip().lower() for e in arg.split(",") if e.strip()]
+
+
+def mark_external(events: list[dict], ekko_domain: str, internal_contacts: list[str]) -> None:
+    """Set is_external: any attendee outside the domain who is not a known personal contact."""
+    contacts = {c.strip().lower() for c in internal_contacts}
+    for e in events:
+        e["is_external"] = any(
+            a["email"]
+            and not a["email"].lower().endswith(ekko_domain.lower())
+            and a["email"].lower() not in contacts
+            for a in e["attendees"]
+        )
+
+
 def main() -> None:
     if len(sys.argv) < 2:
         print("usage: fetch_calendar.py <ekko_email_domain> [<primary_calendar>]", file=sys.stderr)
         sys.exit(2)
     ekko_domain = sys.argv[1]
     primary_calendar = sys.argv[2] if len(sys.argv) > 2 else None
+    internal_contacts = parse_contacts(sys.argv[3]) if len(sys.argv) > 3 else []
 
     if shutil.which("gcalcli") is None:
         print("gcalcli not found in PATH", file=sys.stderr)
@@ -183,13 +203,7 @@ def main() -> None:
 
     events = parse_agenda(result.stdout, today_d.year)
 
-    # Mark external: any attendee email not ending with the configured domain.
-    for e in events:
-        e["is_external"] = any(
-            a["email"] and not a["email"].endswith(ekko_domain)
-            for a in e["attendees"]
-        )
-
+    mark_external(events, ekko_domain, internal_contacts)
     print(json.dumps(events, indent=2))
 
 
