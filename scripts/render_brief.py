@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 
 TEMPLATE = Path(__file__).resolve().parent / "brief_template.html"
-IDEA_BUCKETS = (("strategic", "Strategic"), ("other", "Other"))
+IDEA_BUCKETS = (("strategic", "Strategic"), ("other", "Operational"))
 
 
 def number_items(raw: dict) -> tuple[dict, dict]:
@@ -95,19 +95,19 @@ def number_items(raw: dict) -> tuple[dict, dict]:
     return brief, numbers
 
 
-def _todo_line(item: dict) -> str:
+def _todo_line(item: dict, show_tags: bool = True) -> str:
     due = f" ({item['due']})" if item.get("due") else ""
-    cats = f"  [{', '.join(item.get('categories', []))}]" if item.get("categories") else ""
+    cats = f"  [{', '.join(item.get('categories', []))}]" if show_tags and item.get("categories") else ""
     note = f" ({item['note']})" if item.get("note") else ""
     return f"{item['n']}. {item['title']}{due}{cats}{note}"
 
 
-def _todo_groups_md(groups: list) -> list[str]:
+def _todo_groups_md(groups: list, show_tags: bool = True) -> list[str]:
     out: list[str] = []
     for g in groups:
         if g.get("parent"):
             out += [f"*{g['parent']}:*", ""]
-        out += [_todo_line(i) for i in g.get("items", [])]
+        out += [_todo_line(i, show_tags) for i in g.get("items", [])]
         out.append("")
     return out
 
@@ -192,7 +192,7 @@ def to_markdown(brief: dict) -> str:
         for key, label in IDEA_BUCKETS:
             groups = brief["ideas"][key]
             if _count(groups):
-                L += [f"**{label}** - {_count(groups)}", ""] + _todo_groups_md(groups)
+                L += [f"**{label}** - {_count(groups)}", ""] + _todo_groups_md(groups, show_tags=False)
 
     L += ["## Engineering progress", ""]
     for p in brief["projects"]:

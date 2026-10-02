@@ -221,15 +221,15 @@ Awaiting review (N):
 
 **Strategic** - N
 
-8. <standalone task>  [<categories>]
+8. <standalone task>
 
 *<Parent name 2>:*
 
-9. <subtask>  [<categories>]
+9. <subtask>
 
-**Other** - N
+**Operational** - N
 
-10. <standalone task>  [<categories>]
+10. <standalone task>
 
 ## Engineering progress
 
@@ -243,7 +243,7 @@ The sections below are the rules for each part of the template above.
 **Bucket logic** (each task lands in the first matching bucket):
 1. **Urgent today** - has `Due` ≤ today. Renders under `**Urgent today**` in `## To do`.
 2. **Coming up** - has `Due` after today, ordered by due date. Renders under `**Coming up**` in `## To do`.
-3. **Ideas bank** - has no `Due` date. Renders under `## Ideas bank`, split into **Strategic** (`Category` contains `Strategic`) and **Other** (everything else).
+3. **Ideas bank** - has no `Due` date. Renders under `## Ideas bank`, split into **Strategic** (`Category` contains `Strategic`) and **Operational** (everything else). Per-item category tags are not shown in the Ideas bank.
 
 Notion rows with `Type: Idea` are still dropped in Step 1; the Ideas bank here is undated to-dos, not parked ideas.
 
@@ -254,10 +254,10 @@ Notion rows with `Type: Idea` are still dropped in Step 1; the Ideas bank here i
 
 **Each parent group renders exactly once across Urgent today, Coming up and the Ideas bank together** - never split across buckets, never repeated:
 1. Bucket every subtask individually, using the bucket logic above against its own Due/Category.
-2. Place the group in the bucket of its most urgent subtask: the bucket of the subtask with the earliest `Due` date. If no subtask in the group has a `Due` date, the group goes to the Ideas bank: **Strategic** if any subtask's `Category` contains `Strategic`, otherwise **Other**. A group whose most urgent subtask is overdue or due today renders only under Urgent today, with all its subtasks.
+2. Place the group in the bucket of its most urgent subtask: the bucket of the subtask with the earliest `Due` date. If no subtask in the group has a `Due` date, the group goes to the Ideas bank: **Strategic** if any subtask's `Category` contains `Strategic`, otherwise **Operational**. A group whose most urgent subtask is overdue or due today renders only under Urgent today, with all its subtasks.
 3. Within that one bucket, render the group once, with its subtasks sorted by `Due` date (undated subtasks last). Each subtask line still shows its own due date.
 
-Within each bucket (Urgent today, Coming up, Strategic, Other): standalone tasks first (flat, no indent, sorted by due date), then parent groups (alphabetically by parent name).
+Within each bucket (Urgent today, Coming up, Strategic, Operational): standalone tasks first (flat, no indent, sorted by due date), then parent groups (alphabetically by parent name).
 
 Every bucket heading line is followed by a blank line before its first list item, and a blank line separates one list (a run of standalone tasks, or a parent group's italic name line plus its subtasks) from the next. In CommonMark, an ordered list that doesn't start at 1 cannot interrupt a preceding paragraph, so a numbered line placed right after a heading or after a parent's italic name line - with no blank line between - merges into that line instead of rendering as a list. The same blank-line rule applies to the Your actions and Product actions headings.
 
@@ -265,9 +265,9 @@ A parent group renders as a standalone italic line, `*<Parent name>:*`, on its o
 
 Each line shows the task title, its due date if any, and its categories as inline `[Tag1, Tag2]` after the title. Numbered lines have no checkbox.
 
-**Numbering.** Every actionable line across the WHOLE brief shares one running number sequence, in page order: Urgent today (starting at 1), Coming up, Your actions, Product actions, Testing, then the Ideas bank (Strategic, then Other). Parent-name sub-headers are not actionable and do not consume a number; only standalone tasks, subtasks and action items do. PR lines are not numbered. The renderer assigns the numbers and writes the map to `~/morning/state/brief-map-<date>.json`; the model never numbers anything.
+**Numbering.** Every actionable line across the WHOLE brief shares one running number sequence, in page order: Urgent today (starting at 1), Coming up, Your actions, Product actions, Testing, then the Ideas bank (Strategic, then Operational). Parent-name sub-headers are not actionable and do not consume a number; only standalone tasks, subtasks and action items do. PR lines are not numbered. The renderer assigns the numbers and writes the map to `~/morning/state/brief-map-<date>.json`; the model never numbers anything.
 
-JSON mapping: Urgent today goes in `urgent`, Coming up in `todos.coming_up`, Strategic in `ideas.strategic`, Other in `ideas.other`.
+JSON mapping: Urgent today goes in `urgent`, Coming up in `todos.coming_up`, Strategic in `ideas.strategic`, Operational in `ideas.other`.
 
 If every to-do bucket is empty, render `## To do` with "Notion DB is empty. Add tasks at <DB url>". If a sub-heading's list is empty, omit it. If Notion is unavailable, render `## To do` with "Notion unavailable".
 
