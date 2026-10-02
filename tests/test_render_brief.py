@@ -197,6 +197,15 @@ class HtmlTest(unittest.TestCase):
         self.assertNotIn('tab: "today"', html)
 
 
+class HtmlLayoutTest(unittest.TestCase):
+    def test_wide_layout_breakpoint_and_project_details(self):
+        html = (ROOT / "scripts" / "brief_template.html").read_text()
+        self.assertIn("(min-width: 1100px)", html)
+        self.assertIn("window.matchMedia", html)
+        self.assertIn('el("details", { "class": "prow" }', html)
+        self.assertIn('el("aside", { "class": "side"', html)
+
+
 class CliTest(unittest.TestCase):
     def test_writes_three_files(self):
         with tempfile.TemporaryDirectory() as d:
