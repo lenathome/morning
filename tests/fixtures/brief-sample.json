@@ -33,6 +33,7 @@
   },
   "meetings": [{"time": "16:30", "title": "Partner call", "company": "Acme - payments", "participants": [{"name": "Jo Bloggs", "role": "likely Head of Product"}], "notes": []}],
   "projects": [{"name": "PPP localisation", "slug": "ppp-localisation", "owner": "Etienne", "status": "active", "next": "Flag on", "target": "2026-10-02", "summary": "Bilo is finishing the move.", "stale_note": "", "sync_note": "",
+    "waiting_on": [{"text": "Sign-off on the rounding copy", "who": "Simon and Baran"}, {"text": "Staging data refresh", "who": ""}],
     "github": {"line": "0 PRs merged in last 7 days, 1 open", "open": [{"number": 1258, "url": "https://github.com/ekko-enviroconomy/ekko-api/pull/1258", "title": "feat(ppp): drop the gate", "repo": "ekko-api", "state": "open", "updated": "yesterday"}]}}],
   "partners": [{"name": "Zip", "owner": "Jamie", "status": "active", "next": "Get a live date", "target": ""}],
   "team_sync_notes": "SDK moves to one skeleton loader."

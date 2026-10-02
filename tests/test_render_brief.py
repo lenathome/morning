@@ -75,6 +75,48 @@ class NumberingTest(unittest.TestCase):
             render_brief.number_items(b)
 
 
+class WaitingOnTest(unittest.TestCase):
+    def test_defaults_to_empty(self):
+        b = load()
+        del b["projects"][0]["waiting_on"]
+        brief, _ = render_brief.number_items(b)
+        self.assertEqual(brief["projects"][0]["waiting_on"], [])
+
+    def test_invalid_entries_name_the_project(self):
+        for bad in ([{"text": "", "who": "A"}], [{"who": "A"}], [{"text": "x", "who": 3}], ["x"], "x"):
+            b = load()
+            b["projects"][0]["waiting_on"] = bad
+            with self.assertRaisesRegex(ValueError, "PPP localisation"):
+                render_brief.number_items(b)
+
+    def test_who_may_be_empty_or_missing(self):
+        b = load()
+        b["projects"][0]["waiting_on"] = [{"text": "x", "who": ""}, {"text": "y"}]
+        render_brief.number_items(b)
+
+    def test_markdown_lists_entries_after_summary(self):
+        brief, _ = render_brief.number_items(load())
+        md = render_brief.to_markdown(brief)
+        self.assertIn("Bilo is finishing the move.\n\nWaiting on others (2):\n\n"
+                      "- Sign-off on the rounding copy (Simon and Baran)\n- Staging data refresh\n\n", md)
+
+    def test_markdown_omits_when_empty(self):
+        b = load()
+        b["projects"][0]["waiting_on"] = []
+        brief, _ = render_brief.number_items(b)
+        self.assertNotIn("Waiting on others", render_brief.to_markdown(brief))
+
+    def test_numbers_and_counts_unchanged(self):
+        brief, numbers = render_brief.number_items(load())
+        self.assertEqual(len(numbers), 9)
+        self.assertEqual(render_brief.counts(brief)["max_number"], 9)
+
+    def test_template_renders_waiting_on(self):
+        html = (ROOT / "scripts" / "brief_template.html").read_text()
+        self.assertIn("Waiting on others", html)
+        self.assertIn("waiting on others", html)
+
+
 class MarkdownTest(unittest.TestCase):
     def setUp(self):
         brief, _ = render_brief.number_items(load())
