@@ -48,6 +48,16 @@ def number_items(raw: dict) -> tuple[dict, dict]:
     for k in ("meetings", "projects", "partners"):
         brief.setdefault(k, [])
     brief.setdefault("team_sync_notes", "")
+    for p in brief["projects"]:
+        waiting = p.setdefault("waiting_on", [])
+        name = p.get("name", "?")
+        if not isinstance(waiting, list):
+            raise ValueError(f"project '{name}' needs 'waiting_on' as a list")
+        for w in waiting:
+            if not isinstance(w, dict) or not isinstance(w.get("text"), str) or not w["text"].strip():
+                raise ValueError(f"project '{name}' has a waiting_on entry without 'text'")
+            if not isinstance(w.get("who", ""), str):
+                raise ValueError(f"project '{name}' has a waiting_on entry whose 'who' is not a string")
 
     numbers: dict[str, dict] = {}
     n = 0
@@ -202,6 +212,10 @@ def to_markdown(brief: dict) -> str:
         if p.get("target"):
             head += f", target {p['target']}"
         L += [head, "", p.get("summary", ""), ""]
+        waiting = p.get("waiting_on", [])
+        if waiting:
+            L += [f"Waiting on others ({len(waiting)}):", ""]
+            L += [f"- {w['text']} ({w['who']})" if w.get("who") else f"- {w['text']}" for w in waiting] + [""]
         if p.get("stale_note"):
             L += [p["stale_note"], ""]
         if p.get("sync_note"):
