@@ -73,6 +73,8 @@ In an unattended run (scheduled, no user present) this step still prints the lis
 
 ## Step 1: Fetch all data sources in parallel
 
+Run every Bash command with absolute paths, one command per call. Never start a command with `cd` and never chain commands with `;`, `&&` or a loop: a compound command asks for approval even when each part is allowed, which stalls an unattended run.
+
 Make these tool calls in a SINGLE message (parallel tool use):
 
 1. **To-dos** — Notion MCP. Use `notion-search` with `data_source_url: collection://<todo_database_id from config's data source>` to list pages in the Tasks DB. Increase `page_size` to 25 (max) and `max_highlight_length: 0`. Then `notion-fetch` each page to read properties (Name, Due, Status, Category, Type, Client, Area, Parent, Subtasks). Filter out `Status: Done` and filter out `Type: Idea`. An Idea is not a to-do: parked ideas live in `~/product-os/backlog.md` and are reviewed at the cycle boundary, so surfacing them daily buries the actionable rows. Rows with no `Type` set are kept, because an unset Type is missing data rather than a decision. Keep `Parent` and `Subtasks` fields — they drive the parent/subtask rendering in the brief. If MCP unavailable, mark to-dos section as "Notion unavailable".
