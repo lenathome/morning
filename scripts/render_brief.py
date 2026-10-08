@@ -37,7 +37,7 @@ TAG_VERDICTS = ("needs-lena", "split", "handoff")
 TAG_LABELS = {"needs-lena": "needs-Lena", "split": "split", "handoff": "handoff"}
 BG_EXTS = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".png": "image/png"}
 BG_WARN_BYTES = 600 * 1024
-ALPHA_NOTE ="Owner tags are alpha: a first guess at who could own each to-do, not yet reviewed."
+ALPHA_NOTE = "Owner tags are alpha: a first guess at who could own each to-do, not yet reviewed."
 
 
 def check_tag(item: dict, label: str) -> None:
