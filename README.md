@@ -42,6 +42,7 @@ The tool is a Claude Code skill plus small Python and shell scripts. The skill i
 - `scripts/render_brief.py` turns the brief into output (see below).
 - `scripts/publish_brief.sh` commits the shared markdown copy to `briefs/` in the product-os repo and pushes it to origin/main.
 - `scripts/extract_sessions.py` and `scripts/proposals.py` serve `/session-sweep`.
+- `scripts/fetch_etienne_issues.py` serves `/etienne-inbox`, an hourly check of product-os for issues from a colleague's agent (`etienne/SKILL.md`). It recommends an action and, once you approve, records it and replies on the issue.
 - `scripts/ack_*.py` record what you ticked off or parked, in `~/morning/state/`.
 
 The brief is JSON. Claude writes it to `~/morning/briefs/<date>.json` and never numbers anything. `scripts/render_brief.py` validates it, numbers every actionable line and writes four files: a markdown archive, a shared markdown copy without the external meeting prep (`--shared-md`), an HTML page (`scripts/brief_template.html` with the JSON embedded, rendered in the browser) and a map from number to Notion page or Fathom action. The tick-off step reads that map, which is why numbers stay stable between the page and the chat.
@@ -69,6 +70,7 @@ git clone https://github.com/lenathome/morning ~/github/morning
 mkdir -p ~/morning/briefs ~/morning/state ~/ai-log ~/.claude/skills
 ln -s ~/github/morning/skill ~/.claude/skills/morning
 ln -s ~/github/morning/sweep ~/.claude/skills/session-sweep
+ln -s ~/github/morning/etienne ~/.claude/skills/etienne-inbox
 cp ~/github/morning/config.example.yaml ~/morning/config.yaml
 ```
 
