@@ -157,7 +157,9 @@ Loop over the meetings returned in Step 1.6:
 
 Write the brief's content as JSON to `<briefs_dir>/<YYYY-MM-DD>.json`, following the contract in `docs/plans/2026-10-01-brief-html-page.md` (section "The brief JSON contract"). That contract lives in this repo; the skill reads it from `~/github/morning/docs/plans/2026-10-01-brief-html-page.md`. Do not number anything: the renderer does. Put every list in final display order (standalone tasks first, then parent groups alphabetically). Apply the voice guide to every string you write. Assign a `tag` to every to-do (see "Tags on to-dos" in the Brief structure section). Then run:
 
-`python3 ~/github/morning/scripts/render_brief.py <briefs_dir>/<date>.json --md <briefs_dir>/<date>.md --shared-md <briefs_dir>/<date>.shared.md --html <briefs_dir>/<date>.html --map ~/morning/state/brief-map-<date>.json`
+`python3 ~/github/morning/scripts/render_brief.py <briefs_dir>/<date>.json --md <briefs_dir>/<date>.md --shared-md <briefs_dir>/<date>.shared.md --html <briefs_dir>/<date>.html --map ~/morning/state/brief-map-<date>.json --background <output.background if set, else output.backgrounds_dir>`
+
+Expand `~` to the absolute home path in the `--background` value. A missing photo is fine: the renderer then makes the page without one, so never stop or ask about it.
 
 It prints one JSON line of counts; keep it for Step 6. If it exits 1, fix the JSON it names and run it again. The `.shared.md` file is the same markdown without the External meeting prep section; Step 6 publishes it to the shared product-os repo.
 

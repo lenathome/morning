@@ -104,6 +104,8 @@ Markdown shows a tag as ` [needs-Lena]`, ` [split: Maria]` or ` [handoff: Kurt]`
 
 `render_brief.py --shared-md <path>` writes the same markdown as `--md` without the External meeting prep section, so the copy can go to a shared repo. Numbering is unchanged.
 
+`render_brief.py --background <file or folder>` embeds a seasonal photo behind the page header. A file is used as is; a folder gives `<season>.<ext>` by the brief's `date` month (Mar-May spring, Jun-Aug summer, Sep-Nov autumn, Dec-Feb winter). The image goes into the HTML only, as a `data:` URI in a second JSON script tag (`bg-data`). A missing file or option means no photo, and a file over 600KB prints a warning to run `scripts/prep_background.sh`.
+
 Bucket meaning: `urgent` is every to-do due today or overdue. `todos.coming_up` is every to-do due after today, ordered by due date. `ideas` holds every to-do with no due date: `ideas.strategic` when `Category` contains Strategic, `ideas.other` for the rest.
 
 Numbering order, following the page: `urgent` (groups in the order given), `todos.coming_up`, `actions.yours`, `actions.product`, `testing`, `ideas.strategic`, `ideas.other`. A testing item's map entry is `{"kind": "test", "key": "<repo>#<number>"}`. The model is responsible for the order within each list (standalone first, then parent groups alphabetically), exactly as the current skill describes.

@@ -87,6 +87,14 @@ output:
   # claude.ai artifact the brief page is published to every morning. Leave
   # empty for the first run; the skill prints the new URL to paste here.
   artifact_url: ""
+  # Seasonal photo behind the page header. The folder holds up to four files,
+  # spring.jpg, summer.jpg, autumn.jpg and winter.jpg (.jpeg, .webp and .png also
+  # work); the brief's date picks the season (Mar-May spring, Jun-Aug summer,
+  # Sep-Nov autumn, Dec-Feb winter). A missing file means no photo.
+  # Shrink photos first with scripts/prep_background.sh.
+  backgrounds_dir: "~/morning/backgrounds"
+  # Optional: one image file that overrides the season pick.
+  # background: "~/morning/backgrounds/my-photo.jpg"
 
 paths:
   # Directory of per-project markdown files with YAML frontmatter.

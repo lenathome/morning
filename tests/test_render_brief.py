@@ -1,9 +1,12 @@
+import base64
 import json
 import re
+import struct
 import subprocess
 import sys
 import tempfile
 import unittest
+import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -422,6 +425,101 @@ class HtmlLayoutTest(unittest.TestCase):
         self.assertIn("window.matchMedia", html)
         self.assertIn('el("details", { "class": "prow" }', html)
         self.assertIn('el("aside", { "class": "side"', html)
+
+
+PNG_1X1 = (b"\x89PNG\r\n\x1a\n"
+           + struct.pack(">I", 13) + b"IHDR" + struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)
+           + struct.pack(">I", zlib.crc32(b"IHDR" + struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)))
+           + struct.pack(">I", 0) + b"IEND" + struct.pack(">I", zlib.crc32(b"IEND")))
+
+
+class SeasonTest(unittest.TestCase):
+    def test_month_boundaries(self):
+        cases = {"2026-02-28": "winter", "2026-03-01": "spring", "2026-05-31": "spring",
+                 "2026-06-01": "summer", "2026-08-31": "summer", "2026-09-01": "autumn",
+                 "2026-11-30": "autumn", "2026-12-01": "winter", "2026-01-15": "winter"}
+        for date, season in cases.items():
+            self.assertEqual(render_brief.season_for(date), season, date)
+
+    def test_bad_date_raises(self):
+        for bad in ("2026-13-01", "2026-00-01"):
+            with self.assertRaises(ValueError):
+                render_brief.season_for(bad)
+
+
+class BackgroundTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+        self.addCleanup(self.tmp.cleanup)
+
+    def test_file_is_used_as_is(self):
+        f = self.dir / "any.png"
+        f.write_bytes(PNG_1X1)
+        self.assertEqual(render_brief.pick_background(str(f), "2026-10-08"), f)
+
+    def test_unsupported_file_is_ignored(self):
+        f = self.dir / "any.gif"
+        f.write_bytes(b"GIF89a")
+        self.assertIsNone(render_brief.pick_background(str(f), "2026-10-08"))
+
+    def test_dir_picks_by_season_and_extension_order(self):
+        (self.dir / "autumn.png").write_bytes(PNG_1X1)
+        (self.dir / "winter.png").write_bytes(PNG_1X1)
+        self.assertEqual(render_brief.pick_background(str(self.dir), "2026-10-08"), self.dir / "autumn.png")
+        (self.dir / "autumn.jpg").write_bytes(b"x")
+        self.assertEqual(render_brief.pick_background(str(self.dir), "2026-10-08"), self.dir / "autumn.jpg")
+        self.assertEqual(render_brief.pick_background(str(self.dir), "2026-01-08"), self.dir / "winter.png")
+
+    def test_missing_is_none(self):
+        self.assertIsNone(render_brief.pick_background(None, "2026-10-08"))
+        self.assertIsNone(render_brief.pick_background(str(self.dir / "nope.jpg"), "2026-10-08"))
+        self.assertIsNone(render_brief.pick_background(str(self.dir), "2026-10-08"))  # no autumn file
+        self.assertIsNone(render_brief.pick_background(str(self.dir), "not-a-date"))
+
+    def test_embed_in_html_only(self):
+        f = self.dir / "autumn.png"
+        f.write_bytes(PNG_1X1)
+        brief, _ = render_brief.number_items(load())
+        html = render_brief.to_html(brief, f)
+        self.assertIn('id="bg-data"', html)
+        self.assertIn('"data:image/png;base64,' + base64.b64encode(PNG_1X1).decode(), html)
+        self.assertNotIn("/*__BG__*/", html)
+        self.assertNotIn("data:image", render_brief.to_markdown(brief))
+
+    def test_no_background_means_no_data_image(self):
+        brief, _ = render_brief.number_items(load())
+        html = render_brief.to_html(brief)
+        self.assertNotIn("data:image/", html)
+        self.assertIn('id="bg-data" type="application/json">null</script>', html)
+
+    def test_large_file_warns_on_stderr(self):
+        f = self.dir / "big.jpg"
+        f.write_bytes(b"\xff" * (601 * 1024))
+        r = subprocess.run([sys.executable, str(SCRIPT), str(FIXTURE), "--html", str(self.dir / "b.html"),
+                            "--background", str(f)], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("prep_background.sh", r.stderr)
+        self.assertIn("data:image/jpeg;base64,", (self.dir / "b.html").read_text())
+
+    def test_cli_small_background_no_warning_and_missing_option_unchanged(self):
+        f = self.dir / "autumn.png"
+        f.write_bytes(PNG_1X1)
+        out = self.dir / "b.html"
+        r = subprocess.run([sys.executable, str(SCRIPT), str(FIXTURE), "--html", str(out),
+                            "--background", str(self.dir)], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stderr, "")  # fixture date 2026-10-01 is autumn
+        self.assertIn("data:image/png", out.read_text())
+        r = subprocess.run([sys.executable, str(SCRIPT), str(FIXTURE), "--html", str(out)],
+                           capture_output=True, text=True)
+        self.assertNotIn("data:image", out.read_text())
+
+    def test_template_builds_the_layer_without_innerhtml(self):
+        t = (ROOT / "scripts" / "brief_template.html").read_text()
+        self.assertIn("style.backgroundImage = \"url(\" + JSON.stringify(bgUri) + \")\"", t)
+        self.assertIn(".bg-photo { filter: brightness(0.55); }", t)
+        self.assertNotIn("innerHTML", t)
 
 
 class CliTest(unittest.TestCase):

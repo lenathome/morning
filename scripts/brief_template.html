@@ -93,6 +93,29 @@ header { display: flex; flex-direction: column; gap: 10px; }
 .focus { font-family: var(--font-display); font-weight: 500; font-size: 26px; line-height: 1.2; margin: 0; text-wrap: balance; }
 .banner { background: var(--surface-2); color: var(--muted); border-radius: 8px; padding: 8px 12px; font-size: 13px; display: flex; flex-direction: column; gap: 2px; }
 
+/* seasonal photo: a fixed-height layer behind the header that fades into the page colour.
+   Only present when the renderer embedded a photo (body.has-bg). Cards keep solid backgrounds. */
+body { position: relative; }
+.wrap { position: relative; z-index: 1; }
+.bg-hero { position: absolute; top: 0; left: 0; right: 0; height: 420px; overflow: hidden; z-index: 0; pointer-events: none; }
+.bg-photo { position: absolute; inset: 0; background-size: cover; background-position: center; background-repeat: no-repeat; }
+.bg-hero::before { content: ""; position: absolute; inset: 0; z-index: 1; background: var(--bg); opacity: 0.35; }
+.bg-hero::after { content: ""; position: absolute; inset: 0; z-index: 2; background: linear-gradient(to bottom, transparent 35%, var(--bg) 100%); }
+body.has-bg header {
+  background: color-mix(in srgb, var(--bg) 62%, transparent);
+  border-radius: 10px; padding: 12px 14px;
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+body.has-bg .date { color: var(--fg); text-shadow: 0 1px 6px var(--bg); }
+body.has-bg .focus { text-shadow: 0 1px 8px var(--bg); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .bg-photo { filter: brightness(0.55); }
+}
+:root[data-theme="dark"] .bg-photo { filter: brightness(0.55); }
+@media (max-width: 600px) {
+  .bg-hero { height: 300px; }
+}
+
 /* pills: the only navigation. Each pill is a tab; the row sticks to the top while scrolling. */
 .chips {
   position: sticky; top: env(safe-area-inset-top, 0px); z-index: 2;
@@ -209,6 +232,7 @@ tr:last-child td { border-bottom: 0; }
 </head>
 <body>
 <div class="wrap" id="app"></div>
+<script id="bg-data" type="application/json">/*__BG__*/null</script>
 <script id="brief-data" type="application/json">/*__BRIEF_JSON__*/null</script>
 <script>
 (function () {
@@ -237,6 +261,15 @@ tr:last-child td { border-bottom: 0; }
   function safeUrl(u) { return /^https?:\/\//i.test(String(u || "")) ? u : "#"; }
 
   var app = document.getElementById("app");
+  /* Seasonal photo: a data: URI string, or null when the renderer had none. */
+  var bgUri = null;
+  try { bgUri = JSON.parse(document.getElementById("bg-data").textContent); } catch (e) { bgUri = null; }
+  if (typeof bgUri === "string" && /^data:/i.test(bgUri)) {
+    var photo = el("div", { "class": "bg-photo" });
+    photo.style.backgroundImage = "url(" + JSON.stringify(bgUri) + ")";
+    document.body.insertBefore(el("div", { "class": "bg-hero", "aria-hidden": "true" }, [photo]), app);
+    document.body.classList.add("has-bg");
+  }
   var brief = null;
   try { brief = JSON.parse(document.getElementById("brief-data").textContent); } catch (e) { brief = null; }
   if (!brief) {

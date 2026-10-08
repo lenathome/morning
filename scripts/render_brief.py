@@ -3,6 +3,7 @@
 
 Usage:
     python3 render_brief.py <brief.json> [--md OUT.md] [--shared-md OUT.md] [--html OUT.html] [--map OUT.json]
+                           [--background PATH_OR_DIR]
 
 The model writes the brief's content once as JSON (contract in
 docs/plans/2026-10-01-brief-html-page.md). This script owns the numbering, so
@@ -12,6 +13,10 @@ the markdown archive, the page and the Step 7 tick-off map always agree.
 prep" section, which holds research on named external people and must not go
 to a shared repo.
 
+--background takes an image file, or a folder holding spring/summer/autumn/winter
+.jpg/.jpeg/.webp/.png (the season comes from the brief's date). The image is
+embedded in the HTML as a data: URI; a missing file means no background.
+
 stdout: one JSON line of counts, e.g. {"urgent": 8, "overdue": 5, ...}, which
 the skill prints as the chat header.
 
@@ -20,6 +25,7 @@ Exit codes: 0 ok, 1 invalid brief JSON, 2 bad args.
 
 from __future__ import annotations
 import argparse
+import base64
 import copy
 import json
 import sys
@@ -29,7 +35,9 @@ TEMPLATE = Path(__file__).resolve().parent / "brief_template.html"
 IDEA_BUCKETS = (("strategic", "Strategic"), ("other", "Operational"))
 TAG_VERDICTS = ("needs-lena", "split", "handoff")
 TAG_LABELS = {"needs-lena": "needs-Lena", "split": "split", "handoff": "handoff"}
-ALPHA_NOTE = "Owner tags are alpha: a first guess at who could own each to-do, not yet reviewed."
+BG_EXTS = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".png": "image/png"}
+BG_WARN_BYTES = 600 * 1024
+ALPHA_NOTE ="Owner tags are alpha: a first guess at who could own each to-do, not yet reviewed."
 
 
 def check_tag(item: dict, label: str) -> None:
@@ -294,11 +302,49 @@ def to_markdown(brief: dict, shared: bool = False) -> str:
     return "\n".join(L).rstrip() + "\n"
 
 
-def to_html(brief: dict) -> str:
+def season_for(date_str: str) -> str:
+    """Season for a YYYY-MM-DD date: Mar-May spring, Jun-Aug summer, Sep-Nov autumn, Dec-Feb winter."""
+    month = int(str(date_str).split("-")[1])
+    if not 1 <= month <= 12:
+        raise ValueError(f"bad month in date {date_str!r}")
+    return ("winter", "spring", "summer", "autumn")[(month % 12) // 3]
+
+
+def pick_background(path: str | None, date_str: str) -> Path | None:
+    """The background image to use, or None. A file is used as is; a folder gives <season>.<ext>."""
+    if not path:
+        return None
+    p = Path(path).expanduser()
+    if p.is_file():
+        return p if p.suffix.lower() in BG_EXTS else None
+    if p.is_dir():
+        try:
+            season = season_for(date_str)
+        except (ValueError, IndexError):
+            return None
+        for ext in BG_EXTS:
+            candidate = p / f"{season}{ext}"
+            if candidate.is_file():
+                return candidate
+    return None
+
+
+def background_data_uri(image: Path) -> str:
+    """The image as a data: URI. Warns on stderr above BG_WARN_BYTES."""
+    raw = image.read_bytes()
+    if len(raw) > BG_WARN_BYTES:
+        print(f"warning: background {image} is {len(raw) // 1024}KB; run scripts/prep_background.sh "
+              f"to shrink it (the page embeds it)", file=sys.stderr)
+    mime = BG_EXTS[image.suffix.lower()]
+    return f"data:{mime};base64," + base64.b64encode(raw).decode("ascii")
+
+
+def to_html(brief: dict, background: Path | None = None) -> str:
     if has_tags(brief):
         brief = {**brief, "alpha_note": ALPHA_NOTE}
     data = json.dumps(brief, ensure_ascii=False).replace("<", "\\u003c")
-    return TEMPLATE.read_text().replace("/*__BRIEF_JSON__*/null", data)
+    bg = json.dumps(background_data_uri(background)).replace("<", "\\u003c") if background else "null"
+    return TEMPLATE.read_text().replace("/*__BG__*/null", bg).replace("/*__BRIEF_JSON__*/null", data)
 
 
 def counts(brief: dict) -> dict:
@@ -329,6 +375,7 @@ def main() -> None:
     ap.add_argument("--shared-md")
     ap.add_argument("--html")
     ap.add_argument("--map")
+    ap.add_argument("--background")
     args = ap.parse_args()
     try:
         brief, numbers = number_items(json.loads(Path(args.brief).read_text()))
@@ -340,7 +387,7 @@ def main() -> None:
     if args.shared_md:
         Path(args.shared_md).expanduser().write_text(to_markdown(brief, shared=True))
     if args.html:
-        Path(args.html).expanduser().write_text(to_html(brief))
+        Path(args.html).expanduser().write_text(to_html(brief, pick_background(args.background, brief["date"])))
     if args.map:
         Path(args.map).expanduser().write_text(json.dumps({"date": brief["date"], "numbers": numbers}, indent=2))
     print(json.dumps(counts(brief)))
