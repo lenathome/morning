@@ -15,7 +15,7 @@ TODAY = dt.date(2026, 9, 3)
 FULL = """---
 name: PPP localisation
 status: active
-owner: Lena
+owner: Sam
 repos: [ekko-api, ekko-web-mono]
 keywords: [ppp, round-up]
 notion: https://www.notion.so/ekko-earth/ppp
@@ -52,7 +52,7 @@ class ParseFileTests(unittest.TestCase):
         self.assertEqual(r["slug"], "ppp-localisation")
         self.assertEqual(r["name"], "PPP localisation")
         self.assertEqual(r["status"], "active")
-        self.assertEqual(r["owner"], "Lena")
+        self.assertEqual(r["owner"], "Sam")
         self.assertEqual(r["repos"], ["ekko-api", "ekko-web-mono"])
         self.assertEqual(r["keywords"], ["ppp", "round-up"])
         self.assertEqual(r["notion"], "https://www.notion.so/ekko-earth/ppp")

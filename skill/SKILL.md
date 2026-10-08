@@ -5,18 +5,18 @@ description: Produce the daily morning brief - project updates to apply first, t
 
 # /morning — daily brief skill
 
-You are producing Lena's morning brief. Follow this skill exactly. The output must read like her own writing — see the Voice guide section below.
+You are producing the user's morning brief. Follow this skill exactly. The output must read like the user's own writing — see the Voice guide section below.
 
 ## Voice guide
 
-This guide tells you (Claude) how to write the brief so it sounds like Lena writing for herself. Internal monologue style. Direct. Practical.
+This guide tells you (Claude) how to write the brief so it sounds like the user writing for themselves. Internal monologue style. Direct. Practical.
 
 ### Tone
 
 - Warm, direct, conversational. Never corporate.
 - Confident by default. State things plainly.
 - Occasional dry humour in parenthetical asides.
-- German cultural sensibility: unsentimental, practical.
+- Unsentimental and practical.
 
 ### Structure
 
@@ -263,7 +263,7 @@ The sections below are the rules for each part of the template above.
 
 Notion rows with `Type: Idea` are still dropped in Step 1; the Ideas bank here is undated to-dos, not parked ideas.
 
-**To do shows only tasks Lena can act on now.** A task whose next step is somebody else's (waiting for an answer, a review, a deliverable or a decision from another person) is not listed in To do: it goes into its project's `waiting_on` list with who it is waiting on. The Notion Tasks `Status` decides it: `Waiting` means waiting on someone else, so a task with that status never appears in To do and goes to the `waiting_on` list of the project it belongs to (a subtask of a parent group goes to the project that group belongs to; otherwise match the repos and keywords). Take `who` from the title or the task page. If a task is not marked Waiting but its title clearly says it depends on another person, leave it in To do and mention in the brief that it could be set to Waiting. `waiting_on` entries are not numbered and not tick-off-able. Shape: `"waiting_on": [{"text": "...", "who": "Simon and Baran"}]` on the project object (optional, `text` required, `who` may be empty).
+**To do shows only tasks the user can act on now.** A task whose next step is somebody else's (waiting for an answer, a review, a deliverable or a decision from another person) is not listed in To do: it goes into its project's `waiting_on` list with who it is waiting on. The Notion Tasks `Status` decides it: `Waiting` means waiting on someone else, so a task with that status never appears in To do and goes to the `waiting_on` list of the project it belongs to (a subtask of a parent group goes to the project that group belongs to; otherwise match the repos and keywords). Take `who` from the title or the task page. If a task is not marked Waiting but its title clearly says it depends on another person, leave it in To do and mention in the brief that it could be set to Waiting. `waiting_on` entries are not numbered and not tick-off-able. Shape: `"waiting_on": [{"text": "...", "who": "Simon and Baran"}]` on the project object (optional, `text` required, `who` may be empty).
 
 **Parent/subtask rendering.** The Tasks DB has a self-referencing `Parent` / `Subtasks` relation. Tasks split into three kinds:
 - **Parent groupers** — `Subtasks` non-empty. These are containers, NOT actionable themselves. Do NOT render parent groupers as task lines. Use their Name as the heading for their child subtasks. If the query returns an empty `Subtasks` field on every row, that view doesn't populate it - infer parent groupers instead from the children's `Parent` relation: any page named by at least one other row's `Parent` field is a grouper, even though its own `Subtasks` field reads empty.
@@ -305,7 +305,7 @@ Bucket logic:
 
 Per-line annotations:
 - Days stale = whole days since `updated_at`. If ≥5 days stale, prefix the line with `⚡` (call to poke).
-- If `reviewers_requested` is empty, append ` (no reviewers assigned)` so Lena knows to add them.
+- If `reviewers_requested` is empty, append ` (no reviewers assigned)` so the user knows to add them.
 - If `review_decision == "CHANGES_REQUESTED"`, append ` - changes requested`.
 
 Omit a bucket or sub-list that is empty. If both sub-lists are empty, write "Nothing waiting on you. Nice."
@@ -316,18 +316,18 @@ The tags are alpha: the model's first guess, not reviewed, and the brief says so
 
 Every to-do gets a `tag` saying who should own it: each item in `urgent`, `todos.coming_up`, `ideas.strategic` and `ideas.other`, and each entry in `actions.yours` and `actions.product`. Testing items carry none. Shape: `"tag": {"verdict": "needs-lena" | "split" | "handoff", "who": "<first name, empty for needs-lena>", "why": "<one short sentence>"}`.
 
-Legend: needs-Lena = product judgement, sign-off or a relationship only Lena holds; split = someone else does the legwork, Lena decides or signs off; handoff = someone else can own it end to end.
+Legend: needs-Lena = product judgement, sign-off or a relationship only you hold; split = someone else does the legwork, you decide or sign off; handoff = someone else can own it end to end.
 
 Rules:
 - `who` must be a first name from `<paths.product_os>/people.md`. Read that file once. Leave `who` empty for needs-lena.
 - Choose from the person's specialism in people.md and from the `owner` field of the project the item belongs to in the projects index (Step 1.3).
 - When unsure, use needs-lena.
 - Never hand off or split to an external partner. `who` is always someone at ekko.
-- `why` is one short sentence in the voice guide's style, with the reason (for example the person's specialism or what only Lena can decide).
+- `why` is one short sentence in the voice guide's style, with the reason (for example the person's specialism or what only you can decide).
 
 Markdown shows the tag at the end of the item line (` [needs-Lena]`, ` [split: Maria]`, ` [handoff: Kurt]`) with the `why` on the next line as an indented italic line. The renderer does this; the model only writes the JSON.
 
-The shared copy of the brief is read by Etienne's agents to find work to take off Lena's plate, so the tags and `why` lines must be accurate and must not contain anything you would not show him.
+The shared copy of the brief is read by Etienne's agents to find work to take off your plate, so the tags and `why` lines must be accurate and must not contain anything you would not show him.
 
 ### Your actions and Product actions
 
@@ -353,7 +353,7 @@ Numbering continues sequentially from the Your actions list. Testing then contin
 
 ### Testing
 
-Merged PRs Lena can try by hand. Write them into the `testing` key of the brief JSON, newest merge first.
+Merged PRs the user can try by hand. Write them into the `testing` key of the brief JSON, newest merge first.
 
 - Keep only PRs from Step 1.10 whose key `<repo>#<number>` is not in the acknowledged-tests list and that change something visible or clickable. Drop CI, infra, refactor, test-only and docs PRs.
 - `live` comes from the `deploys` the fetch returns for the merge commit, never from the merge itself. Name the environments whose deploy jobs succeeded (for example `dev, staging, prod`). If no deploy run succeeded, write `not deployed yet`; if a run is still going, say so.
@@ -364,9 +364,9 @@ Merged PRs Lena can try by hand. Write them into the `testing` key of the brief 
 
 ### External meeting prep
 
-Only render this section when there's at least one external meeting today (events with `is_external: true`). DO NOT render a calendar listing of all events - the user can check her own calendar. The calendar data is still fetched in Step 1 and used in Step 3 (research), but it does NOT get listed in the brief.
+Only render this section when there's at least one external meeting today (events with `is_external: true`). DO NOT render a calendar listing of all events - the user can check their own calendar. The calendar data is still fetched in Step 1 and used in Step 3 (research), but it does NOT get listed in the brief.
 
-Events with `is_personal: true` (the `calendar.personal_events` entries in config, for example the NatWest bi-weekly catch-up) are never external and never get prep, research or a mention here. To mark another recurring event personal, add a `title` and/or `with` (an attendee email) entry to that list in `~/morning/config.yaml`.
+Events with `is_personal: true` (the `calendar.personal_events` entries in config, for example a bi-weekly catch-up with an old colleague) are never external and never get prep, research or a mention here. To mark another recurring event personal, add a `title` and/or `with` (an attendee email) entry to that list in `~/morning/config.yaml`.
 
 Never repeat a numbered line here in full - each already has its own numbered line elsewhere in the brief. If any numbered item relates to this meeting (by company, client or topic), add one line pointing to it by number instead, e.g. "Your open Moka items are 3 to 8 and 29." Omit the line if nothing relates.
 
@@ -437,14 +437,14 @@ Examples (bad):
 
 ## Step 6: Publish and present
 
-1. Publish `<briefs_dir>/<date>.html` with the Artifact tool. If `output.artifact_url` is set: first `read` that URL (a publish to an artifact this conversation hasn't read is refused), then publish with `url` set to it, no `icon`. If it is empty: publish without `url`, with `icon: "calendar"` and `description: "Lena's daily morning brief"`, and tell Lena to paste the returned URL into `output.artifact_url` in `~/morning/config.yaml`.
+1. Publish `<briefs_dir>/<date>.html` with the Artifact tool. If `output.artifact_url` is set: first `read` that URL (a publish to an artifact this conversation hasn't read is refused), then publish with `url` set to it, no `icon`. If it is empty: publish without `url`, with `icon: "calendar"` and `description: "Your daily morning brief"`, and tell the user to paste the returned URL into `output.artifact_url` in `~/morning/config.yaml`.
 2. Print only this in chat:
    - `**<weekday_label>** - <focus>`
    - one line of counters from the renderer: `Urgent N (M overdue) · PRs: R to review, K ready, A awaiting · Your actions N · Meetings N` (drop any part that is 0, except Urgent)
    - the artifact link
    - `Saved: <briefs_dir>/<date>.md`
-3. If publishing fails for any reason, say so in one line and print the full markdown archive inline instead, verbatim. Lena must never end up with neither.
-4. Publish the shared copy to product-os. Run `/Users/lenathome/github/morning/scripts/publish_brief.sh <date> <briefs_dir>/<date>.shared.md <paths.product_os>` (expand `~` to the absolute path first). Use exactly that absolute script path and run no other git command against product-os: the script does the copy, commit and push itself. Add one line to the final message with the JSON result line it prints last (`{"committed": ..., "pushed": ..., "reason": ...}`). A non-zero exit (2 = unpushed commits outside briefs/, 3 = behind origin/main, 4 = push failed) is reported with the script's message and never retried with other git commands. It never blocks the rest of the brief: Steps 7 and 8 carry on either way. If `paths.product_os` is missing from the config, say so in one line and skip this step.
+3. If publishing fails for any reason, say so in one line and print the full markdown archive inline instead, verbatim. The user must never end up with neither.
+4. Publish the shared copy to product-os. Run `~/github/morning/scripts/publish_brief.sh <date> <briefs_dir>/<date>.shared.md <paths.product_os>` (expand `~` to the absolute home path first, in the script path and the arguments). Use exactly that script path and run no other git command against product-os: the script does the copy, commit and push itself. Add one line to the final message with the JSON result line it prints last (`{"committed": ..., "pushed": ..., "reason": ...}`). A non-zero exit (2 = unpushed commits outside briefs/, 3 = behind origin/main, 4 = push failed) is reported with the script's message and never retried with other git commands. It never blocks the rest of the brief: Steps 7 and 8 carry on either way. If `paths.product_os` is missing from the config, say so in one line and skip this step.
 
 ## Step 7: Action item tick-off
 

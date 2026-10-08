@@ -11,7 +11,7 @@
 **Decisions taken (1 Oct 2026, Lena):**
 - The chat gets a link, not the full brief. A short header stays inline so the brief still reads at a glance on a phone notification.
 - The page is a claude.ai artifact (private by default), not a local file: one pinned URL, works on her phone too.
-- Calendar: some non-ekko attendees are personal contacts, not external meetings (first case: the NatWest catch-up with an old colleague). Config gets an allowlist.
+- Calendar: some non-ekko attendees are personal contacts, not external meetings (first case: a catch-up with an old colleague). Config gets an allowlist.
 
 **Out of scope (later phase):** tick-off buttons on the page. They need the artifact to hold state and write back to Notion and Fathom. Ticking off stays in chat, by number, as now.
 
@@ -52,7 +52,7 @@ Written by the model in Step 4. `render_brief.py` adds the `n` field to every ac
     ]},
     {"parent": "Moka launch actions (Lena)", "items": [
       {"id": "3dbf...", "title": "Chase Simon ...", "due": "overdue since 17 Sep", "categories": ["Operational"], "note": "",
-       "tag": {"verdict": "split", "who": "Maria", "why": "Maria drafts, Lena signs off."}}
+       "tag": {"verdict": "split", "who": "Maria", "why": "Maria drafts, you sign off."}}
     ]}
   ],
   "prs": {
@@ -98,7 +98,7 @@ Rules the renderer enforces (raises `ValueError` with a clear message, exit code
 - Optional `tag` (alpha) on every to-do-like item (the items in `urgent`, `todos.coming_up`, `ideas.strategic` and `ideas.other`, plus every entry in `actions.yours` and `actions.product`) says who should own it: `{"verdict": "needs-lena" | "split" | "handoff", "who": "<first name, empty for needs-lena>", "why": "<one short sentence>"}`. `verdict` must be one of the three; `split` and `handoff` need a non-empty `who`; `who` and `why` are strings. A bad tag exits 1 and names the item. Items without a tag render as before. Testing items carry no tag. The renderer prints the alpha note when any item is tagged.
 - Missing lists default to empty. Missing optional strings default to `""`.
 
-Tag legend (the same wording lives in `skill/SKILL.md`): needs-Lena = product judgement, sign-off or a relationship only Lena holds; split = someone else does the legwork, Lena decides or signs off; handoff = someone else can own it end to end.
+Tag legend (the same wording lives in `skill/SKILL.md`): needs-Lena = product judgement, sign-off or a relationship only you hold; split = someone else does the legwork, you decide or sign off; handoff = someone else can own it end to end.
 
 Markdown shows a tag as ` [needs-Lena]`, ` [split: Maria]` or ` [handoff: Kurt]` at the end of the item line, with the `why` on the next line as an indented italic line. The page shows it as a small pill with the `why` as a muted line under the item.
 
@@ -134,23 +134,23 @@ def ev(*emails):
 
 class MarkExternalTest(unittest.TestCase):
     def test_outside_domain_is_external(self):
-        events = [ev("lena.thome@ekko.earth", "liam.quinn@visualsoft.co.uk")]
+        events = [ev("you@ekko.earth", "alex.smith@agency.example.org")]
         fetch_calendar.mark_external(events, "@ekko.earth", [])
         self.assertTrue(events[0]["is_external"])
 
     def test_internal_contact_is_not_external(self):
-        events = [ev("yaw.poku@natwest.com")]
-        fetch_calendar.mark_external(events, "@ekko.earth", ["yaw.poku@natwest.com"])
+        events = [ev("pat.jones@partner.example.com")]
+        fetch_calendar.mark_external(events, "@ekko.earth", ["pat.jones@partner.example.com"])
         self.assertFalse(events[0]["is_external"])
 
     def test_contact_match_ignores_case_and_spaces(self):
-        events = [ev("Yaw.Poku@NatWest.com")]
-        fetch_calendar.mark_external(events, "@ekko.earth", [" yaw.poku@natwest.com "])
+        events = [ev("Pat.Jones@Partner.Example.com")]
+        fetch_calendar.mark_external(events, "@ekko.earth", [" pat.jones@partner.example.com "])
         self.assertFalse(events[0]["is_external"])
 
     def test_contact_plus_real_external_is_still_external(self):
-        events = [ev("yaw.poku@natwest.com", "tim.mawson@visualsoft.co.uk")]
-        fetch_calendar.mark_external(events, "@ekko.earth", ["yaw.poku@natwest.com"])
+        events = [ev("pat.jones@partner.example.com", "robin.lee@agency.example.org")]
+        fetch_calendar.mark_external(events, "@ekko.earth", ["pat.jones@partner.example.com"])
         self.assertTrue(events[0]["is_external"])
 
     def test_parse_contacts_arg(self):
@@ -776,7 +776,7 @@ git commit -m "feat(morning): publish the brief as a page and print a link"
 
 Not in the repo, not delegated.
 
-- [ ] `~/morning/config.yaml`: add `calendar.internal_contacts: ["yaw.poku@natwest.com"]` and `output.artifact_url: ""`.
+- [ ] `~/morning/config.yaml`: add `calendar.internal_contacts: ["pat.jones@partner.example.com"]` and `output.artifact_url: ""`.
 - [ ] `~/.claude/scheduled-tasks/morning-brief/SKILL.md`: change "print the ENTIRE brief inline in the chat, never condensed and never replaced with a pointer to the file" to "publish the page and print the header, counters and link (Step 6); print the full brief inline only if publishing fails". Add to "Needed approval" guidance: list any Artifact call that prompted.
 - [ ] Memory `feedback_brief_numbered_lists.md`: replace "always print the full brief inline" with the link decision (1 Oct 2026) and its reason. Update the `MEMORY.md` line.
 

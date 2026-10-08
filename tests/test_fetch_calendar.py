@@ -13,23 +13,23 @@ def ev(*emails):
 
 class MarkExternalTest(unittest.TestCase):
     def test_outside_domain_is_external(self):
-        events = [ev("lena.thome@ekko.earth", "liam.quinn@visualsoft.co.uk")]
+        events = [ev("you@ekko.earth", "alex.smith@agency.example.org")]
         fetch_calendar.mark_external(events, "@ekko.earth", [])
         self.assertTrue(events[0]["is_external"])
 
     def test_internal_contact_is_not_external(self):
-        events = [ev("yaw.poku@natwest.com")]
-        fetch_calendar.mark_external(events, "@ekko.earth", ["yaw.poku@natwest.com"])
+        events = [ev("pat.jones@partner.example.com")]
+        fetch_calendar.mark_external(events, "@ekko.earth", ["pat.jones@partner.example.com"])
         self.assertFalse(events[0]["is_external"])
 
     def test_contact_match_ignores_case_and_spaces(self):
-        events = [ev("Yaw.Poku@NatWest.com")]
-        fetch_calendar.mark_external(events, "@ekko.earth", [" yaw.poku@natwest.com "])
+        events = [ev("Pat.Jones@Partner.Example.com")]
+        fetch_calendar.mark_external(events, "@ekko.earth", [" pat.jones@partner.example.com "])
         self.assertFalse(events[0]["is_external"])
 
     def test_contact_plus_real_external_is_still_external(self):
-        events = [ev("yaw.poku@natwest.com", "tim.mawson@visualsoft.co.uk")]
-        fetch_calendar.mark_external(events, "@ekko.earth", ["yaw.poku@natwest.com"])
+        events = [ev("pat.jones@partner.example.com", "robin.lee@agency.example.org")]
+        fetch_calendar.mark_external(events, "@ekko.earth", ["pat.jones@partner.example.com"])
         self.assertTrue(events[0]["is_external"])
 
     def test_parse_contacts_arg(self):
@@ -38,7 +38,7 @@ class MarkExternalTest(unittest.TestCase):
 
 
 class MarkPersonalTest(unittest.TestCase):
-    RULES = [{"title": "Catch up", "with": "yaw.poku@natwest.com"}]
+    RULES = [{"title": "Catch up", "with": "pat.jones@partner.example.com"}]
 
     def personal(self, title, *emails, rules=None):
         e = ev(*emails)
@@ -49,24 +49,24 @@ class MarkPersonalTest(unittest.TestCase):
         return events[0]
 
     def test_match_is_personal_even_with_an_extra_external_guest(self):
-        e = self.personal("Catch up", "yaw.poku@natwest.com", "someone@visualsoft.co.uk")
+        e = self.personal("Catch up", "pat.jones@partner.example.com", "someone@agency.example.org")
         self.assertTrue(e["is_personal"])
         self.assertFalse(e["is_external"])
 
     def test_title_match_ignores_case_and_extra_words(self):
-        self.assertTrue(self.personal("NatWest catch up (bi-weekly)", "Yaw.Poku@NatWest.com")["is_personal"])
+        self.assertTrue(self.personal("Personal catch up (bi-weekly)", "Pat.Jones@Partner.Example.com")["is_personal"])
 
     def test_same_title_with_someone_else_stays_external(self):
-        e = self.personal("Catch up", "someone@visualsoft.co.uk")
+        e = self.personal("Catch up", "someone@agency.example.org")
         self.assertFalse(e["is_personal"])
         self.assertTrue(e["is_external"])
 
     def test_same_attendee_other_title_stays_external(self):
-        self.assertTrue(self.personal("Pricing call", "yaw.poku@natwest.com")["is_external"])
+        self.assertTrue(self.personal("Pricing call", "pat.jones@partner.example.com")["is_external"])
 
     def test_title_only_rule_and_no_rules(self):
         self.assertTrue(self.personal("Dentist", "x@y.com", rules=[{"title": "dentist"}])["is_personal"])
-        e = self.personal("Catch up", "yaw.poku@natwest.com", rules=[])
+        e = self.personal("Catch up", "pat.jones@partner.example.com", rules=[])
         self.assertFalse(e["is_personal"])
         self.assertTrue(e["is_external"])
 

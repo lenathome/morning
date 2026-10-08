@@ -167,7 +167,7 @@ class MarkdownTest(unittest.TestCase):
         self.assertIn("> **Today's focus:** Ship the thing.", self.md)
 
     def test_parent_group_has_blank_lines_around_italic_name(self):
-        self.assertIn("\n*Moka launch actions (Lena):*\n\n2. Chase Simon (overdue since 17 Sep)  [Operational]\n", self.md)
+        self.assertIn("\n*Moka launch actions (you):*\n\n2. Chase Simon (overdue since 17 Sep)  [Operational]\n", self.md)
 
     def test_pr_line_and_poke(self):
         self.assertIn("- [#1291](https://github.com/ekko-enviroconomy/ekko-api/pull/1291) fix(funds): convert unit prices (ekko-api) - stacked on #1290", self.md)
@@ -257,18 +257,18 @@ class TagTest(unittest.TestCase):
 
     def test_needs_lena_tag_and_why_line(self):
         self.assertIn("1. Standalone urgent (due today)  [Operational] [needs-Lena]\n"
-                      "   *Only Lena can sign this off.*\n", self.md())
+                      "   *Only you can sign this off.*\n", self.md())
 
     def test_action_tag_follows_the_link_line(self):
         self.assertIn('4. [Email Jamie](https://fathom.video/calls/1?timestamp=2) (from "P&E team sync", 25 Sep)'
                       ' [handoff: Kurt]\n   *A plain follow-up email.*\n', self.md())
 
     def test_ideas_tag_shows_although_categories_do_not(self):
-        self.assertIn("8. Travel calculator [split: Maria]\n   *Maria mocks it up, Lena decides.*\n", self.md())
+        self.assertIn("8. Travel calculator [split: Maria]\n   *Maria mocks it up, you decide.*\n", self.md())
 
     def test_untagged_items_render_as_before(self):
         md = self.md()
-        self.assertIn("\n*Moka launch actions (Lena):*\n\n2. Chase Simon (overdue since 17 Sep)  [Operational]\n\n**Coming up**", md)
+        self.assertIn("\n*Moka launch actions (you):*\n\n2. Chase Simon (overdue since 17 Sep)  [Operational]\n\n**Coming up**", md)
         self.assertIn("5. [Schedule officers' call](https://fathom.video/calls/3?timestamp=4) "
                       "(from \"P&E team sync\", 30 Sep)\n", md)
 
@@ -281,7 +281,7 @@ class TagTest(unittest.TestCase):
     def test_two_digit_numbers_indent_the_why_line_under_the_item(self):
         brief, _ = render_brief.number_items(load())
         brief["urgent"][0]["items"][0]["n"] = 12
-        self.assertEqual(render_brief._todo_line(brief["urgent"][0]["items"][0])[1], "    *Only Lena can sign this off.*")
+        self.assertEqual(render_brief._todo_line(brief["urgent"][0]["items"][0])[1], "    *Only you can sign this off.*")
 
     def test_html_embeds_the_tag_and_template_renders_it(self):
         brief, _ = render_brief.number_items(load())
@@ -395,7 +395,7 @@ class HtmlTest(unittest.TestCase):
         self.assertNotIn("<script>alert(1)", html)
         self.assertIn("\\u003cscript>alert(1)", html)
         self.assertIn('id: "testing", label: "Testing"', html)
-        self.assertIn('label: "To test"', html)
+        self.assertNotIn('label: "To test"', html)
         self.assertIn("Nothing merged recently that needs a manual test.", html)
 
     def test_tabs_are_todo_prs_testing_ideas_projects(self):
@@ -404,6 +404,15 @@ class HtmlTest(unittest.TestCase):
         self.assertEqual(ids, [("todo", "To do"), ("prs", "PRs"), ("testing", "Testing"),
                                ("ideas", "Ideas bank"), ("projects", "Projects")])
         self.assertNotIn('tab: "today"', html)
+
+    def test_pills_are_the_only_tab_bar(self):
+        html = (ROOT / "scripts" / "brief_template.html").read_text()
+        self.assertIn('el("div", { "class": "chips", role: "tablist"', html)
+        self.assertIn('el("button", { "class": "chip", role: "tab"', html)
+        self.assertNotIn('"class": "tab",', html)
+        self.assertNotIn(".tabs {", html)
+        for old in ('label: "Urgent"', 'label: "PRs needing you"', 'label: "Your actions"', 'label: "Meetings"'):
+            self.assertNotIn(old, html)
 
 
 class HtmlLayoutTest(unittest.TestCase):

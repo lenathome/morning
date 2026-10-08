@@ -3,7 +3,7 @@
 
 Usage:
     python3 fetch_calendar.py <ekko_email_domain> [<primary_calendar>] [<internal_contacts comma-joined>] [<personal_events JSON>]
-    e.g. python3 fetch_calendar.py @ekko.earth lena.thome@ekko.earth
+    e.g. python3 fetch_calendar.py @ekko.earth you@ekko.earth
 
 If <primary_calendar> is provided, the gcalcli query is restricted to that
 single calendar so events you're only subscribed to (other people's standups,
