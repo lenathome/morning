@@ -11,6 +11,7 @@ You are sweeping Lena's Claude Code sessions since the last run. This runs unatt
 
 - The only writes allowed: the digest files in `~/ai-log/`, the proposals queue (through `proposals.py`) and `~/morning/state/sweep-last-run.txt`.
 - Never edit project files in `~/product-os/projects/`. Proposals only.
+- Run every Bash command with absolute paths, one command per call. Never start with `cd` or chain commands with `;`, `&&` or a loop: a compound command asks for approval even when each part is allowed.
 - Never accept or reject a proposal. That happens in the brief.
 - Never ask a question. If something is ambiguous, skip it and count it as skipped.
 - If the extractor fails, stop without updating the last-run file and say why in one line.
