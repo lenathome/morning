@@ -172,6 +172,10 @@ details.prow .detail { margin: 0 12px 10px; }
 .pill.blocked { background: var(--bad-soft); color: var(--bad); }
 .pill.waiting { background: var(--warn-soft); color: var(--warn); }
 .pill.other { background: var(--surface-2); color: var(--muted); }
+.pill.needs-lena { background: var(--warn-soft); color: var(--warn); text-transform: none; }
+.pill.split { background: var(--accent-soft); color: var(--accent); text-transform: none; }
+.pill.handoff { background: var(--good-soft); color: var(--good); text-transform: none; }
+.why { font-size: 12.5px; color: var(--muted); font-style: italic; }
 .detail { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; margin-top: 8px; border-top: 1px solid var(--line); font-size: 13.5px; }
 .detail p { margin: 0; }
 .detail ul { margin: 0; padding-left: 18px; }
@@ -265,6 +269,17 @@ tr:last-child td { border-bottom: 0; }
   function numberedRow(n, body) {
     return el("div", { "class": "row" }, [span("num", String(n)), el("div", { "class": "rowbody" }, body)]);
   }
+  function tagPill(item) {
+    var t = item.tag;
+    if (!t || ["needs-lena", "split", "handoff"].indexOf(t.verdict) < 0) return null;
+    var text = t.verdict === "needs-lena" ? "needs-Lena" : t.verdict + ": " + (t.who || "");
+    var pill = span("pill " + t.verdict, text);
+    if (t.why) pill.setAttribute("title", t.why);
+    return pill;
+  }
+  function whyLine(item) {
+    return item.tag && item.tag.why ? el("div", { "class": "why", text: item.tag.why }) : null;
+  }
   function todoRow(item, showTags) {
     var meta = [];
     if (item.due) {
@@ -274,9 +289,12 @@ tr:last-child td { border-bottom: 0; }
     }
     if (showTags) (item.categories || []).forEach(function (c) { meta.push(span("tag", c)); });
     if (item.note) meta.push(span("", item.note));
+    meta.push(tagPill(item));
+    meta = meta.filter(Boolean);
     return numberedRow(item.n, [
       el("div", { text: item.title }),
-      meta.length ? el("div", { "class": "meta" }, meta) : null
+      meta.length ? el("div", { "class": "meta" }, meta) : null,
+      whyLine(item)
     ]);
   }
   function todoPanel(groups, showTags) {
@@ -294,7 +312,8 @@ tr:last-child td { border-bottom: 0; }
     list.forEach(function (a) {
       panel.appendChild(numberedRow(a.n, [
         el("div", {}, [link(safeUrl(a.url), a.text)]),
-        el("div", { "class": "meta" }, [span("", a.meeting + ", " + a.date)])
+        el("div", { "class": "meta" }, [span("", a.meeting + ", " + a.date), tagPill(a)]),
+        whyLine(a)
       ]));
     });
     return panel;
@@ -395,6 +414,7 @@ tr:last-child td { border-bottom: 0; }
   /* ---------- tab content ---------- */
   function todoTab() {
     var out = [];
+    if (brief.alpha_note) out.push(el("div", { "class": "meta" }, [span("pill other", "alpha"), span("", brief.alpha_note)]));
     if (urgentItems.length) out.push(section("Urgent today", urgentItems.length, todoPanel(urgent)));
     var comingN = countGroups(todos.coming_up);
     if (comingN) out.push(section("Coming up", comingN, todoPanel(todos.coming_up)));

@@ -155,11 +155,11 @@ Loop over the meetings returned in Step 1.6:
 
 ## Step 4: Render the brief
 
-Write the brief's content as JSON to `<briefs_dir>/<YYYY-MM-DD>.json`, following the contract in `docs/plans/2026-10-01-brief-html-page.md` (section "The brief JSON contract"). That contract lives in this repo; the skill reads it from `~/github/morning/docs/plans/2026-10-01-brief-html-page.md`. Do not number anything: the renderer does. Put every list in final display order (standalone tasks first, then parent groups alphabetically). Apply the voice guide to every string you write. Then run:
+Write the brief's content as JSON to `<briefs_dir>/<YYYY-MM-DD>.json`, following the contract in `docs/plans/2026-10-01-brief-html-page.md` (section "The brief JSON contract"). That contract lives in this repo; the skill reads it from `~/github/morning/docs/plans/2026-10-01-brief-html-page.md`. Do not number anything: the renderer does. Put every list in final display order (standalone tasks first, then parent groups alphabetically). Apply the voice guide to every string you write. Assign a `tag` to every to-do (see "Tags on to-dos" in the Brief structure section). Then run:
 
-`python3 ~/github/morning/scripts/render_brief.py <briefs_dir>/<date>.json --md <briefs_dir>/<date>.md --html <briefs_dir>/<date>.html --map ~/morning/state/brief-map-<date>.json`
+`python3 ~/github/morning/scripts/render_brief.py <briefs_dir>/<date>.json --md <briefs_dir>/<date>.md --shared-md <briefs_dir>/<date>.shared.md --html <briefs_dir>/<date>.html --map ~/morning/state/brief-map-<date>.json`
 
-It prints one JSON line of counts; keep it for Step 6. If it exits 1, fix the JSON it names and run it again.
+It prints one JSON line of counts; keep it for Step 6. If it exits 1, fix the JSON it names and run it again. The `.shared.md` file is the same markdown without the External meeting prep section; Step 6 publishes it to the shared product-os repo.
 
 The "Brief structure" section below still defines what goes in each list.
 
@@ -310,6 +310,25 @@ Per-line annotations:
 
 Omit a bucket or sub-list that is empty. If both sub-lists are empty, write "Nothing waiting on you. Nice."
 
+### Tags on to-dos (alpha)
+
+The tags are alpha: the model's first guess, not reviewed, and the brief says so. The renderer adds the note; the model writes nothing extra.
+
+Every to-do gets a `tag` saying who should own it: each item in `urgent`, `todos.coming_up`, `ideas.strategic` and `ideas.other`, and each entry in `actions.yours` and `actions.product`. Testing items carry none. Shape: `"tag": {"verdict": "needs-lena" | "split" | "handoff", "who": "<first name, empty for needs-lena>", "why": "<one short sentence>"}`.
+
+Legend: needs-Lena = product judgement, sign-off or a relationship only you hold; split = someone else does the legwork, you decide or sign off; handoff = someone else can own it end to end.
+
+Rules:
+- `who` must be a first name from `<paths.product_os>/people.md`. Read that file once. Leave `who` empty for needs-lena.
+- Choose from the person's specialism in people.md and from the `owner` field of the project the item belongs to in the projects index (Step 1.3).
+- When unsure, use needs-lena.
+- Never hand off or split to an external partner. `who` is always someone at ekko.
+- `why` is one short sentence in the voice guide's style, with the reason (for example the person's specialism or what only you can decide).
+
+Markdown shows the tag at the end of the item line (` [needs-Lena]`, ` [split: Maria]`, ` [handoff: Kurt]`) with the `why` on the next line as an indented italic line. The renderer does this; the model only writes the JSON.
+
+The shared copy of the brief is read by Etienne's agents to find work to take off your plate, so the tags and `why` lines must be accurate and must not contain anything you would not show him.
+
 ### Your actions and Product actions
 
 These render inside `## To do`, after Coming up. Numbering continues from the last Coming up item (or from Urgent today if Coming up is empty). Each `**Your actions**` / `**Product actions**` heading is followed by a blank line before its numbered list starts, for the same CommonMark reason.
@@ -425,6 +444,7 @@ Examples (bad):
    - the artifact link
    - `Saved: <briefs_dir>/<date>.md`
 3. If publishing fails for any reason, say so in one line and print the full markdown archive inline instead, verbatim. The user must never end up with neither.
+4. Publish the shared copy to product-os. Run `~/github/morning/scripts/publish_brief.sh <date> <briefs_dir>/<date>.shared.md <paths.product_os>` (expand `~` to the absolute home path first, in the script path and the arguments). Use exactly that script path and run no other git command against product-os: the script does the copy, commit and push itself. Add one line to the final message with the JSON result line it prints last (`{"committed": ..., "pushed": ..., "reason": ...}`). A non-zero exit (2 = unpushed commits outside briefs/, 3 = behind origin/main, 4 = push failed) is reported with the script's message and never retried with other git commands. It never blocks the rest of the brief: Steps 7 and 8 carry on either way. If `paths.product_os` is missing from the config, say so in one line and skip this step.
 
 ## Step 7: Action item tick-off
 

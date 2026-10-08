@@ -18,6 +18,8 @@ This is my own tool, not an ekko team tool. You are welcome to copy it, but it i
 
 Every actionable line has a number. You tick items off in chat by replying with the numbers and the next brief drops them.
 
+Every to-do carries an owner tag (needs-Lena, split or handoff) saying who could own it. The tags are alpha: a first guess, not reviewed, and the page and the markdown say so. The `needs-Lena` tag is the name used by readers of the shared brief; for you it means product judgement, sign-off or a relationship only you hold.
+
 `/session-sweep` runs before the brief. It reads every Claude Code session since its last run, writes a digest of each to `~/ai-log/YYYY-MM-DD.md` and queues proposed edits to the project files. It never edits a project file itself. You accept or reject the proposals when the brief opens.
 
 ## Why it was built
@@ -38,10 +40,11 @@ The tool is a Claude Code skill plus small Python and shell scripts. The skill i
 - `scripts/fetch_github.sh` and `scripts/fetch_merged.sh` wrap `gh` for review requests, mentions, your own PRs, project PRs and recently merged PRs with their deploy runs.
 - `scripts/parse_projects.py` reads the project files.
 - `scripts/render_brief.py` turns the brief into output (see below).
+- `scripts/publish_brief.sh` commits the shared markdown copy to `briefs/` in the product-os repo and pushes it to origin/main.
 - `scripts/extract_sessions.py` and `scripts/proposals.py` serve `/session-sweep`.
 - `scripts/ack_*.py` record what you ticked off or parked, in `~/morning/state/`.
 
-The brief is JSON. Claude writes it to `~/morning/briefs/<date>.json` and never numbers anything. `scripts/render_brief.py` validates it, numbers every actionable line and writes three files: a markdown archive, an HTML page (`scripts/brief_template.html` with the JSON embedded, rendered in the browser) and a map from number to Notion page or Fathom action. The tick-off step reads that map, which is why numbers stay stable between the page and the chat.
+The brief is JSON. Claude writes it to `~/morning/briefs/<date>.json` and never numbers anything. `scripts/render_brief.py` validates it, numbers every actionable line and writes four files: a markdown archive, a shared markdown copy without the external meeting prep (`--shared-md`), an HTML page (`scripts/brief_template.html` with the JSON embedded, rendered in the browser) and a map from number to Notion page or Fathom action. The tick-off step reads that map, which is why numbers stay stable between the page and the chat.
 
 I built it with Claude Code. The spec and the implementation plans in `docs/plans` were written first and each plan is split into tasks for agents to execute one at a time. The scripts use the Python standard library only.
 
@@ -79,6 +82,7 @@ Then edit `~/morning/config.yaml`. The values to fill in:
 - `fathom.user_name`: your name as it appears as an action owner in Fathom summaries. `fathom.team_action_owners` lists colleagues whose actions you want to track.
 - `output.artifact_url`: leave empty on the first run. The skill prints the new URL and you paste it in, so every later brief goes to the same page.
 - `paths.projects_dir`: where your project files live.
+- `paths.product_os`: the product-os git repo. Step 6 publishes the shared brief to `briefs/` in it and pushes to origin/main.
 
 `config.yaml` is gitignored.
 

@@ -47,10 +47,12 @@ Written by the model in Step 4. `render_brief.py` adds the `n` field to every ac
   "unavailable": ["Fathom unavailable: <reason>"],
   "urgent": [
     {"parent": null, "items": [
-      {"id": "3ecf93807de4816c8cbff4d851e840e3", "title": "Prep translations ...", "due": "due today", "categories": ["Operational"], "note": ""}
+      {"id": "3ecf93807de4816c8cbff4d851e840e3", "title": "Prep translations ...", "due": "due today", "categories": ["Operational"], "note": "",
+       "tag": {"verdict": "needs-lena", "who": "", "why": "Sets the copy rules and signs off."}}
     ]},
     {"parent": "Moka launch actions (Lena)", "items": [
-      {"id": "3dbf...", "title": "Chase Simon ...", "due": "overdue since 17 Sep", "categories": ["Operational"], "note": ""}
+      {"id": "3dbf...", "title": "Chase Simon ...", "due": "overdue since 17 Sep", "categories": ["Operational"], "note": "",
+       "tag": {"verdict": "split", "who": "Maria", "why": "Maria drafts, you sign off."}}
     ]}
   ],
   "prs": {
@@ -93,7 +95,14 @@ Rules the renderer enforces (raises `ValueError` with a clear message, exit code
 - Every to-do item has `id`; every action has `key`.
 - Optional `testing` lists merged PRs Lena can test by hand. Every item has `repo`, `number`, `url` and `title`, and `steps` is a non-empty list of strings. `live` is free text ("not deployed yet" is allowed); `inferred` is true when the steps were written from the diff rather than the PR's test plan.
 - Optional `waiting_on` on each project lists tasks that wait on other people: `[{"text": "...", "who": "Simon and Baran"}]`. Each entry needs a non-empty `text`; `who` is a string and may be empty. Entries are not numbered, not in the number map and not tick-off-able. Defaults to `[]`.
+- Optional `tag` (alpha) on every to-do-like item (the items in `urgent`, `todos.coming_up`, `ideas.strategic` and `ideas.other`, plus every entry in `actions.yours` and `actions.product`) says who should own it: `{"verdict": "needs-lena" | "split" | "handoff", "who": "<first name, empty for needs-lena>", "why": "<one short sentence>"}`. `verdict` must be one of the three; `split` and `handoff` need a non-empty `who`; `who` and `why` are strings. A bad tag exits 1 and names the item. Items without a tag render as before. Testing items carry no tag. The renderer prints the alpha note when any item is tagged.
 - Missing lists default to empty. Missing optional strings default to `""`.
+
+Tag legend (the same wording lives in `skill/SKILL.md`): needs-Lena = product judgement, sign-off or a relationship only you hold; split = someone else does the legwork, you decide or sign off; handoff = someone else can own it end to end.
+
+Markdown shows a tag as ` [needs-Lena]`, ` [split: Maria]` or ` [handoff: Kurt]` at the end of the item line, with the `why` on the next line as an indented italic line. The page shows it as a small pill with the `why` as a muted line under the item.
+
+`render_brief.py --shared-md <path>` writes the same markdown as `--md` without the External meeting prep section, so the copy can go to a shared repo. Numbering is unchanged.
 
 Bucket meaning: `urgent` is every to-do due today or overdue. `todos.coming_up` is every to-do due after today, ordered by due date. `ideas` holds every to-do with no due date: `ideas.strategic` when `Category` contains Strategic, `ideas.other` for the rest.
 
