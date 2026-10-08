@@ -327,7 +327,7 @@ Rules:
 
 Markdown shows the tag at the end of the item line (` [needs-Lena]`, ` [split: Maria]`, ` [handoff: Kurt]`) with the `why` on the next line as an indented italic line. The renderer does this; the model only writes the JSON.
 
-The shared copy of the brief is read by Etienne's agents to find work to take off your plate, so the tags and `why` lines must be accurate and must not contain anything you would not show him.
+The shared copy of the brief is read by Etienne and his agents, so the tags and `why` lines must be accurate and must not contain anything you would not show him.
 
 ### Your actions and Product actions
 
