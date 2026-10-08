@@ -13,6 +13,46 @@ sys.path.insert(0, str(SCRIPT.parent))
 import render_brief  # noqa: E402
 
 
+class AlphaNoteTest(unittest.TestCase):
+    NOTE = "_Owner tags are alpha: a first guess at who could own each to-do, not yet reviewed._\n\n"
+
+    def untag(self, b):
+        for g in b["urgent"] + b["todos"]["coming_up"] + b["ideas"]["strategic"] + b["ideas"]["other"]:
+            for i in g["items"]:
+                i.pop("tag", None)
+        for a in b["actions"]["yours"] + b["actions"]["product"]:
+            a.pop("tag", None)
+        return b
+
+    def test_md_and_shared_md_have_the_note_once_under_the_to_do_heading(self):
+        brief, _ = render_brief.number_items(load())
+        for shared in (False, True):
+            md = render_brief.to_markdown(brief, shared=shared)
+            self.assertEqual(md.count(self.NOTE), 1)
+            self.assertIn("## To do\n\n" + self.NOTE + "**Urgent today**", md)
+
+    def test_html_embeds_the_note_once_and_template_shows_it(self):
+        brief, _ = render_brief.number_items(load())
+        html = render_brief.to_html(brief)
+        self.assertEqual(html.count(render_brief.ALPHA_NOTE), 1)
+        template = (ROOT / "scripts" / "brief_template.html").read_text()
+        self.assertIn("brief.alpha_note", template)
+        self.assertIn('span("pill other", "alpha")', template)
+
+    def test_no_note_when_nothing_is_tagged(self):
+        brief, _ = render_brief.number_items(self.untag(load()))
+        for shared in (False, True):
+            self.assertNotIn("alpha", render_brief.to_markdown(brief, shared=shared))
+        self.assertNotIn(render_brief.ALPHA_NOTE, render_brief.to_html(brief))
+        self.assertNotIn('"alpha_note":', render_brief.to_html(brief))
+
+    def test_numbering_is_unchanged(self):
+        tagged, tagged_map = render_brief.number_items(load())
+        plain, plain_map = render_brief.number_items(self.untag(load()))
+        self.assertEqual(tagged_map, plain_map)
+        self.assertEqual(render_brief.counts(tagged), render_brief.counts(plain))
+
+
 def load():
     return json.loads(FIXTURE.read_text())
 

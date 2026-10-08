@@ -421,6 +421,7 @@ tr:last-child td { border-bottom: 0; }
   /* ---------- tab content ---------- */
   function todoTab() {
     var out = [];
+    if (brief.alpha_note) out.push(el("div", { "class": "meta" }, [span("pill other", "alpha"), span("", brief.alpha_note)]));
     if (urgentItems.length) out.push(section("Urgent today", urgentItems.length, todoPanel(urgent)));
     var comingN = countGroups(todos.coming_up);
     if (comingN) out.push(section("Coming up", comingN, todoPanel(todos.coming_up)));

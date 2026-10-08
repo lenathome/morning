@@ -310,7 +310,9 @@ Per-line annotations:
 
 Omit a bucket or sub-list that is empty. If both sub-lists are empty, write "Nothing waiting on you. Nice."
 
-### Tags on to-dos
+### Tags on to-dos (alpha)
+
+The tags are alpha: the model's first guess, not reviewed, and the brief says so. The renderer adds the note; the model writes nothing extra.
 
 Every to-do gets a `tag` saying who should own it: each item in `urgent`, `todos.coming_up`, `ideas.strategic` and `ideas.other`, and each entry in `actions.yours` and `actions.product`. Testing items carry none. Shape: `"tag": {"verdict": "needs-lena" | "split" | "handoff", "who": "<first name, empty for needs-lena>", "why": "<one short sentence>"}`.
 
