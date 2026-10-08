@@ -95,7 +95,7 @@ header { display: flex; flex-direction: column; gap: 10px; }
 
 /* seasonal photo: a fixed-height layer behind the header that fades into the page colour.
    Only present when the renderer embedded a photo (body.has-bg). Cards keep solid backgrounds. */
-body { position: relative; }
+body { position: relative; margin: 0; }
 .wrap { position: relative; z-index: 1; }
 .bg-hero { position: absolute; top: 0; left: 0; right: 0; height: 420px; overflow: hidden; z-index: 0; pointer-events: none; }
 .bg-photo { position: absolute; inset: 0; background-size: cover; background-position: center; background-repeat: no-repeat; }
