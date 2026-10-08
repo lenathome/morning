@@ -2,11 +2,15 @@
 """render_brief.py - turn the brief JSON into markdown, HTML and a number map.
 
 Usage:
-    python3 render_brief.py <brief.json> [--md OUT.md] [--html OUT.html] [--map OUT.json]
+    python3 render_brief.py <brief.json> [--md OUT.md] [--shared-md OUT.md] [--html OUT.html] [--map OUT.json]
 
 The model writes the brief's content once as JSON (contract in
 docs/plans/2026-10-01-brief-html-page.md). This script owns the numbering, so
 the markdown archive, the page and the Step 7 tick-off map always agree.
+
+--shared-md writes the same markdown as --md without the "External meeting
+prep" section, which holds research on named external people and must not go
+to a shared repo.
 
 stdout: one JSON line of counts, e.g. {"urgent": 8, "overdue": 5, ...}, which
 the skill prints as the chat header.
@@ -23,6 +27,25 @@ from pathlib import Path
 
 TEMPLATE = Path(__file__).resolve().parent / "brief_template.html"
 IDEA_BUCKETS = (("strategic", "Strategic"), ("other", "Operational"))
+TAG_VERDICTS = ("needs-lena", "split", "handoff")
+TAG_LABELS = {"needs-lena": "needs-Lena", "split": "split", "handoff": "handoff"}
+
+
+def check_tag(item: dict, label: str) -> None:
+    """Validate the optional `tag` on a to-do-like item. `label` names the item in errors."""
+    if "tag" not in item or item["tag"] is None:
+        return
+    tag = item["tag"]
+    if not isinstance(tag, dict):
+        raise ValueError(f"{label} has a 'tag' that is not an object")
+    verdict = tag.get("verdict")
+    if verdict not in TAG_VERDICTS:
+        raise ValueError(f"{label} has an unknown tag verdict {verdict!r} (use {', '.join(TAG_VERDICTS)})")
+    for k in ("who", "why"):
+        if not isinstance(tag.get(k, ""), str):
+            raise ValueError(f"{label} has a tag whose '{k}' is not a string")
+    if verdict != "needs-lena" and not tag.get("who", "").strip():
+        raise ValueError(f"{label} has a '{verdict}' tag with no 'who'")
 
 
 def number_items(raw: dict) -> tuple[dict, dict]:
@@ -68,6 +91,7 @@ def number_items(raw: dict) -> tuple[dict, dict]:
             for item in g.get("items", []):
                 if not item.get("id"):
                     raise ValueError(f"to-do '{item.get('title', '?')}' has no 'id'")
+                check_tag(item, f"to-do '{item.get('title', '?')}'")
                 n += 1
                 item["n"] = n
                 numbers[str(n)] = {"kind": "notion", "id": item["id"]}
@@ -77,6 +101,7 @@ def number_items(raw: dict) -> tuple[dict, dict]:
         for a in items:
             if not a.get("key"):
                 raise ValueError(f"action '{a.get('text', '?')}' has no 'key'")
+            check_tag(a, f"action '{a.get('text', '?')}'")
             n += 1
             a["n"] = n
             numbers[str(n)] = {"kind": "fathom", "key": a["key"]}
@@ -105,11 +130,28 @@ def number_items(raw: dict) -> tuple[dict, dict]:
     return brief, numbers
 
 
-def _todo_line(item: dict, show_tags: bool = True) -> str:
+def _tag_suffix(item: dict) -> str:
+    tag = item.get("tag")
+    if not tag:
+        return ""
+    verdict = tag["verdict"]
+    who = f": {tag['who'].strip()}" if verdict != "needs-lena" else ""
+    return f" [{TAG_LABELS[verdict]}{who}]"
+
+
+def _tag_why(item: dict) -> list[str]:
+    """The why line under a tagged item, indented to sit inside the numbered item."""
+    tag = item.get("tag")
+    if not tag or not tag.get("why", "").strip():
+        return []
+    return [" " * len(f"{item['n']}. ") + f"*{tag['why'].strip()}*"]
+
+
+def _todo_line(item: dict, show_tags: bool = True) -> list[str]:
     due = f" ({item['due']})" if item.get("due") else ""
     cats = f"  [{', '.join(item.get('categories', []))}]" if show_tags and item.get("categories") else ""
     note = f" ({item['note']})" if item.get("note") else ""
-    return f"{item['n']}. {item['title']}{due}{cats}{note}"
+    return [f"{item['n']}. {item['title']}{due}{cats}{note}{_tag_suffix(item)}"] + _tag_why(item)
 
 
 def _todo_groups_md(groups: list, show_tags: bool = True) -> list[str]:
@@ -117,7 +159,8 @@ def _todo_groups_md(groups: list, show_tags: bool = True) -> list[str]:
     for g in groups:
         if g.get("parent"):
             out += [f"*{g['parent']}:*", ""]
-        out += [_todo_line(i, show_tags) for i in g.get("items", [])]
+        for i in g.get("items", []):
+            out += _todo_line(i, show_tags)
         out.append("")
     return out
 
@@ -128,8 +171,9 @@ def _pr_line(pr: dict) -> str:
     return f"- {poke}[#{pr['number']}]({pr['url']}) {pr['title']} ({pr['repo']}){note}"
 
 
-def _action_line(a: dict) -> str:
-    return f"{a['n']}. [{a['text']}]({a['url']}) (from \"{a['meeting']}\", {a['date']})"
+def _action_line(a: dict) -> list[str]:
+    head = f"{a['n']}. [{a['text']}]({a['url']}) (from \"{a['meeting']}\", {a['date']}){_tag_suffix(a)}"
+    return [head] + _tag_why(a)
 
 
 def _testing_md(t: dict) -> list[str]:
@@ -149,7 +193,8 @@ def _count(groups: list) -> int:
     return sum(len(g.get("items", [])) for g in groups)
 
 
-def to_markdown(brief: dict) -> str:
+def to_markdown(brief: dict, shared: bool = False) -> str:
+    """Markdown archive. `shared` drops External meeting prep (research on named external people)."""
     L: list[str] = [f"# Morning brief - {brief['weekday_label']}", "",
                     f"> **Today's focus:** {brief['focus']}", ""]
     for u in brief["unavailable"]:
@@ -164,13 +209,13 @@ def to_markdown(brief: dict) -> str:
     acts = brief["actions"]
     L += ["**Your actions**", ""]
     if acts["yours"]:
-        L += [_action_line(a) for a in acts["yours"]] + [""]
+        L += [x for a in acts["yours"] for x in _action_line(a)] + [""]
     else:
         L += ["Nothing carrying over on your own actions. Clean slate.", ""]
     if acts["product"]:
-        L += ["**Product actions**", ""] + [_action_line(a) for a in acts["product"]] + [""]
+        L += ["**Product actions**", ""] + [x for a in acts["product"] for x in _action_line(a)] + [""]
 
-    if brief["meetings"]:
+    if brief["meetings"] and not shared:
         L += ["## External meeting prep", ""]
         for m in brief["meetings"]:
             L += [f"**{m['time']} - {m['title']}**", f"- Company: {m.get('company', '')}", "- Participants:"]
@@ -269,6 +314,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("brief")
     ap.add_argument("--md")
+    ap.add_argument("--shared-md")
     ap.add_argument("--html")
     ap.add_argument("--map")
     args = ap.parse_args()
@@ -279,6 +325,8 @@ def main() -> None:
         sys.exit(1)
     if args.md:
         Path(args.md).expanduser().write_text(to_markdown(brief))
+    if args.shared_md:
+        Path(args.shared_md).expanduser().write_text(to_markdown(brief, shared=True))
     if args.html:
         Path(args.html).expanduser().write_text(to_html(brief))
     if args.map:

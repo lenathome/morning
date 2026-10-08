@@ -158,7 +158,8 @@ class MarkdownTest(unittest.TestCase):
         ideas_md = self.md.split("## Ideas bank")[1].split("## Engineering progress")[0]
         for line in ideas_md.splitlines():
             if re.match(r"\d+\. ", line):
-                self.assertNotIn("[", line)
+                # a tag suffix is allowed; category tags are not
+                self.assertNotIn("[", re.sub(r" \[(needs-Lena|split: [^\]]+|handoff: [^\]]+)\]$", "", line))
         template = (ROOT / "scripts" / "brief_template.html").read_text()
         self.assertIn('["Operational", ideas.other]', template)
         self.assertNotIn('["Other"', template)
@@ -207,6 +208,123 @@ class MarkdownTest(unittest.TestCase):
         b["actions"]["yours"] = []
         brief, _ = render_brief.number_items(b)
         self.assertIn("Nothing carrying over on your own actions. Clean slate.", render_brief.to_markdown(brief))
+
+
+class TagTest(unittest.TestCase):
+    def md(self, b=None):
+        brief, _ = render_brief.number_items(b or load())
+        return render_brief.to_markdown(brief)
+
+    def test_needs_lena_tag_and_why_line(self):
+        self.assertIn("1. Standalone urgent (due today)  [Operational] [needs-Lena]\n"
+                      "   *Only Lena can sign this off.*\n", self.md())
+
+    def test_action_tag_follows_the_link_line(self):
+        self.assertIn('4. [Email Jamie](https://fathom.video/calls/1?timestamp=2) (from "P&E team sync", 25 Sep)'
+                      ' [handoff: Kurt]\n   *A plain follow-up email.*\n', self.md())
+
+    def test_ideas_tag_shows_although_categories_do_not(self):
+        self.assertIn("8. Travel calculator [split: Maria]\n   *Maria mocks it up, Lena decides.*\n", self.md())
+
+    def test_untagged_items_render_as_before(self):
+        md = self.md()
+        self.assertIn("\n*Moka launch actions (Lena):*\n\n2. Chase Simon (overdue since 17 Sep)  [Operational]\n\n**Coming up**", md)
+        self.assertIn("5. [Schedule officers' call](https://fathom.video/calls/3?timestamp=4) "
+                      "(from \"P&E team sync\", 30 Sep)\n", md)
+
+    def test_tag_without_why_adds_no_line(self):
+        b = load()
+        b["urgent"][0]["items"][0]["tag"]["why"] = ""
+        md = self.md(b)
+        self.assertIn("[needs-Lena]\n\n", md)
+
+    def test_two_digit_numbers_indent_the_why_line_under_the_item(self):
+        brief, _ = render_brief.number_items(load())
+        brief["urgent"][0]["items"][0]["n"] = 12
+        self.assertEqual(render_brief._todo_line(brief["urgent"][0]["items"][0])[1], "    *Only Lena can sign this off.*")
+
+    def test_html_embeds_the_tag_and_template_renders_it(self):
+        brief, _ = render_brief.number_items(load())
+        html = render_brief.to_html(brief)
+        self.assertIn('"verdict": "handoff"', html)
+        template = (ROOT / "scripts" / "brief_template.html").read_text()
+        self.assertIn("tagPill(item)", template)
+        self.assertIn("tagPill(a)", template)
+        self.assertIn(".pill.needs-lena", template)
+
+    def test_unknown_verdict_names_the_item(self):
+        b = load()
+        b["urgent"][0]["items"][0]["tag"]["verdict"] = "you"
+        with self.assertRaisesRegex(ValueError, "Standalone urgent.*unknown tag verdict"):
+            render_brief.number_items(b)
+
+    def test_split_and_handoff_need_who(self):
+        for verdict in ("split", "handoff"):
+            for who in ("", "  ", None):
+                b = load()
+                tag = {"verdict": verdict, "why": "x"}
+                if who is not None:
+                    tag["who"] = who
+                b["todos"]["coming_up"][0]["items"][0]["tag"] = tag
+                with self.assertRaisesRegex(ValueError, f"Revisit round-up.*'{verdict}' tag with no 'who'"):
+                    render_brief.number_items(b)
+
+    def test_needs_lena_may_have_empty_who(self):
+        b = load()
+        b["todos"]["coming_up"][0]["items"][0]["tag"] = {"verdict": "needs-lena"}
+        self.assertIn("3. Revisit round-up (due 2 Oct)  [Operational] [needs-Lena]\n", self.md(b))
+
+    def test_non_object_tag_and_non_string_fields_are_rejected(self):
+        for bad in ("needs-lena", ["split"], {"verdict": "split", "who": 3}, {"verdict": "needs-lena", "why": 4}):
+            b = load()
+            b["actions"]["product"][0]["tag"] = bad
+            with self.assertRaisesRegex(ValueError, "Schedule officers' call"):
+                render_brief.number_items(b)
+
+    def test_ideas_item_with_bad_tag_is_rejected(self):
+        b = load()
+        b["ideas"]["other"][0]["items"][0]["tag"] = {"verdict": "handoff", "who": ""}
+        with self.assertRaisesRegex(ValueError, "Link to methodology PDFs"):
+            render_brief.number_items(b)
+
+    def test_cli_exits_1_on_bad_tag(self):
+        with tempfile.TemporaryDirectory() as d:
+            b = load()
+            b["urgent"][0]["items"][0]["tag"]["verdict"] = "nope"
+            bad = Path(d) / "bad.json"
+            bad.write_text(json.dumps(b))
+            r = subprocess.run([sys.executable, str(SCRIPT), str(bad), "--md", str(Path(d) / "x.md")],
+                               capture_output=True, text=True)
+            self.assertEqual(r.returncode, 1)
+            self.assertIn("Standalone urgent", r.stderr)
+
+
+class SharedMdTest(unittest.TestCase):
+    def test_drops_only_external_meeting_prep(self):
+        brief, _ = render_brief.number_items(load())
+        full = render_brief.to_markdown(brief)
+        shared = render_brief.to_markdown(brief, shared=True)
+        self.assertIn("## External meeting prep", full)
+        self.assertNotIn("## External meeting prep", shared)
+        self.assertNotIn("Jo Bloggs", shared)
+        self.assertNotIn("Acme - payments", shared)
+        section = full[full.index("## External meeting prep"):full.index("## PRs needing you")]
+        self.assertEqual(full.replace(section, ""), shared)
+
+    def test_numbering_is_identical(self):
+        brief, _ = render_brief.number_items(load())
+        shared = render_brief.to_markdown(brief, shared=True)
+        self.assertIn("1. Standalone urgent", shared)
+        self.assertIn("9. Link to methodology PDFs", shared)
+
+    def test_cli_writes_shared_md(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            r = subprocess.run([sys.executable, str(SCRIPT), str(FIXTURE), "--md", str(d / "b.md"),
+                                "--shared-md", str(d / "b.shared.md")], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("External meeting prep", (d / "b.md").read_text())
+            self.assertNotIn("External meeting prep", (d / "b.shared.md").read_text())
 
 
 class CountsTest(unittest.TestCase):

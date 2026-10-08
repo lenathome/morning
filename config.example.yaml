@@ -92,3 +92,7 @@ paths:
   # Directory of per-project markdown files with YAML frontmatter.
   # See ~/product-os/projects/_template.md for the schema.
   projects_dir: "~/product-os/projects"
+  # The product-os git repo. Step 6 publishes each day's shared brief (no
+  # external meeting prep) to briefs/<date>.md and briefs/latest.md in it and
+  # pushes to origin/main, so it can be read by others.
+  product_os: "~/product-os"

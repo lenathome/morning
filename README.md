@@ -18,7 +18,7 @@ Running since 2026-05-26. Phase 1 of the product OS (2026-09) moved project cont
 
 ## The page
 
-Step 4 writes the brief as JSON; `scripts/render_brief.py` numbers it and writes the markdown archive, a tabbed HTML page and the tick-off map. Step 6 publishes the page to the artifact URL in `output.artifact_url` and prints only the focus, counters and the link. Ticking off stays in chat, by number.
+Step 4 writes the brief as JSON; `scripts/render_brief.py` numbers it and writes the markdown archive, a tabbed HTML page and the tick-off map. Step 6 publishes the page to the artifact URL in `output.artifact_url` and prints only the focus, counters and the link. Ticking off stays in chat, by number. Every to-do carries a tag (needs-Lena, split or handoff) saying who should own it. Step 6 also runs `scripts/publish_brief.sh`, which commits a shared markdown copy (without the external meeting prep) to `briefs/` in the product-os repo and pushes it to origin/main.
 
 ## session-sweep
 

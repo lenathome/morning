@@ -5,7 +5,7 @@
   "unavailable": [],
   "urgent": [
     {"parent": null, "items": [
-      {"id": "p1", "title": "Standalone urgent", "due": "due today", "categories": ["Operational"], "note": ""}
+      {"id": "p1", "title": "Standalone urgent", "due": "due today", "categories": ["Operational"], "note": "", "tag": {"verdict": "needs-lena", "who": "", "why": "Only Lena can sign this off."}}
     ]},
     {"parent": "Moka launch actions (Lena)", "items": [
       {"id": "p2", "title": "Chase Simon", "due": "overdue since 17 Sep", "categories": ["Operational"], "note": ""}
@@ -17,7 +17,7 @@
     "awaiting": [{"number": 325, "url": "https://github.com/ekko-enviroconomy/ekko-v3-infra/pull/325", "title": "DNS <records>", "repo": "ekko-v3-infra", "note": "1 reviewer, 6 days stale", "poke": true}]
   },
   "actions": {
-    "yours": [{"key": "k1", "text": "Email Jamie", "url": "https://fathom.video/calls/1?timestamp=2", "meeting": "P&E team sync", "date": "25 Sep"}],
+    "yours": [{"key": "k1", "text": "Email Jamie", "url": "https://fathom.video/calls/1?timestamp=2", "meeting": "P&E team sync", "date": "25 Sep", "tag": {"verdict": "handoff", "who": "Kurt", "why": "A plain follow-up email."}}],
     "product": [{"key": "k2", "text": "Schedule officers' call", "url": "https://fathom.video/calls/3?timestamp=4", "meeting": "P&E team sync", "date": "30 Sep"}]
   },
   "todos": {
@@ -28,7 +28,7 @@
     {"repo": "ekko-api", "number": 1300, "url": "https://github.com/ekko-enviroconomy/ekko-api/pull/1300", "title": "fix(funds): <b>round</b> up", "project": "", "merged": "30 Sep", "live": "not deployed yet", "steps": ["Request a quote for 12.34 EUR on dev"], "inferred": true}
   ],
   "ideas": {
-    "strategic": [{"parent": null, "items": [{"id": "p4", "title": "Travel calculator", "due": "", "categories": ["Strategic"], "note": ""}]}],
+    "strategic": [{"parent": null, "items": [{"id": "p4", "title": "Travel calculator", "due": "", "categories": ["Strategic"], "note": "", "tag": {"verdict": "split", "who": "Maria", "why": "Maria mocks it up, Lena decides."}}]}],
     "other": [{"parent": "Public documentation", "items": [{"id": "p5", "title": "Link to methodology PDFs", "due": "", "categories": ["Operational"], "note": ""}]}]
   },
   "meetings": [{"time": "16:30", "title": "Partner call", "company": "Acme - payments", "participants": [{"name": "Jo Bloggs", "role": "likely Head of Product"}], "notes": []}],
