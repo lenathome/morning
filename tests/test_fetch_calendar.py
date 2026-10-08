@@ -37,5 +37,46 @@ class MarkExternalTest(unittest.TestCase):
         self.assertEqual(fetch_calendar.parse_contacts(""), [])
 
 
+class MarkPersonalTest(unittest.TestCase):
+    RULES = [{"title": "Catch up", "with": "yaw.poku@natwest.com"}]
+
+    def personal(self, title, *emails, rules=None):
+        e = ev(*emails)
+        e["title"] = title
+        events = [e]
+        fetch_calendar.mark_external(events, "@ekko.earth", [])
+        fetch_calendar.mark_personal(events, self.RULES if rules is None else rules)
+        return events[0]
+
+    def test_match_is_personal_even_with_an_extra_external_guest(self):
+        e = self.personal("Catch up", "yaw.poku@natwest.com", "someone@visualsoft.co.uk")
+        self.assertTrue(e["is_personal"])
+        self.assertFalse(e["is_external"])
+
+    def test_title_match_ignores_case_and_extra_words(self):
+        self.assertTrue(self.personal("NatWest catch up (bi-weekly)", "Yaw.Poku@NatWest.com")["is_personal"])
+
+    def test_same_title_with_someone_else_stays_external(self):
+        e = self.personal("Catch up", "someone@visualsoft.co.uk")
+        self.assertFalse(e["is_personal"])
+        self.assertTrue(e["is_external"])
+
+    def test_same_attendee_other_title_stays_external(self):
+        self.assertTrue(self.personal("Pricing call", "yaw.poku@natwest.com")["is_external"])
+
+    def test_title_only_rule_and_no_rules(self):
+        self.assertTrue(self.personal("Dentist", "x@y.com", rules=[{"title": "dentist"}])["is_personal"])
+        e = self.personal("Catch up", "yaw.poku@natwest.com", rules=[])
+        self.assertFalse(e["is_personal"])
+        self.assertTrue(e["is_external"])
+
+    def test_parse_personal_arg(self):
+        self.assertEqual(fetch_calendar.parse_personal(""), [])
+        self.assertEqual(fetch_calendar.parse_personal('[{"title": "Catch up"}]'), [{"title": "Catch up"}])
+        for bad in ("not json", "{}", "[{}]", '["Catch up"]'):
+            with self.assertRaises(ValueError):
+                fetch_calendar.parse_personal(bad)
+
+
 if __name__ == "__main__":
     unittest.main()

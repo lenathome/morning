@@ -41,6 +41,15 @@ calendar:
   # meeting with only these people plus ekko colleagues is not external, so it
   # gets no company research and no prep block.
   internal_contacts: []
+  # Recurring events that are personal, never external meeting prep, whatever
+  # else is invited. An event matches when its title contains `title`
+  # (case-insensitive) and `with` is among its attendees; give either or both.
+  # Keep `title` specific: "Catch up" alone would also match real client calls
+  # unless `with` pins it to one person.
+  personal_events:
+    # NatWest bi-weekly: a catch-up with an old colleague.
+    - title: "Catch up"
+      with: "yaw.poku@natwest.com"
 
 github:
   # Repos to scan for "awaiting your input" (review requests, mentions).
