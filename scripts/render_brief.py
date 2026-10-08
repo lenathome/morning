@@ -49,11 +49,37 @@ def check_tag(item: dict, label: str) -> None:
         raise ValueError(f"{label} has a '{verdict}' tag with no 'who'")
 
 
+def check_goals(goals) -> None:
+    """Validate the optional top-level `goals` object (the output of parse_goals.py)."""
+    if not isinstance(goals, dict):
+        raise ValueError("'goals' is not an object")
+    for k in ("quarter", "status", "status_note"):
+        if not isinstance(goals.get(k, ""), str):
+            raise ValueError(f"goals '{k}' is not a string")
+    if not goals.get("quarter", "").strip():
+        raise ValueError("goals is missing 'quarter'")
+    for k in ("goals", "not_doing"):
+        if not isinstance(goals.get(k, []), list):
+            raise ValueError(f"goals '{k}' is not a list")
+    for g in goals.get("goals", []):
+        if not isinstance(g, dict) or not isinstance(g.get("title"), str) or not g["title"].strip():
+            raise ValueError("a goal has no 'title'")
+        if not isinstance(g.get("why", ""), str):
+            raise ValueError(f"goal '{g['title']}' has a 'why' that is not a string")
+        done = g.get("done_when", [])
+        if not isinstance(done, list) or not all(isinstance(x, str) for x in done):
+            raise ValueError(f"goal '{g['title']}' needs 'done_when' as a list of strings")
+    if not all(isinstance(x, str) for x in goals.get("not_doing", [])):
+        raise ValueError("goals 'not_doing' needs a list of strings")
+
+
 def number_items(raw: dict) -> tuple[dict, dict]:
     """Validate, fill defaults and add a running `n` to every actionable item."""
     for k in ("date", "weekday_label", "focus"):
         if not str(raw.get(k, "")).strip():
             raise ValueError(f"brief is missing '{k}'")
+    if raw.get("goals") is not None:
+        check_goals(raw["goals"])
     brief = copy.deepcopy(raw)
     brief.setdefault("unavailable", [])
     brief.setdefault("urgent", [])
@@ -201,10 +227,31 @@ def _count(groups: list) -> int:
     return sum(len(g.get("items", [])) for g in groups)
 
 
+def _goals_md(goals: dict | None) -> list[str]:
+    """The goals strip. Bullets, not a numbered list, so it never clashes with the running item numbers."""
+    if not goals or not goals.get("goals"):
+        return []
+    L = [f"## {goals['quarter']} goals", ""]
+    if goals.get("status", "") != "agreed":
+        note = goals.get("status_note", "").strip()
+        L += [f"_Draft: {note}_" if note else "_Draft_", ""]
+    for g in goals["goals"]:
+        L += [f"- **{g['title']}**"]
+        if g.get("why", "").strip():
+            L += [f"  - Why: {g['why']}"]
+        if g.get("done_when"):
+            L += ["  - Done when:"] + [f"    - {x}" for x in g["done_when"]]
+    L += [""]
+    if goals.get("not_doing"):
+        L += ["Not doing: " + "; ".join(x.rstrip(".") for x in goals["not_doing"]), ""]
+    return L
+
+
 def to_markdown(brief: dict, shared: bool = False) -> str:
     """Markdown archive. `shared` drops External meeting prep (research on named external people)."""
     L: list[str] = [f"# Morning brief - {brief['weekday_label']}", "",
                     f"> **Today's focus:** {brief['focus']}", ""]
+    L += _goals_md(brief.get("goals"))
     for u in brief["unavailable"]:
         L += [f"_{u}_", ""]
 

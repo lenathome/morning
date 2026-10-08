@@ -450,5 +450,86 @@ class CliTest(unittest.TestCase):
             self.assertIn("weekday_label", r.stderr)
 
 
+GOALS = {
+    "quarter": "Q4 2026", "status": "draft", "status_note": "Waiting on feedback",
+    "goals": [
+        {"title": "Harden the API", "why": "Partners build on it.", "done_when": ["Header is live.", "Re-quote ships."]},
+        {"title": "Explore Shopify", "why": "", "done_when": []},
+    ],
+    "not_doing": ["The carbon update", "The Verra deal"],
+}
+
+
+def with_goals(goals):
+    b = load()
+    b["goals"] = goals
+    return b
+
+
+class GoalsTest(unittest.TestCase):
+    def test_missing_goals_renders_as_before(self):
+        brief, _ = render_brief.number_items(load())
+        self.assertNotIn("goals", render_brief.to_markdown(brief))
+        self.assertNotIn('"goals"', render_brief.to_html(brief))
+
+    def test_goals_do_not_change_numbering_or_counts(self):
+        plain, plain_map = render_brief.number_items(load())
+        goaled, goaled_map = render_brief.number_items(with_goals(GOALS))
+        self.assertEqual(plain_map, goaled_map)
+        self.assertEqual(render_brief.counts(plain), render_brief.counts(goaled))
+
+    def test_markdown_section_sits_right_after_the_focus_line(self):
+        brief, _ = render_brief.number_items(with_goals(GOALS))
+        for shared in (False, True):
+            md = render_brief.to_markdown(brief, shared=shared)
+            focus_end = md.index("\n\n", md.index("> **Today's focus:**")) + 2
+            self.assertTrue(md[focus_end:].startswith("## Q4 2026 goals\n\n_Draft: Waiting on feedback_\n\n"))
+            self.assertIn("- **Harden the API**\n  - Why: Partners build on it.\n"
+                          "  - Done when:\n    - Header is live.\n    - Re-quote ships.\n", md)
+            self.assertIn("- **Explore Shopify**\n\n", md)
+            self.assertIn("Not doing: The carbon update; The Verra deal\n", md)
+
+    def test_agreed_goals_have_no_draft_line(self):
+        brief, _ = render_brief.number_items(with_goals({**GOALS, "status": "agreed"}))
+        self.assertNotIn("Draft", render_brief.to_markdown(brief))
+
+    def test_goal_lines_are_never_numbered(self):
+        brief, _ = render_brief.number_items(with_goals(GOALS))
+        md = render_brief.to_markdown(brief)
+        section = md[md.index("## Q4 2026 goals"):md.index("## To do")]
+        self.assertNotRegex(section, r"(?m)^\s*\d+\. ")
+
+    def test_html_embeds_goals_and_template_builds_them_without_innerhtml(self):
+        brief, _ = render_brief.number_items(with_goals(GOALS))
+        self.assertIn('"quarter": "Q4 2026"', render_brief.to_html(brief))
+        template = (ROOT / "scripts" / "brief_template.html").read_text()
+        self.assertIn("goalsBlock(brief.goals)", template)
+        self.assertNotIn("innerHTML", template)
+
+    def test_bad_shapes_name_the_problem(self):
+        cases = [
+            ("not an object", ["x"], "'goals' is not an object"),
+            ("no quarter", {**GOALS, "quarter": ""}, "quarter"),
+            ("goals not a list", {**GOALS, "goals": "x"}, "'goals' is not a list"),
+            ("empty title", {**GOALS, "goals": [{"title": " "}]}, "no 'title'"),
+            ("bad done_when", {**GOALS, "goals": [{"title": "A", "done_when": "x"}]}, "done_when"),
+            ("bad not_doing", {**GOALS, "not_doing": [1]}, "not_doing"),
+        ]
+        for name, goals, needle in cases:
+            with self.subTest(name):
+                with self.assertRaises(ValueError) as cm:
+                    render_brief.number_items(with_goals(goals))
+                self.assertIn(needle, str(cm.exception))
+
+    def test_cli_exits_1_on_bad_goals(self):
+        with tempfile.TemporaryDirectory() as d:
+            bad = Path(d) / "b.json"
+            bad.write_text(json.dumps(with_goals({**GOALS, "goals": [{"title": ""}]})))
+            r = subprocess.run([sys.executable, str(SCRIPT), str(bad), "--md", str(Path(d) / "x.md")],
+                               capture_output=True, text=True)
+            self.assertEqual(r.returncode, 1)
+            self.assertIn("title", r.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

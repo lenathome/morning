@@ -187,6 +187,13 @@ td.nextcol { min-width: 160px; }
 tr:last-child td { border-bottom: 0; }
 .empty { color: var(--muted); padding: 24px 0; }
 
+/* goals strip: context under the header, not numbered. Rows reuse the project row styles. */
+.goals h2 { flex-wrap: wrap; }
+.goals .pill.draft { background: var(--warn-soft); color: var(--warn); text-transform: none; letter-spacing: 0; }
+.goals .gnote { font-size: 12.5px; color: var(--muted); }
+.goals .detail p.glabel { font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.goals .notdoing { font-size: 12.5px; color: var(--muted); }
+
 @media (prefers-reduced-motion: no-preference) {
   .chip, .filter { transition: border-color 0.12s, background 0.12s; }
 }
@@ -411,6 +418,33 @@ tr:last-child td { border-bottom: 0; }
     return card;
   }
 
+  function goalRow(g) {
+    var detail = [];
+    if (g.why) detail.push(el("p", {}, [span("muted", "Why: "), g.why]));
+    if ((g.done_when || []).length) {
+      detail.push(el("p", { "class": "glabel", text: "Done when" }));
+      detail.push(el("ul", {}, g.done_when.map(function (x) { return el("li", { text: x }); })));
+    }
+    if (!detail.length) detail.push(el("p", { "class": "muted", text: "No more detail." }));
+    return el("details", { "class": "prow" }, [
+      el("summary", {}, [
+        el("div", { "class": "psum" }, [span("pname", g.title)]),
+        el("span", { "class": "chev", "aria-hidden": "true" })
+      ]),
+      el("div", { "class": "detail" }, detail)
+    ]);
+  }
+  function goalsBlock(goals) {
+    if (!goals || !(goals.goals || []).length) return null;
+    var draft = goals.status !== "agreed";
+    return el("section", { "class": "group goals", "aria-label": "Goals" }, [
+      el("h2", {}, [(goals.quarter || "") + " goals", draft ? span("pill draft", "Draft") : null]),
+      draft && goals.status_note ? el("div", { "class": "gnote", text: goals.status_note }) : null,
+      el("div", { "class": "panel prows" }, goals.goals.map(goalRow)),
+      (goals.not_doing || []).length ? el("div", { "class": "notdoing", text: "Not doing: " + goals.not_doing.map(function (x) { return x.replace(/\.$/, ""); }).join("; ") }) : null
+    ]);
+  }
+
   /* ---------- tab content ---------- */
   function todoTab() {
     var out = [];
@@ -523,6 +557,9 @@ tr:last-child td { border-bottom: 0; }
     main.appendChild(el("div", { "class": "banner", role: "status" },
       brief.unavailable.map(function (u) { return el("div", { text: u }); })));
   }
+
+  var goalsNode = goalsBlock(brief.goals);
+  if (goalsNode) main.appendChild(goalsNode);
 
   /* ---------- pills: one per tab, and the only tab bar ---------- */
   /* Each pill carries its tab's label and count; To do also shows the overdue figure. */
