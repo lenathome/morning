@@ -247,10 +247,12 @@ class HtmlTest(unittest.TestCase):
                                ("ideas", "Ideas bank"), ("projects", "Projects")])
         self.assertNotIn('tab: "today"', html)
 
-    def test_one_pill_per_tab(self):
+    def test_pills_are_the_only_tab_bar(self):
         html = (ROOT / "scripts" / "brief_template.html").read_text()
-        self.assertIn('el("div", { "class": "chips" }, TABS.map(', html)
-        self.assertIn("chipButtons.projects.hidden = wide;", html)
+        self.assertIn('el("div", { "class": "chips", role: "tablist"', html)
+        self.assertIn('el("button", { "class": "chip", role: "tab"', html)
+        self.assertNotIn('"class": "tab",', html)
+        self.assertNotIn(".tabs {", html)
         for old in ('label: "Urgent"', 'label: "PRs needing you"', 'label: "Your actions"', 'label: "Meetings"'):
             self.assertNotIn(old, html)
 

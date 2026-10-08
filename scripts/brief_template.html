@@ -6,8 +6,8 @@
 <title>Morning brief</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: one narrow reading column. Header with focus and counter chips, a sticky
-   tab bar, then dense rows with a fixed-width number column so numbers can be read back.
+/* Layout: one narrow reading column. Header with the date, then a sticky row of pills
+   that doubles as the tab bar, then dense rows with a fixed-width number column so numbers can be read back.
    From 1100px wide it becomes two columns: brief on the left, Projects panel pinned on the right. */
 :root {
   --bg: #f4f6f4;
@@ -91,31 +91,24 @@ button { font: inherit; color: inherit; }
 header { display: flex; flex-direction: column; gap: 10px; }
 .date { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 .focus { font-family: var(--font-display); font-weight: 500; font-size: 26px; line-height: 1.2; margin: 0; text-wrap: balance; }
-.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.banner { background: var(--surface-2); color: var(--muted); border-radius: 8px; padding: 8px 12px; font-size: 13px; display: flex; flex-direction: column; gap: 2px; }
+
+/* pills: the only navigation. Each pill is a tab; the row sticks to the top while scrolling. */
+.chips {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 2;
+  background: var(--bg); border-bottom: 1px solid var(--line);
+  display: flex; flex-wrap: wrap; gap: 8px;
+  margin-inline: -16px; padding: 8px 16px 10px;
+}
 .chip {
   display: inline-flex; align-items: baseline; gap: 6px;
   background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
-  padding: 6px 12px; cursor: pointer; font-size: 13px;
+  padding: 6px 12px; cursor: pointer; font-size: 13px; white-space: nowrap;
 }
 .chip:hover { border-color: var(--accent); }
+.chip[aria-selected="true"] { background: var(--accent-soft); border-color: var(--accent); font-weight: 600; }
 .chip b { font-family: var(--font-mono); font-weight: 500; font-variant-numeric: tabular-nums; }
 .chip .overdue { color: var(--bad); font-weight: 600; }
-.banner { background: var(--surface-2); color: var(--muted); border-radius: 8px; padding: 8px 12px; font-size: 13px; display: flex; flex-direction: column; gap: 2px; }
-
-/* tabs */
-.tabs {
-  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 2;
-  background: var(--bg); border-bottom: 1px solid var(--line);
-  display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none;
-  margin-inline: -16px; padding-inline: 16px;
-}
-.tabs::-webkit-scrollbar { display: none; }
-.tab {
-  background: none; border: 0; border-bottom: 2px solid transparent;
-  padding: 10px 12px; cursor: pointer; white-space: nowrap; color: var(--muted); font-weight: 500;
-}
-.tab[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
-.tab .count { font-family: var(--font-mono); font-size: 12px; margin-left: 4px; font-variant-numeric: tabular-nums; }
 
 /* sections and rows */
 section.group { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
@@ -191,7 +184,7 @@ tr:last-child td { border-bottom: 0; }
 .empty { color: var(--muted); padding: 24px 0; }
 
 @media (prefers-reduced-motion: no-preference) {
-  .chip, .filter, .tab { transition: border-color 0.12s, background 0.12s; }
+  .chip, .filter { transition: border-color 0.12s, background 0.12s; }
 }
 @media (max-width: 420px) {
   .focus { font-size: 22px; }
@@ -206,7 +199,7 @@ tr:last-child td { border-bottom: 0; }
   }
   .side .prows { border: 0; background: none; border-radius: 0; }
   .side .tabpanel { gap: 14px; }
-  .tabs { margin-inline: 0; padding-inline: 0; }
+  .chips { margin-inline: 0; padding-inline: 0; }
 }
 </style>
 </head>
@@ -497,19 +490,9 @@ tr:last-child td { border-bottom: 0; }
   function projectsNodes() { return [projectsNode]; }
 
   /* ---------- header ---------- */
-  /* One pill per tab, same label, same count and order as the tabs. To do also shows the overdue figure. */
-  var chipButtons = {};
   var header = el("header", {}, [
     el("div", { "class": "date", text: brief.weekday_label || brief.date }),
-    el("h1", { "class": "focus", text: "Morning brief" }),
-    el("div", { "class": "chips" }, TABS.map(function (t) {
-      var b = el("button", { "class": "chip", type: "button", onclick: function () { select(t.id, true); } }, [
-        span("", t.label), el("b", { text: String(t.count) }),
-        t.id === "todo" && overdue > 0 ? span("overdue", overdue + " overdue") : null
-      ]);
-      chipButtons[t.id] = b;
-      return b;
-    }))
+    el("h1", { "class": "focus", text: "Morning brief" })
   ]);
   var main = el("div", { "class": "main" });
   var side = el("aside", { "class": "side", "aria-label": "Projects", hidden: "" });
@@ -521,15 +504,18 @@ tr:last-child td { border-bottom: 0; }
       brief.unavailable.map(function (u) { return el("div", { text: u }); })));
   }
 
-  /* ---------- tabs ---------- */
-  var tablist = el("div", { "class": "tabs", role: "tablist", "aria-label": "Brief sections" });
+  /* ---------- pills: one per tab, and the only tab bar ---------- */
+  /* Each pill carries its tab's label and count; To do also shows the overdue figure. */
+  var tablist = el("div", { "class": "chips", role: "tablist", "aria-label": "Brief sections" });
   var panels = {};
   var tabButtons = {};
   TABS.forEach(function (t) {
-    var b = el("button", { "class": "tab", role: "tab", type: "button", id: "tab-" + t.id,
+    var b = el("button", { "class": "chip", role: "tab", type: "button", id: "tab-" + t.id,
       "aria-controls": "panel-" + t.id, "aria-selected": "false",
-      onclick: function () { select(t.id, false); } },
-      [t.label, t.count ? span("count", String(t.count)) : null]);
+      onclick: function () { select(t.id, true); } }, [
+      span("", t.label), el("b", { text: String(t.count) }),
+      t.id === "todo" && overdue > 0 ? span("overdue", overdue + " overdue") : null
+    ]);
     tabButtons[t.id] = b;
     tablist.appendChild(b);
     var content = t.build();
@@ -556,7 +542,7 @@ tr:last-child td { border-bottom: 0; }
       tabButtons[t.id].tabIndex = on ? 0 : -1;
     });
     try { localStorage.setItem("morning-brief-tab", id); } catch (e) { /* storage unavailable */ }
-    if (scrollUp) tablist.scrollIntoView({ block: "start" });
+    if (scrollUp && tablist.getBoundingClientRect().top < 0) tablist.scrollIntoView({ block: "start" });
   }
   tablist.addEventListener("keydown", function (e) {
     var ids = visibleTabIds();
@@ -575,7 +561,6 @@ tr:last-child td { border-bottom: 0; }
     (wide ? side : panels.projects).appendChild(projectsNode);
     side.hidden = !wide;
     tabButtons.projects.hidden = wide;
-    chipButtons.projects.hidden = wide;
     if (wide && current === "projects") select("todo", false);
   }
   if (wideQuery.addEventListener) wideQuery.addEventListener("change", place);
