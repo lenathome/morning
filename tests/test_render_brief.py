@@ -237,7 +237,7 @@ class HtmlTest(unittest.TestCase):
         self.assertNotIn("<script>alert(1)", html)
         self.assertIn("\\u003cscript>alert(1)", html)
         self.assertIn('id: "testing", label: "Testing"', html)
-        self.assertIn('label: "To test"', html)
+        self.assertNotIn('label: "To test"', html)
         self.assertIn("Nothing merged recently that needs a manual test.", html)
 
     def test_tabs_are_todo_prs_testing_ideas_projects(self):
@@ -246,6 +246,13 @@ class HtmlTest(unittest.TestCase):
         self.assertEqual(ids, [("todo", "To do"), ("prs", "PRs"), ("testing", "Testing"),
                                ("ideas", "Ideas bank"), ("projects", "Projects")])
         self.assertNotIn('tab: "today"', html)
+
+    def test_one_pill_per_tab(self):
+        html = (ROOT / "scripts" / "brief_template.html").read_text()
+        self.assertIn('el("div", { "class": "chips" }, TABS.map(', html)
+        self.assertIn("chipButtons.projects.hidden = wide;", html)
+        for old in ('label: "Urgent"', 'label: "PRs needing you"', 'label: "Your actions"', 'label: "Meetings"'):
+            self.assertNotIn(old, html)
 
 
 class HtmlLayoutTest(unittest.TestCase):

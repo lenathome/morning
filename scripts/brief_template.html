@@ -497,21 +497,18 @@ tr:last-child td { border-bottom: 0; }
   function projectsNodes() { return [projectsNode]; }
 
   /* ---------- header ---------- */
-  var chips = [
-    { label: "Urgent", n: urgentItems.length, tab: "todo", extra: overdue > 0 ? overdue + " overdue" : "" },
-    { label: "PRs needing you", n: prTotal, tab: "prs" },
-    { label: "Your actions", n: yours.length, tab: "todo" },
-    { label: "Meetings", n: meetings.length, tab: "todo" },
-    { label: "To test", n: testing.length, tab: "testing" }
-  ];
+  /* One pill per tab, same label, same count and order as the tabs. To do also shows the overdue figure. */
+  var chipButtons = {};
   var header = el("header", {}, [
     el("div", { "class": "date", text: brief.weekday_label || brief.date }),
     el("h1", { "class": "focus", text: "Morning brief" }),
-    el("div", { "class": "chips" }, chips.map(function (c) {
-      return el("button", { "class": "chip", type: "button", onclick: function () { select(c.tab, true); } }, [
-        span("", c.label), el("b", { text: String(c.n) }),
-        c.extra ? span("overdue", c.extra) : null
+    el("div", { "class": "chips" }, TABS.map(function (t) {
+      var b = el("button", { "class": "chip", type: "button", onclick: function () { select(t.id, true); } }, [
+        span("", t.label), el("b", { text: String(t.count) }),
+        t.id === "todo" && overdue > 0 ? span("overdue", overdue + " overdue") : null
       ]);
+      chipButtons[t.id] = b;
+      return b;
     }))
   ]);
   var main = el("div", { "class": "main" });
@@ -578,6 +575,7 @@ tr:last-child td { border-bottom: 0; }
     (wide ? side : panels.projects).appendChild(projectsNode);
     side.hidden = !wide;
     tabButtons.projects.hidden = wide;
+    chipButtons.projects.hidden = wide;
     if (wide && current === "projects") select("todo", false);
   }
   if (wideQuery.addEventListener) wideQuery.addEventListener("change", place);
