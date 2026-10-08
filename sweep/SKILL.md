@@ -95,6 +95,7 @@ Factual record, not prose. Not Lena's voice: do not read the voice profile. 30 s
    - A changed next step: `frontmatter`, field `next_milestone`, with the new value.
    - A new open question: `append` to section `Open questions`.
 4. Before proposing, read the project file (`~/product-os/projects/<slug>.md`) and drop anything it already says. Sessions often edit project files directly.
+   Then run `python3 ~/github/morning/scripts/proposals.py list` and drop anything that says the same as a proposal already queued, or as one you have already drafted for another session in this run. The same fact under a different section (a decision and an open question) or in different words is still the same thing: queue it once, under the best-fitting section.
 5. At most 3 proposals per session per project.
 6. Item shape:
    - `slug`, `kind` (`append` or `frontmatter`), `source`, `session_title`, `session_date`.
@@ -108,7 +109,7 @@ Factual record, not prose. Not Lena's voice: do not read the voice profile. 30 s
    python3 ~/github/morning/scripts/proposals.py add
    ```
 
-   stdin is a JSON array. It prints `{"added": [...], "skipped": [...]}`. Skipped items are duplicates or invalid. Keep both counts for the output. If there is nothing to propose, skip the call.
+   stdin is a JSON array. It prints `{"added": [...], "skipped": [...]}`. Skipped items are duplicates or invalid: the queue also drops items that repeat a pending proposal or the project file's current text, as a backstop for what the checks above miss. Keep both counts for the output. If there is nothing to propose, skip the call.
 
 ## Step 6: Record the run
 

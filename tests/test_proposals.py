@@ -122,6 +122,36 @@ class ProposalsTests(unittest.TestCase):
         self.run_cli("reject", first[0])
         self.assertEqual(self.add(item())["added"], [])
 
+    def test_skips_same_thing_worded_differently_across_sections(self):
+        self.add(item(text="2026-09-29: Round-up deferred to w/c 8 Sep"))
+        reworded = self.add(
+            item(section="Open questions", text="2026-09-30: round-up deferred to w/c 8 Sep!"),
+            item(text="Round-up deferred to w/c 8 Sep, tiny-gap rule contested"),
+        )
+        self.assertEqual(reworded["added"], [])
+        self.assertTrue(all(s["reason"].startswith("duplicate: same as pending") for s in reworded["skipped"]))
+
+    def test_skips_text_the_project_file_already_says(self):
+        result = self.add(item(text="2026-09-29: Second decision"), item(section="Open questions", text="Tiny-gap rule"))
+        self.assertEqual(result["added"], [])
+        self.assertEqual(
+            [s["reason"] for s in result["skipped"]],
+            ["duplicate: already in ppp.md", "duplicate: already in ppp.md"],
+        )
+
+    def test_skips_frontmatter_value_already_set_or_pending(self):
+        fm = dict(kind="frontmatter", field="next_milestone")
+        self.assertEqual(self.add(item(value='"Round-up decision"', **fm))["added"], [])
+        first = self.add(item(value="ship it", **fm))["added"]
+        self.assertEqual(len(first), 1)
+        self.assertEqual(self.add(item(value="'Ship it'", **fm))["added"], [])
+        self.assertEqual(len(self.add(item(value="something else", **fm))["added"]), 1)
+
+    def test_similar_but_different_text_is_kept(self):
+        self.add(item(text="Round-up deferred to w/c 8 Sep"))
+        other = self.add(item(text="Round-up now ships with presets"), item(slug="empty", section="Open questions", text="Round-up deferred to w/c 8 Sep"))
+        self.assertEqual(len(other["added"]), 2)
+
     def test_accept_append_middle_section_leaves_others_untouched(self):
         pid = self.add(item())["added"][0]
         result, _ = self.run_cli("accept", pid)

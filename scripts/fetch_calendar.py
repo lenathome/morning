@@ -2,7 +2,7 @@
 """fetch_calendar.py — emit today's calendar events as JSON.
 
 Usage:
-    python3 fetch_calendar.py <ekko_email_domain> [<primary_calendar>] [<internal_contacts comma-joined>]
+    python3 fetch_calendar.py <ekko_email_domain> [<primary_calendar>] [<internal_contacts comma-joined>] [<personal_events JSON>]
     e.g. python3 fetch_calendar.py @ekko.earth lena.thome@ekko.earth
 
 If <primary_calendar> is provided, the gcalcli query is restricted to that
@@ -11,6 +11,11 @@ team OOO calendars, etc.) are filtered out. Recommended.
 
 Attendees in <internal_contacts> are personal contacts and never make a meeting external.
 
+<personal_events> is a JSON array of {"title": str, "with": str}. An event whose
+title contains `title` (case-insensitive) and that has `with` among its attendees
+(either key may be left out, not both) is personal: is_personal is true and
+is_external is false, whoever else is invited.
+
 Output (stdout): JSON array of events. Each event has:
     {
         "time_start": "YYYY-MM-DD HH:MM",
@@ -18,6 +23,7 @@ Output (stdout): JSON array of events. Each event has:
         "title": str,
         "attendees": [{"email": str, "name": str}],
         "is_external": bool,
+        "is_personal": bool,
         "conference_link": str,
     }
 
@@ -169,6 +175,31 @@ def mark_external(events: list[dict], ekko_domain: str, internal_contacts: list[
         )
 
 
+def parse_personal(arg: str) -> list[dict]:
+    """JSON array of {"title", "with"} rules -> list; blank -> []. Raises ValueError when malformed."""
+    if not arg.strip():
+        return []
+    rules = json.loads(arg)
+    if not isinstance(rules, list) or not all(
+        isinstance(r, dict) and (r.get("title") or r.get("with")) for r in rules
+    ):
+        raise ValueError("personal_events must be a JSON array of objects with a title or with")
+    return rules
+
+
+def mark_personal(events: list[dict], personal: list[dict]) -> None:
+    """Set is_personal for events matching a rule, and clear is_external on them."""
+    for e in events:
+        emails = {a["email"].lower() for a in e["attendees"]}
+        e["is_personal"] = any(
+            (not r.get("title") or r["title"].lower() in e["title"].lower())
+            and (not r.get("with") or r["with"].strip().lower() in emails)
+            for r in personal
+        )
+        if e["is_personal"]:
+            e["is_external"] = False
+
+
 def main() -> None:
     if len(sys.argv) < 2:
         print("usage: fetch_calendar.py <ekko_email_domain> [<primary_calendar>]", file=sys.stderr)
@@ -176,6 +207,11 @@ def main() -> None:
     ekko_domain = sys.argv[1]
     primary_calendar = sys.argv[2] if len(sys.argv) > 2 else None
     internal_contacts = parse_contacts(sys.argv[3]) if len(sys.argv) > 3 else []
+    try:
+        personal_events = parse_personal(sys.argv[4]) if len(sys.argv) > 4 else []
+    except ValueError as e:  # json.JSONDecodeError is a ValueError
+        print(f"bad personal_events argument: {e}", file=sys.stderr)
+        sys.exit(2)
 
     if shutil.which("gcalcli") is None:
         print("gcalcli not found in PATH", file=sys.stderr)
@@ -204,6 +240,7 @@ def main() -> None:
     events = parse_agenda(result.stdout, today_d.year)
 
     mark_external(events, ekko_domain, internal_contacts)
+    mark_personal(events, personal_events)
     print(json.dumps(events, indent=2))
 
 

@@ -77,9 +77,9 @@ Run every Bash command with absolute paths, one command per call. Never start a 
 
 Make these tool calls in a SINGLE message (parallel tool use):
 
-1. **To-dos** — Notion MCP. Use `notion-search` with `data_source_url: collection://<todo_database_id from config's data source>` to list pages in the Tasks DB. Increase `page_size` to 25 (max) and `max_highlight_length: 0`. Then `notion-fetch` each page to read properties (Name, Due, Status, Category, Type, Client, Area, Parent, Subtasks). Filter out `Status: Done` and filter out `Type: Idea`. An Idea is not a to-do: parked ideas live in `~/product-os/backlog.md` and are reviewed at the cycle boundary, so surfacing them daily buries the actionable rows. Rows with no `Type` set are kept, because an unset Type is missing data rather than a decision. Keep `Parent` and `Subtasks` fields — they drive the parent/subtask rendering in the brief. If MCP unavailable, mark to-dos section as "Notion unavailable".
+1. **To-dos** — Notion MCP. Use `notion-search` with `data_source_url: collection://<todo_database_id from config's data source>` to list pages in the Tasks DB. Increase `page_size` to 25 (max) and `max_highlight_length: 0`. Then `notion-fetch` each page to read properties (Name, Due, Status, Category, Type, Client, Area, Parent, Subtasks). Filter out `Status: Done` and filter out `Type: Idea`. An Idea is not a to-do: parked ideas live in `~/product-os/backlog.md` and are reviewed at the cycle boundary, so surfacing them daily buries the actionable rows. Rows with no `Type` set are kept, because an unset Type is missing data rather than a decision. Keep `Parent` and `Subtasks` fields — they drive the parent/subtask rendering in the brief. Always read Status from the live page, never from an earlier brief file. If MCP unavailable, mark to-dos section as "Notion unavailable".
 
-2. **Calendar** — Bash: `python3 ~/github/morning/scripts/fetch_calendar.py "<ekko_email_domain>" "<primary_calendar>" "<calendar.internal_contacts comma-joined, or empty string>"` (values from config; second arg restricts gcalcli to your own calendar so shared calendars don't clutter the brief; third arg lists personal contacts who do not make a meeting external)
+2. **Calendar** — Bash: `python3 ~/github/morning/scripts/fetch_calendar.py "<ekko_email_domain>" "<primary_calendar>" "<calendar.internal_contacts comma-joined, or empty string>" '<calendar.personal_events as a JSON array, or empty string>'` (values from config; second arg restricts gcalcli to your own calendar so shared calendars don't clutter the brief; third arg lists personal contacts who do not make a meeting external; fourth arg lists recurring personal events, which are never external whoever is invited and come back with `is_personal: true`)
 
 3. **Projects index** — Bash: `python3 ~/github/morning/scripts/parse_projects.py "<paths.projects_dir from config>"`. Returns a JSON array of live projects from `~/product-os/projects/*.md`, each with `slug, name, status, owner, repos, keywords, notion, next_milestone, target_date, last_reviewed, stale, body`. If the command exits non-zero, render the Engineering progress section as "Projects unavailable: <first line of stderr>" and continue.
 
@@ -99,6 +99,20 @@ Make these tool calls in a SINGLE message (parallel tool use):
 9. **Your own open PRs** — Bash: `~/github/morning/scripts/fetch_github.sh authored`. Returns non-draft PRs you authored, enriched with `review_decision`, `reviewers_requested`, `latest_approvals`, `mergeable`. Used by "Yours to chase" in the PRs needing you section.
 
 10. **Recently merged PRs** — Bash: `~/github/morning/scripts/fetch_merged.sh "<repos comma-joined>" 3`, where the repos are the union of every non-done project's `repos` and config `github.ekko_repos`. Returns merged PRs from the last 3 days, each with `repo, number, title, url, body, mergedAt, author, files` and `deploys` (the deploy, release and publish runs on the merge commit, with their jobs). Used by the Testing section. Also read `~/morning/state/acknowledged-tests.json` with the Read tool; if the file is missing, treat it as `[]`.
+
+11. **Acknowledged tasks** — Read tool: `~/morning/state/acknowledged-tasks.json` (Notion page ids ticked off in earlier briefs). If the file is missing, treat it as `[]`.
+
+12. **Recent ai-log** — Bash: `ls -1 ~/ai-log`, then Read the last two files listed (the two most recent days, so a weekend gap does not hide Friday's work). If the directory is missing, skip.
+
+## Step 1a: Drop what is already done
+
+Run this over every Notion task from Step 1.1 and every Fathom action from Step 3a, before anything is bucketed into To do, Your actions, Product actions or the Ideas bank. Drop an item, silently, when any of these says it is done:
+
+1. **Live Notion Status.** `Done` on the page fetched in Step 1.1 (waiting items follow the Waiting rule below). Never carry a task over from an earlier brief's `.json` or `.md`: those files are history, not a source of tasks.
+2. **Earlier tick-offs.** The task's page id is in the acknowledged-tasks list (Step 1.11), or the action's key is in the acknowledged-actions list (Step 1.7). A Fathom action also counts as ticked when its lowercased, whitespace-normalised text equals that of a ticked action in a previous `<briefs_dir>/<date>.json` (look the ticked keys up there): the same action raised again in a later meeting has a new key.
+3. **ai-log.** The two files from Step 1.12 log the item's work as done, shipped, merged or live (match on the task title, a PR number or the topic). An entry that only mentions the item, or lists it as a follow-up, is not enough.
+
+If only check 3 says done and the Notion page is still open, keep the task and set its `note` to `looks done per ai-log <YYYY-MM-DD>, set Notion to Done?`. A Fathom action has no Notion page: drop it on check 3.
 
 
 ## Step 2: Per-project data fetch (parallel)
@@ -333,6 +347,8 @@ Merged PRs Lena can try by hand. Write them into the `testing` key of the brief 
 
 Only render this section when there's at least one external meeting today (events with `is_external: true`). DO NOT render a calendar listing of all events - the user can check her own calendar. The calendar data is still fetched in Step 1 and used in Step 3 (research), but it does NOT get listed in the brief.
 
+Events with `is_personal: true` (the `calendar.personal_events` entries in config, for example the NatWest bi-weekly catch-up) are never external and never get prep, research or a mention here. To mark another recurring event personal, add a `title` and/or `with` (an attendee email) entry to that list in `~/morning/config.yaml`.
+
 Never repeat a numbered line here in full - each already has its own numbered line elsewhere in the brief. If any numbered item relates to this meeting (by company, client or topic), add one line pointing to it by number instead, e.g. "Your open Moka items are 3 to 8 and 29." Omit the line if nothing relates.
 
 For each external meeting today:
@@ -418,7 +434,7 @@ If the brief has any numbered lines (To do, Testing or Ideas bank):
 2. Wait for the user's reply in the same conversation.
 3. Parse the response: split on commas, strip whitespace, drop anything that isn't a positive integer or that exceeds `max_number` from the renderer's counts (also derivable as the largest key in the map).
 4. For each valid number, look it up in `~/morning/state/brief-map-<date>.json` (`numbers[<n>]` gives `{kind: notion, id}`, `{kind: fathom, key}` or `{kind: test, key}`).
-5. For a Notion to-do: update that page's `Status` property to `Done` via the Notion MCP.
+5. For a Notion to-do: update that page's `Status` property to `Done` via the Notion MCP, then run `python3 ~/github/morning/scripts/ack_task.py <id1> <id2> ...` (batch all such ids into one call) so the next brief drops it even if the Notion write fails or is reverted.
 6. For a Fathom action: run `python3 ~/github/morning/scripts/ack_action.py <key1> <key2> ...` (batch all such keys into one call).
 7. For a Testing item (kind `test`): run `python3 ~/github/morning/scripts/ack_test.py <key1> <key2> ...` (batch all such keys into one call).
 8. Confirm to the user: `Marked N item(s) done. They won't appear tomorrow.`

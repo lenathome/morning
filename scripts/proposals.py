@@ -25,6 +25,11 @@ Both files are JSON arrays; a missing file means [].
     session_title, session_date (YYYY-MM-DD)
 Invalid items are reported on stderr and skipped. id = sha1(slug|kind|section-or-
 field|text-or-value)[:12]; ids already pending or already in the log are skipped.
+An item is also skipped when it says the same thing as a pending proposal for the
+same project (any section) or as the project file's current text: same words once
+case, punctuation, a leading "YYYY-MM-DD:" and html comments are ignored, or the
+shorter of two texts (3+ words) sits inside the longer. A frontmatter proposal is
+skipped when the field already holds that value.
 Output: {"added": [ids], "skipped": [{"item_index": i, "reason": "..."}]}
 
 `accept` for an append inserts "- <text> <!-- src: <source> -->" after the last
@@ -90,6 +95,54 @@ def proposal_id(item: dict) -> str:
     body = item["text"] if item["kind"] == "append" else item["value"]
     raw = "|".join([item["slug"], item["kind"], key, str(body)])
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
+
+
+def normalise(text: str) -> str:
+    """Lowercase words only: html comments, a leading date and punctuation dropped."""
+    text = re.sub(r"<!--.*?-->", " ", text, flags=re.S)
+    text = re.sub(r"^\s*(?:[-*]\s+)?\d{4}-\d{2}-\d{2}\s*:?", " ", text)
+    return " ".join(re.findall(r"[a-z0-9]+", text.lower()))
+
+
+def same_thing(a: str, b: str) -> bool:
+    """True when two normalised texts match, or the shorter (3+ words) sits inside the longer."""
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    short, long_ = sorted((a, b), key=len)
+    return len(short.split()) >= 3 and f" {short} " in f" {long_} "
+
+
+def current_value(lines: list[str], field: str) -> str:
+    idx = find_field(lines, field)
+    if idx is None:
+        return ""
+    return lines[idx].split(":", 1)[1].strip().strip("\"'")
+
+
+def redundant_reason(item: dict, pending: list[dict], projects_dir: Path) -> str | None:
+    """Reason to skip a valid item that repeats a pending proposal or the project file, else None."""
+    lines = (projects_dir / f"{item['slug']}.md").read_text(encoding="utf-8").split("\n")
+    if item["kind"] == "frontmatter":
+        if normalise(current_value(lines, item["field"])) == normalise(item["value"]):
+            return f"{item['field']} already set in {item['slug']}.md"
+        mine = normalise(item["value"])
+        for p in pending:
+            if (p["slug"], p["kind"], p.get("field")) == (item["slug"], "frontmatter", item["field"]) \
+                    and normalise(p["value"]) == mine:
+                return f"same as pending {p['id']}"
+        return None
+    mine = normalise(item["text"])
+    for p in pending:
+        if p["slug"] == item["slug"] and p["kind"] == "append" and same_thing(mine, normalise(p["text"])):
+            return f"same as pending {p['id']}"
+    fm = frontmatter_range(lines)
+    body = lines[fm[1] + 1 :] if fm else lines
+    if any(same_thing(mine, normalise(line)) for line in body) \
+            or (len(mine.split()) >= 3 and f" {mine} " in f" {normalise(' '.join(body))} "):
+        return f"already in {item['slug']}.md"
+    return None
 
 
 def frontmatter_range(lines: list[str]) -> tuple[int, int] | None:
@@ -214,6 +267,10 @@ def cmd_add(args, state: Path, log: Path, projects_dir: Path) -> dict:
         pid = proposal_id(item)
         if pid in seen:
             skipped.append({"item_index": i, "reason": f"duplicate of {pid}"})
+            continue
+        reason = redundant_reason(item, pending, projects_dir)
+        if reason:
+            skipped.append({"item_index": i, "reason": f"duplicate: {reason}"})
             continue
         record = {"id": pid, **{k: item[k] for k in STORED_KEYS if k in item}, "created_at": now}
         pending.append(record)
