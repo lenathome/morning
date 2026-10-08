@@ -7,7 +7,7 @@
     {"parent": null, "items": [
       {"id": "p1", "title": "Standalone urgent", "due": "due today", "categories": ["Operational"], "note": ""}
     ]},
-    {"parent": "Moka launch actions (Lena)", "items": [
+    {"parent": "Moka launch actions (you)", "items": [
       {"id": "p2", "title": "Chase Simon", "due": "overdue since 17 Sep", "categories": ["Operational"], "note": ""}
     ]}
   ],

@@ -67,7 +67,7 @@ case "$subcommand" in
 
   reviewer-requested)
     # user-review-requested (not review-requested) so we only surface PRs
-    # where Lena is named individually, not ones where a team she belongs to
+    # where you are named individually, not ones where a team you belong to
     # (e.g. ekko-dev) is the requested reviewer.
     gh search prs "user-review-requested:@me" --state=open \
       --json number,title,url,repository,author,updatedAt --limit 30 \

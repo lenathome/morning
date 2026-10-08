@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """proposals.py - a queue of proposed edits to ~/product-os/projects/*.md.
 
-An unattended job adds proposals; Lena accepts or rejects them later. Accepting
+An unattended job adds proposals; the user accepts or rejects them later. Accepting
 applies the edit to the project file and stamps `last_reviewed:`.
 
 Usage:
