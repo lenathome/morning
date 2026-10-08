@@ -31,7 +31,7 @@ calendar:
   # Primary calendar to read from. Restricts gcalcli to YOUR own events so
   # shared calendars (other people's standups, team OOO calendars, colleagues
   # subscribed for awareness) don't clutter the brief.
-  primary_calendar: "lena.thome@ekko.earth"
+  primary_calendar: "you@ekko.earth"
   # For external meetings: research all named attendees, with a soft cap so
   # large group meetings don't blow up runtime. Meetings rarely exceed 10.
   external_meeting_attendee_cap: 10
@@ -47,9 +47,9 @@ calendar:
   # Keep `title` specific: "Catch up" alone would also match real client calls
   # unless `with` pins it to one person.
   personal_events:
-    # NatWest bi-weekly: a catch-up with an old colleague.
+    # Example: a bi-weekly catch-up with an old colleague.
     - title: "Catch up"
-      with: "yaw.poku@natwest.com"
+      with: "pat.jones@partner.example.com"
 
 github:
   # Repos to scan for "awaiting your input" (review requests, mentions).
@@ -73,7 +73,7 @@ fathom:
   # merely mention these words are not caught.
   team_sync_title_regex: "(?i)^(p\\s*&\\s*e team sync|knowledge shar(e|ing))"
   # Your name as it would appear as an action-item owner in Fathom summaries.
-  user_name: "Lena"
+  user_name: "Your Name"
   # Team action item owners to surface alongside your own. Set this to people
   # whose work you might absorb or need to track (typically a manager, or a
   # tight peer). Other owners are filtered out of the team bucket. Match is

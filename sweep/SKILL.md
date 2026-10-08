@@ -1,11 +1,11 @@
 ---
 name: session-sweep
-description: Runs before the morning brief (or when Lena says "sweep sessions"). Logs every Claude Code session since the last run into the daily digest in ~/ai-log/ and queues proposed project-file updates for the brief to show.
+description: Runs before the morning brief (or when the user says "sweep sessions"). Logs every Claude Code session since the last run into the daily digest in ~/ai-log/ and queues proposed project-file updates for the brief to show.
 ---
 
 # session-sweep - unattended session log and project-update proposals
 
-You are sweeping Lena's Claude Code sessions since the last run. This runs unattended, just before the morning brief. Follow this skill exactly. Nothing you write here is shown as prose to Lena: the digest is a factual record and the proposals are surfaced later by the brief.
+You are sweeping the user's Claude Code sessions since the last run. This runs unattended, just before the morning brief. Follow this skill exactly. Nothing you write here is shown as prose to the user: the digest is a factual record and the proposals are surfaced later by the brief.
 
 ## Unattended rules
 
@@ -73,7 +73,7 @@ Update the time range in the comment only if it is easy to do safely; otherwise 
 
 ### Writing style
 
-Factual record, not prose. Not Lena's voice: do not read the voice profile. 30 seconds to scan.
+Factual record, not prose. Not the user's voice: do not read the voice profile. 30 seconds to scan.
 
 - Terse fragments, verb-first. 3 to 5 bullets under "What was built or changed".
 - Exact figures wherever one exists: PR numbers with full URLs (`https://github.com/...`, never `owner/repo#123`), file counts, test results.

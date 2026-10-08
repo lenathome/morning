@@ -127,7 +127,7 @@ class MarkdownTest(unittest.TestCase):
         self.assertIn("> **Today's focus:** Ship the thing.", self.md)
 
     def test_parent_group_has_blank_lines_around_italic_name(self):
-        self.assertIn("\n*Moka launch actions (Lena):*\n\n2. Chase Simon (overdue since 17 Sep)  [Operational]\n", self.md)
+        self.assertIn("\n*Moka launch actions (you):*\n\n2. Chase Simon (overdue since 17 Sep)  [Operational]\n", self.md)
 
     def test_pr_line_and_poke(self):
         self.assertIn("- [#1291](https://github.com/ekko-enviroconomy/ekko-api/pull/1291) fix(funds): convert unit prices (ekko-api) - stacked on #1290", self.md)

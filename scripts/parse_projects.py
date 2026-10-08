@@ -9,7 +9,7 @@ Each project is a markdown file with YAML frontmatter:
     ---
     name: PPP localisation
     status: active            # active | blocked | waiting | done
-    owner: Lena
+    owner: Sam
     repos: [ekko-api]         # GitHub repo names for PR signal
     keywords: []              # optional PR title keywords
     notion: https://...

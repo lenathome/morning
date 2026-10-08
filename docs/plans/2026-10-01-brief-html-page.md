@@ -11,7 +11,7 @@
 **Decisions taken (1 Oct 2026, Lena):**
 - The chat gets a link, not the full brief. A short header stays inline so the brief still reads at a glance on a phone notification.
 - The page is a claude.ai artifact (private by default), not a local file: one pinned URL, works on her phone too.
-- Calendar: some non-ekko attendees are personal contacts, not external meetings (first case: the NatWest catch-up with an old colleague). Config gets an allowlist.
+- Calendar: some non-ekko attendees are personal contacts, not external meetings (first case: a catch-up with an old colleague). Config gets an allowlist.
 
 **Out of scope (later phase):** tick-off buttons on the page. They need the artifact to hold state and write back to Notion and Fathom. Ticking off stays in chat, by number, as now.
 
@@ -125,23 +125,23 @@ def ev(*emails):
 
 class MarkExternalTest(unittest.TestCase):
     def test_outside_domain_is_external(self):
-        events = [ev("lena.thome@ekko.earth", "liam.quinn@visualsoft.co.uk")]
+        events = [ev("you@ekko.earth", "alex.smith@agency.example.org")]
         fetch_calendar.mark_external(events, "@ekko.earth", [])
         self.assertTrue(events[0]["is_external"])
 
     def test_internal_contact_is_not_external(self):
-        events = [ev("yaw.poku@natwest.com")]
-        fetch_calendar.mark_external(events, "@ekko.earth", ["yaw.poku@natwest.com"])
+        events = [ev("pat.jones@partner.example.com")]
+        fetch_calendar.mark_external(events, "@ekko.earth", ["pat.jones@partner.example.com"])
         self.assertFalse(events[0]["is_external"])
 
     def test_contact_match_ignores_case_and_spaces(self):
-        events = [ev("Yaw.Poku@NatWest.com")]
-        fetch_calendar.mark_external(events, "@ekko.earth", [" yaw.poku@natwest.com "])
+        events = [ev("Pat.Jones@Partner.Example.com")]
+        fetch_calendar.mark_external(events, "@ekko.earth", [" pat.jones@partner.example.com "])
         self.assertFalse(events[0]["is_external"])
 
     def test_contact_plus_real_external_is_still_external(self):
-        events = [ev("yaw.poku@natwest.com", "tim.mawson@visualsoft.co.uk")]
-        fetch_calendar.mark_external(events, "@ekko.earth", ["yaw.poku@natwest.com"])
+        events = [ev("pat.jones@partner.example.com", "robin.lee@agency.example.org")]
+        fetch_calendar.mark_external(events, "@ekko.earth", ["pat.jones@partner.example.com"])
         self.assertTrue(events[0]["is_external"])
 
     def test_parse_contacts_arg(self):
@@ -767,7 +767,7 @@ git commit -m "feat(morning): publish the brief as a page and print a link"
 
 Not in the repo, not delegated.
 
-- [ ] `~/morning/config.yaml`: add `calendar.internal_contacts: ["yaw.poku@natwest.com"]` and `output.artifact_url: ""`.
+- [ ] `~/morning/config.yaml`: add `calendar.internal_contacts: ["pat.jones@partner.example.com"]` and `output.artifact_url: ""`.
 - [ ] `~/.claude/scheduled-tasks/morning-brief/SKILL.md`: change "print the ENTIRE brief inline in the chat, never condensed and never replaced with a pointer to the file" to "publish the page and print the header, counters and link (Step 6); print the full brief inline only if publishing fails". Add to "Needed approval" guidance: list any Artifact call that prompted.
 - [ ] Memory `feedback_brief_numbered_lists.md`: replace "always print the full brief inline" with the link decision (1 Oct 2026) and its reason. Update the `MEMORY.md` line.
 
