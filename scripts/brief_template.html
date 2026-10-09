@@ -6,9 +6,12 @@
 <title>Morning brief</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: one narrow reading column. Header with the date, then a sticky row of pills
-   that doubles as the tab bar, then dense rows with a fixed-width number column so numbers can be read back.
-   From 1100px wide it becomes two columns: brief on the left, Projects panel pinned on the right. */
+/* Layout: one full-width header (date and title, goals strip, then the pill row that doubles as the tab bar; the
+   pill row sticks while scrolling), then one tab panel at a time, then dense rows with a fixed-width number column
+   so numbers can be read back. The page is at most 1240px wide. On the To do tab, from 1100px wide, the to-do
+   content sits on the left (3fr) and the In progress list is pinned on the right (2fr); with no in-progress items
+   the to-do content takes the full width. Below 1100px it is one column with In progress first. Every other tab is
+   a single full-width panel. */
 :root {
   --bg: #f4f6f4;
   --surface: #ffffff;
@@ -77,10 +80,11 @@ body {
   padding-block: 20px 48px;
   overflow-wrap: anywhere;
 }
-.wrap { max-width: 760px; margin-inline: auto; display: flex; flex-direction: column; gap: 18px; min-width: 0; }
-.main { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
-.side { min-width: 0; }
+.wrap { max-width: 1240px; margin-inline: auto; display: flex; flex-direction: column; gap: 18px; min-width: 0; }
 .tabpanel { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+/* To do tab: In progress comes first in the markup, so it leads on narrow screens; from 1100px it moves to the right. */
+.todo-cols { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.todo-main, .todo-side { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
 a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
 a:hover { text-decoration-thickness: 2px; }
 button { font: inherit; color: inherit; }
@@ -229,17 +233,12 @@ body.has-bg .goals > h2, body.has-bg .goals > .gnote {
 @media (max-width: 420px) {
   .focus { font-size: 22px; }
 }
-.side { display: none; }
 @media (min-width: 1100px) {
   body { padding-inline: 24px; }
-  .wrap { max-width: 1400px; display: grid; grid-template-columns: minmax(0, 11fr) minmax(0, 9fr); gap: 28px; align-items: start; }
-  .side {
-    display: block; position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto;
-    background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px;
-  }
-  .side .prows { border: 0; background: none; border-radius: 0; }
-  .side .tabpanel { gap: 14px; }
   .chips { margin-inline: 0; padding-inline: 0; }
+  .todo-cols.has-side { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 28px; align-items: start; }
+  .todo-cols.has-side .todo-main { grid-column: 1; grid-row: 1; }
+  .todo-cols.has-side .todo-side { grid-column: 2; grid-row: 1; position: sticky; top: 68px; max-height: calc(100vh - 84px); overflow-y: auto; }
 }
 </style>
 </head>
@@ -290,6 +289,7 @@ body.has-bg .goals > h2, body.has-bg .goals > .gnote {
     return;
   }
 
+  var inProgress = brief.in_progress || [];
   var urgent = brief.urgent || [];
   var prs = brief.prs || {};
   var actions = brief.actions || {};
@@ -353,15 +353,22 @@ body.has-bg .goals > h2, body.has-bg .goals > .gnote {
     });
     return panel;
   }
+  function actionRow(a) {
+    return numberedRow(a.n, [
+      el("div", {}, [link(safeUrl(a.url), a.text)]),
+      el("div", { "class": "meta" }, [span("", a.meeting + ", " + a.date), tagPill(a)]),
+      whyLine(a)
+    ]);
+  }
   function actionPanel(list) {
     var panel = el("div", { "class": "panel" });
-    list.forEach(function (a) {
-      panel.appendChild(numberedRow(a.n, [
-        el("div", {}, [link(safeUrl(a.url), a.text)]),
-        el("div", { "class": "meta" }, [span("", a.meeting + ", " + a.date), tagPill(a)]),
-        whyLine(a)
-      ]));
-    });
+    list.forEach(function (a) { panel.appendChild(actionRow(a)); });
+    return panel;
+  }
+  /* In progress mixes Notion to-dos and Fathom actions, so each row is picked by its kind. */
+  function inProgressPanel(list) {
+    var panel = el("div", { "class": "panel" });
+    list.forEach(function (i) { panel.appendChild(i.kind === "fathom" ? actionRow(i) : todoRow(i, true)); });
     return panel;
   }
   function section(title, count, content) {
@@ -485,19 +492,26 @@ body.has-bg .goals > h2, body.has-bg .goals > .gnote {
   }
 
   /* ---------- tab content ---------- */
+  /* To do: the to-do content on the left, In progress on the right (first in the markup, so it leads on narrow screens). */
   function todoTab() {
-    var out = [];
-    if (brief.alpha_note) out.push(el("div", { "class": "meta" }, [span("pill other", "alpha"), span("", brief.alpha_note)]));
-    if (urgentItems.length) out.push(section("Urgent today", urgentItems.length, todoPanel(urgent)));
+    var main = [];
+    if (urgentItems.length) main.push(section("Urgent today", urgentItems.length, todoPanel(urgent)));
     var comingN = countGroups(todos.coming_up);
-    if (comingN) out.push(section("Coming up", comingN, todoPanel(todos.coming_up)));
-    if (yours.length) out.push(section("Your actions", yours.length, actionPanel(yours)));
-    if (product.length) out.push(section("Product actions", product.length, actionPanel(product)));
+    if (comingN) main.push(section("Coming up", comingN, todoPanel(todos.coming_up)));
+    if (yours.length) main.push(section("Your actions", yours.length, actionPanel(yours)));
+    if (product.length) main.push(section("Product actions", product.length, actionPanel(product)));
     if (meetings.length) {
-      out.push(section("External meeting prep", meetings.length,
+      main.push(section("External meeting prep", meetings.length,
         el("div", { "class": "cards" }, meetings.map(meetingCard))));
     }
-    return out;
+    var cols = [];
+    if (inProgress.length) {
+      cols.push(el("aside", { "class": "todo-side", "aria-label": "In progress" },
+        [section("In progress", inProgress.length, inProgressPanel(inProgress))]));
+    }
+    if (main.length) cols.push(el("div", { "class": "todo-main" }, main));
+    if (!cols.length) return [];
+    return [el("div", { "class": "todo-cols" + (inProgress.length && main.length ? " has-side" : "") }, cols)];
   }
   function prsTab() {
     var out = [];
@@ -550,62 +564,59 @@ body.has-bg .goals > h2, body.has-bg .goals > .gnote {
       out.push(section("Projects", projects.length, el("div", { "class": "cards" }, [filters, list, emptyMsg])));
       apply();
     }
-    if (partners.length) {
-      var rows = partners.map(function (x) {
-        return el("tr", {}, [el("td", { text: x.name }), el("td", { text: x.owner || "" }),
-          el("td", {}, [statusPill(x.status)]), el("td", { "class": "nextcol", text: x.next || "" }),
-          el("td", { text: x.target || "" })]);
-      });
-      var table = el("table", {}, [
-        el("thead", {}, [el("tr", {}, ["Partner", "Owner", "Status", "Next", "Target"].map(function (h) { return el("th", { text: h }); }))]),
-        el("tbody", {}, rows)
-      ]);
-      out.push(section("Partners", partners.length, el("div", { "class": "panel tablewrap" }, [table])));
-    }
     return out;
   }
+  function clientsTab() {
+    if (!partners.length) return [];
+    var rows = partners.map(function (x) {
+      return el("tr", {}, [el("td", { text: x.name }), el("td", { text: x.owner || "" }),
+        el("td", {}, [statusPill(x.status)]), el("td", { "class": "nextcol", text: x.next || "" }),
+        el("td", { text: x.target || "" })]);
+    });
+    var table = el("table", {}, [
+      el("thead", {}, [el("tr", {}, ["Partner", "Owner", "Status", "Next", "Target"].map(function (h) { return el("th", { text: h }); }))]),
+      el("tbody", {}, rows)
+    ]);
+    return [section("Partners - next actions", partners.length, el("div", { "class": "panel tablewrap" }, [table]))];
+  }
 
+  /* The To do pill counts everything on its tab, In progress included, at every width. */
+  var todoCount = inProgress.length + urgentItems.length + countGroups(todos.coming_up) + yours.length + product.length + meetings.length;
   var TABS = [
-    { id: "todo", label: "To do", build: todoTab,
-      count: urgentItems.length + countGroups(todos.coming_up) + yours.length + product.length + meetings.length,
-      empty: "Nothing to do." },
+    { id: "todo", label: "To do", build: todoTab, count: todoCount, empty: "Nothing to do." },
     { id: "prs", label: "PRs", build: prsTab, count: prTotal, empty: "No pull requests need you." },
     { id: "testing", label: "Testing", build: testingTab, count: testing.length,
       empty: "Nothing merged recently that needs a manual test." },
     { id: "ideas", label: "Ideas bank", build: ideasTab,
       count: countGroups(ideas.strategic) + countGroups(ideas.other), empty: "No ideas parked." },
-    { id: "projects", label: "Projects", build: projectsNodes, count: projects.length, empty: "No projects." }
+    { id: "projects", label: "Projects", build: projectsTab, count: projects.length, empty: "No projects." },
+    { id: "clients", label: "Clients", build: clientsTab, count: partners.length, empty: "No clients." }
   ];
-  /* Projects content is built once and moved between the Projects tab (narrow) and the side panel (wide). */
-  var projectsContent = projectsTab();
-  var projectsNode = el("div", { "class": "tabpanel" },
-    projectsContent.length ? projectsContent : [el("p", { "class": "empty", text: "No projects." })]);
-  function projectsNodes() { return [projectsNode]; }
 
-  /* ---------- header ---------- */
+  /* ---------- header: date and title, goals strip, then the pill row ---------- */
   var header = el("header", {}, [
     el("div", { "class": "date", text: brief.weekday_label || brief.date }),
     el("h1", { "class": "focus", text: "Morning brief" })
   ]);
-  var main = el("div", { "class": "main" });
-  var side = el("aside", { "class": "side", "aria-label": "Projects", hidden: "" });
-  app.appendChild(main);
-  app.appendChild(side);
-  main.appendChild(header);
+  app.appendChild(header);
   if ((brief.unavailable || []).length) {
-    main.appendChild(el("div", { "class": "banner", role: "status" },
+    header.appendChild(el("div", { "class": "banner", role: "status" },
       brief.unavailable.map(function (u) { return el("div", { text: u }); })));
   }
-
   var goalsNode = goalsBlock(brief.goals);
-  if (goalsNode) main.appendChild(goalsNode);
+  if (goalsNode) header.appendChild(goalsNode);
 
   /* ---------- pills: one per tab, and the only tab bar ---------- */
-  /* Each pill carries its tab's label and count; To do also shows the overdue figure. */
+  /* Each pill carries its tab's label and count; To do also shows the overdue figure. A tab with nothing in it gets
+     no pill, except To do, which always shows. */
   var tablist = el("div", { "class": "chips", role: "tablist", "aria-label": "Brief sections" });
   var panels = {};
   var tabButtons = {};
+  var visibleIds = [];
   TABS.forEach(function (t) {
+    var content = t.build();
+    if (!content.length && t.id !== "todo") return;
+    visibleIds.push(t.id);
     var b = el("button", { "class": "chip", role: "tab", type: "button", id: "tab-" + t.id,
       "aria-controls": "panel-" + t.id, "aria-selected": "false",
       onclick: function () { select(t.id, true); } }, [
@@ -614,57 +625,38 @@ body.has-bg .goals > h2, body.has-bg .goals > .gnote {
     ]);
     tabButtons[t.id] = b;
     tablist.appendChild(b);
-    var content = t.build();
-    var p = el("div", { "class": "tabpanel", role: "tabpanel", id: "panel-" + t.id, "aria-labelledby": "tab-" + t.id, hidden: "" },
+    panels[t.id] = el("div", { "class": "tabpanel", role: "tabpanel", id: "panel-" + t.id, "aria-labelledby": "tab-" + t.id, hidden: "" },
       content.length ? content : [el("p", { "class": "empty", text: t.empty })]);
-    panels[t.id] = p;
   });
-  main.appendChild(tablist);
-  TABS.forEach(function (t) { main.appendChild(panels[t.id]); });
+  app.appendChild(tablist);
+  visibleIds.forEach(function (id) { app.appendChild(panels[id]); });
 
-  var wideQuery = window.matchMedia("(min-width: 1100px)");
-  function visibleTabIds() {
-    return TABS.map(function (t) { return t.id; })
-      .filter(function (id) { return !(wideQuery.matches && id === "projects"); });
-  }
   var current = "todo";
   function select(id, scrollUp) {
-    if (!panels[id] || visibleTabIds().indexOf(id) < 0) id = "todo";
+    if (visibleIds.indexOf(id) < 0) id = "todo";
     current = id;
-    TABS.forEach(function (t) {
-      var on = t.id === id;
-      panels[t.id].hidden = !on;
-      tabButtons[t.id].setAttribute("aria-selected", String(on));
-      tabButtons[t.id].tabIndex = on ? 0 : -1;
+    visibleIds.forEach(function (tid) {
+      var on = tid === id;
+      panels[tid].hidden = !on;
+      tabButtons[tid].setAttribute("aria-selected", String(on));
+      tabButtons[tid].tabIndex = on ? 0 : -1;
     });
     try { localStorage.setItem("morning-brief-tab", id); } catch (e) { /* storage unavailable */ }
     if (scrollUp && tablist.getBoundingClientRect().top < 0) tablist.scrollIntoView({ block: "start" });
   }
   tablist.addEventListener("keydown", function (e) {
-    var ids = visibleTabIds();
-    var cur = ids.indexOf(document.activeElement && document.activeElement.id.replace("tab-", ""));
+    var cur = visibleIds.indexOf(document.activeElement && document.activeElement.id.replace("tab-", ""));
     if (cur < 0) return;
     var next = e.key === "ArrowRight" ? cur + 1 : e.key === "ArrowLeft" ? cur - 1 : null;
     if (next == null) return;
-    next = (next + ids.length) % ids.length;
-    select(ids[next], false);
-    tabButtons[ids[next]].focus();
+    next = (next + visibleIds.length) % visibleIds.length;
+    select(visibleIds[next], false);
+    tabButtons[visibleIds[next]].focus();
     e.preventDefault();
   });
 
-  function place() {
-    var wide = wideQuery.matches;
-    (wide ? side : panels.projects).appendChild(projectsNode);
-    side.hidden = !wide;
-    tabButtons.projects.hidden = wide;
-    if (wide && current === "projects") select("todo", false);
-  }
-  if (wideQuery.addEventListener) wideQuery.addEventListener("change", place);
-  else if (wideQuery.addListener) wideQuery.addListener(place);
-
   var saved = "todo";
   try { saved = localStorage.getItem("morning-brief-tab") || "todo"; } catch (e) { saved = "todo"; }
-  place();
   select(saved, false);
 })();
 </script>

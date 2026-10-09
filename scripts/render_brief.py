@@ -37,7 +37,6 @@ TAG_VERDICTS = ("needs-lena", "split", "handoff")
 TAG_LABELS = {"needs-lena": "needs-Lena", "split": "split", "handoff": "handoff"}
 BG_EXTS = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".png": "image/png"}
 BG_WARN_BYTES = 600 * 1024
-ALPHA_NOTE = "Owner tags are alpha: a first guess at who could own each to-do, not yet reviewed."
 
 
 def check_tag(item: dict, label: str) -> None:
@@ -91,6 +90,11 @@ def number_items(raw: dict) -> tuple[dict, dict]:
     brief = copy.deepcopy(raw)
     brief.setdefault("unavailable", [])
     brief.setdefault("urgent", [])
+    in_progress = brief.get("in_progress")
+    if in_progress is None:
+        in_progress = brief["in_progress"] = []
+    if not isinstance(in_progress, list):
+        raise ValueError("'in_progress' is not a list")
     prs = brief.setdefault("prs", {})
     for k in ("review_requested", "ready", "awaiting"):
         prs.setdefault(k, [])
@@ -155,6 +159,30 @@ def number_items(raw: dict) -> tuple[dict, dict]:
             t["n"] = n
             numbers[str(n)] = {"kind": "test", "key": f"{t['repo']}#{t['number']}"}
 
+    def in_progress_list(items: list) -> None:
+        nonlocal n
+        for i, item in enumerate(items, 1):
+            if not isinstance(item, dict):
+                raise ValueError(f"in_progress item {i} is not an object")
+            kind = item.get("kind")
+            if kind == "notion":
+                label = f"in_progress to-do '{item.get('title', '?')}'"
+                if not item.get("id"):
+                    raise ValueError(f"{label} has no 'id'")
+                ref = {"kind": "notion", "id": item["id"]}
+            elif kind == "fathom":
+                label = f"in_progress action '{item.get('text', '?')}'"
+                if not item.get("key"):
+                    raise ValueError(f"{label} has no 'key'")
+                ref = {"kind": "fathom", "key": item["key"]}
+            else:
+                raise ValueError(f"in_progress item {i} has an unknown kind {kind!r} (use notion or fathom)")
+            check_tag(item, label)
+            n += 1
+            item["n"] = n
+            numbers[str(n)] = ref
+
+    in_progress_list(brief["in_progress"])
     todo_groups(brief["urgent"])
     todo_groups(todos["coming_up"])
     action_list(actions["yours"])
@@ -163,13 +191,6 @@ def number_items(raw: dict) -> tuple[dict, dict]:
     for k, _ in IDEA_BUCKETS:
         todo_groups(ideas[k])
     return brief, numbers
-
-
-def has_tags(brief: dict) -> bool:
-    """True when any to-do-like item in the brief carries a tag."""
-    groups = brief["urgent"] + brief["todos"]["coming_up"] + [g for k, _ in IDEA_BUCKETS for g in brief["ideas"][k]]
-    items = [i for g in groups for i in g.get("items", [])] + brief["actions"]["yours"] + brief["actions"]["product"]
-    return any(i.get("tag") for i in items)
 
 
 def _tag_suffix(item: dict) -> str:
@@ -264,8 +285,11 @@ def to_markdown(brief: dict, shared: bool = False) -> str:
         L += [f"_{u}_", ""]
 
     L += ["## To do", ""]
-    if has_tags(brief):
-        L += [f"_{ALPHA_NOTE}_", ""]
+    if brief["in_progress"]:
+        L += ["**In progress**", ""]
+        for i in brief["in_progress"]:
+            L += _action_line(i) if i["kind"] == "fathom" else _todo_line(i)
+        L += [""]
     if brief["urgent"]:
         L += ["**Urgent today**", ""] + _todo_groups_md(brief["urgent"])
     coming = brief["todos"]["coming_up"]
@@ -387,8 +411,6 @@ def background_data_uri(image: Path) -> str:
 
 
 def to_html(brief: dict, background: Path | None = None) -> str:
-    if has_tags(brief):
-        brief = {**brief, "alpha_note": ALPHA_NOTE}
     data = json.dumps(brief, ensure_ascii=False).replace("<", "\\u003c")
     bg = json.dumps(background_data_uri(background)).replace("<", "\\u003c") if background else "null"
     return TEMPLATE.read_text().replace("/*__BG__*/null", bg).replace("/*__BRIEF_JSON__*/null", data)
@@ -397,6 +419,7 @@ def to_html(brief: dict, background: Path | None = None) -> str:
 def counts(brief: dict) -> dict:
     urgent_items = [i for g in brief["urgent"] for i in g.get("items", [])]
     return {
+        "in_progress": len(brief["in_progress"]),
         "urgent": len(urgent_items),
         "overdue": sum(1 for i in urgent_items if str(i.get("due", "")).startswith("overdue")),
         "prs_review": len(brief["prs"]["review_requested"]),
@@ -407,7 +430,8 @@ def counts(brief: dict) -> dict:
         "testing": len(brief["testing"]),
         "ideas": sum(_count(brief["ideas"][k]) for k, _ in IDEA_BUCKETS),
         "meetings": len(brief["meetings"]),
-        "max_number": max([0] + [i["n"] for g in brief["urgent"] for i in g.get("items", [])]
+        "max_number": max([0] + [i["n"] for i in brief["in_progress"]]
+                          + [i["n"] for g in brief["urgent"] for i in g.get("items", [])]
                           + [a["n"] for a in brief["actions"]["yours"] + brief["actions"]["product"]]
                           + [i["n"] for g in brief["todos"]["coming_up"] for i in g.get("items", [])]
                           + [t["n"] for t in brief["testing"]]

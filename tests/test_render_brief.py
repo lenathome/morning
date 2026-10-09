@@ -16,8 +16,8 @@ sys.path.insert(0, str(SCRIPT.parent))
 import render_brief  # noqa: E402
 
 
-class AlphaNoteTest(unittest.TestCase):
-    NOTE = "_Owner tags are alpha: a first guess at who could own each to-do, not yet reviewed._\n\n"
+class TagNoteTest(unittest.TestCase):
+    NOTE_TEXT = "Owner tags are alpha"
 
     def untag(self, b):
         for g in b["urgent"] + b["todos"]["coming_up"] + b["ideas"]["strategic"] + b["ideas"]["other"]:
@@ -27,27 +27,19 @@ class AlphaNoteTest(unittest.TestCase):
             a.pop("tag", None)
         return b
 
-    def test_md_and_shared_md_have_the_note_once_under_the_to_do_heading(self):
+    def test_no_alpha_note_in_md_shared_md_or_html_even_when_tagged(self):
         brief, _ = render_brief.number_items(load())
+        self.assertTrue(any(i.get("tag") for g in brief["urgent"] for i in g["items"]))
         for shared in (False, True):
             md = render_brief.to_markdown(brief, shared=shared)
-            self.assertEqual(md.count(self.NOTE), 1)
-            self.assertIn("## To do\n\n" + self.NOTE + "**Urgent today**", md)
-
-    def test_html_embeds_the_note_once_and_template_shows_it(self):
-        brief, _ = render_brief.number_items(load())
+            self.assertNotIn(self.NOTE_TEXT, md)
+            self.assertNotIn("alpha", md.lower())
+            self.assertIn("## To do\n\n**Urgent today**", md)
         html = render_brief.to_html(brief)
-        self.assertEqual(html.count(render_brief.ALPHA_NOTE), 1)
+        self.assertNotIn(self.NOTE_TEXT, html)
+        self.assertNotIn("alpha_note", html)
         template = (ROOT / "scripts" / "brief_template.html").read_text()
-        self.assertIn("brief.alpha_note", template)
-        self.assertIn('span("pill other", "alpha")', template)
-
-    def test_no_note_when_nothing_is_tagged(self):
-        brief, _ = render_brief.number_items(self.untag(load()))
-        for shared in (False, True):
-            self.assertNotIn("alpha", render_brief.to_markdown(brief, shared=shared))
-        self.assertNotIn(render_brief.ALPHA_NOTE, render_brief.to_html(brief))
-        self.assertNotIn('"alpha_note":', render_brief.to_html(brief))
+        self.assertNotIn("alpha", template.lower())
 
     def test_numbering_is_unchanged(self):
         tagged, tagged_map = render_brief.number_items(load())
@@ -401,11 +393,11 @@ class HtmlTest(unittest.TestCase):
         self.assertNotIn('label: "To test"', html)
         self.assertIn("Nothing merged recently that needs a manual test.", html)
 
-    def test_tabs_are_todo_prs_testing_ideas_projects(self):
+    def test_tabs_are_todo_prs_testing_ideas_projects_clients(self):
         html = (ROOT / "scripts" / "brief_template.html").read_text()
         ids = re.findall(r'\{ id: "(\w+)", label: "([^"]+)"', html)
         self.assertEqual(ids, [("todo", "To do"), ("prs", "PRs"), ("testing", "Testing"),
-                               ("ideas", "Ideas bank"), ("projects", "Projects")])
+                               ("ideas", "Ideas bank"), ("projects", "Projects"), ("clients", "Clients")])
         self.assertNotIn('tab: "today"', html)
 
     def test_pills_are_the_only_tab_bar(self):
@@ -422,9 +414,8 @@ class HtmlLayoutTest(unittest.TestCase):
     def test_wide_layout_breakpoint_and_project_details(self):
         html = (ROOT / "scripts" / "brief_template.html").read_text()
         self.assertIn("(min-width: 1100px)", html)
-        self.assertIn("window.matchMedia", html)
         self.assertIn('el("details", { "class": "prow" }', html)
-        self.assertIn('el("aside", { "class": "side"', html)
+        self.assertIn('el("aside", { "class": "todo-side"', html)
 
 
 PNG_1X1 = (b"\x89PNG\r\n\x1a\n"
@@ -546,6 +537,157 @@ class CliTest(unittest.TestCase):
                                capture_output=True, text=True)
             self.assertEqual(r.returncode, 1)
             self.assertIn("weekday_label", r.stderr)
+
+
+IN_PROGRESS = [
+    {"kind": "notion", "id": "ip1", "title": "Draft the SDK FAQ", "due": "due 3 Oct", "categories": ["Operational"],
+     "note": "", "tag": {"verdict": "needs-lena", "who": "", "why": "Your call on the wording."}},
+    {"kind": "fathom", "key": "ipk1", "text": "Send the deck", "url": "https://fathom.video/calls/9?timestamp=1",
+     "meeting": "Partner call", "date": "2 Oct"},
+]
+
+
+def with_in_progress(items):
+    b = load()
+    b["in_progress"] = items
+    return b
+
+
+class InProgressTest(unittest.TestCase):
+    def template(self):
+        return (ROOT / "scripts" / "brief_template.html").read_text()
+
+    def test_numbered_first_and_mapped_with_kind(self):
+        brief, numbers = render_brief.number_items(with_in_progress(IN_PROGRESS))
+        self.assertEqual([i["n"] for i in brief["in_progress"]], [1, 2])
+        self.assertEqual(brief["urgent"][0]["items"][0]["n"], 3)
+        self.assertEqual(brief["ideas"]["other"][0]["items"][0]["n"], 11)
+        self.assertEqual(numbers["1"], {"kind": "notion", "id": "ip1"})
+        self.assertEqual(numbers["2"], {"kind": "fathom", "key": "ipk1"})
+        self.assertEqual(numbers["3"], {"kind": "notion", "id": "p1"})
+        self.assertEqual(len(numbers), 11)
+        c = render_brief.counts(brief)
+        self.assertEqual(c["in_progress"], 2)
+        self.assertEqual(c["max_number"], 11)
+
+    def test_markdown_section_sits_before_urgent_with_matching_lines(self):
+        brief, _ = render_brief.number_items(with_in_progress(IN_PROGRESS))
+        for shared in (False, True):
+            md = render_brief.to_markdown(brief, shared=shared)
+            self.assertIn("**In progress**\n\n"
+                          "1. Draft the SDK FAQ (due 3 Oct)  [Operational] [needs-Lena]\n"
+                          "   *Your call on the wording.*\n"
+                          '2. [Send the deck](https://fathom.video/calls/9?timestamp=1) (from "Partner call", 2 Oct)\n'
+                          "\n**Urgent today**\n\n3. Standalone urgent", md)
+            self.assertLess(md.index("## To do"), md.index("**In progress**"))
+            self.assertLess(md.index("**In progress**"), md.index("**Urgent today**"))
+
+    def test_in_progress_follows_the_heading_directly(self):
+        b = with_in_progress(IN_PROGRESS)
+        brief, _ = render_brief.number_items(b)
+        md = render_brief.to_markdown(brief)
+        self.assertIn("## To do\n\n**In progress**", md)
+
+    def test_absent_or_empty_renders_exactly_as_before(self):
+        plain, plain_map = render_brief.number_items(load())
+        for value in ([], None):
+            b = load()
+            b["in_progress"] = value
+            brief, numbers = render_brief.number_items(b)
+            self.assertEqual(numbers, plain_map)
+            self.assertEqual(render_brief.to_markdown(brief), render_brief.to_markdown(plain))
+            self.assertNotIn("In progress", render_brief.to_markdown(brief))
+            self.assertEqual(render_brief.counts(brief), render_brief.counts(plain))
+
+    def test_bad_shapes_name_the_problem(self):
+        cases = [
+            ("not a list", "x", "'in_progress' is not a list"),
+            ("not an object", ["x"], "in_progress item 1 is not an object"),
+            ("no kind", [{"id": "a", "title": "T"}], "unknown kind"),
+            ("bad kind", [{"kind": "slack", "id": "a"}], "unknown kind 'slack'"),
+            ("notion without id", [{"kind": "notion", "title": "Lost task"}], "Lost task.*no 'id'"),
+            ("fathom without key", [{"kind": "fathom", "text": "Lost action"}], "Lost action.*no 'key'"),
+            ("bad tag", [{"kind": "notion", "id": "a", "title": "Tagged", "tag": {"verdict": "you"}}],
+             "Tagged.*unknown tag verdict"),
+        ]
+        for name, value, pattern in cases:
+            with self.subTest(name):
+                with self.assertRaisesRegex(ValueError, pattern):
+                    render_brief.number_items(with_in_progress(value))
+
+    def test_cli_exits_1_on_bad_in_progress(self):
+        with tempfile.TemporaryDirectory() as d:
+            bad = Path(d) / "b.json"
+            bad.write_text(json.dumps(with_in_progress([{"kind": "fathom", "text": "Lost action"}])))
+            r = subprocess.run([sys.executable, str(SCRIPT), str(bad), "--md", str(Path(d) / "x.md")],
+                               capture_output=True, text=True)
+            self.assertEqual(r.returncode, 1)
+            self.assertIn("Lost action", r.stderr)
+
+    def test_cli_map_carries_the_kinds(self):
+        with tempfile.TemporaryDirectory() as d:
+            src = Path(d) / "b.json"
+            src.write_text(json.dumps(with_in_progress(IN_PROGRESS)))
+            r = subprocess.run([sys.executable, str(SCRIPT), str(src), "--map", str(Path(d) / "m.json")],
+                               capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            m = json.loads((Path(d) / "m.json").read_text())["numbers"]
+            self.assertEqual(m["2"], {"kind": "fathom", "key": "ipk1"})
+            self.assertIn('"in_progress": 2', r.stdout)
+
+    def test_html_embeds_the_items_and_template_builds_the_section(self):
+        brief, _ = render_brief.number_items(with_in_progress(IN_PROGRESS))
+        html = render_brief.to_html(brief)
+        self.assertIn('"in_progress": [', html)
+        self.assertIn('"kind": "fathom"', html)
+        t = self.template()
+        self.assertIn("brief.in_progress", t)
+        self.assertIn('section("In progress", inProgress.length', t)
+        self.assertIn('i.kind === "fathom" ? actionRow(i) : todoRow(i, true)', t)
+        self.assertNotIn("innerHTML", t)
+
+    def test_template_two_columns_on_todo_only_with_in_progress(self):
+        t = self.template()
+        # the grid applies to the To do container only when it has both columns, from 1100px
+        self.assertIn(".todo-cols.has-side { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);", t)
+        self.assertIn(".todo-cols.has-side .todo-side { grid-column: 2; grid-row: 1; position: sticky;", t)
+        self.assertIn('" has-side" : ""', t)
+        self.assertIn("inProgress.length && main.length", t)
+        self.assertIn("(min-width: 1100px)", t)
+        # In progress comes first in the markup, so it leads on narrow screens
+        self.assertLess(t.index('cols.push(el("aside", { "class": "todo-side"'),
+                        t.index('cols.push(el("div", { "class": "todo-main"'))
+        # no side column outside the To do tab, and no width-dependent JS
+        self.assertNotIn(".wrap.has-side", t)
+        self.assertNotIn("wideQuery", t)
+        self.assertNotIn("matchMedia", t)
+        self.assertNotIn('app.appendChild(side)', t)
+
+    def test_projects_only_in_its_tab_and_clients_has_its_own(self):
+        t = self.template()
+        self.assertNotIn("projectsNode", t)
+        self.assertNotIn("projectsContent", t)
+        self.assertNotIn("(wide ? main", t)
+        self.assertEqual(t.count("projectsTab"), 2)   # defined once, used once in TABS
+        self.assertIn('build: clientsTab, count: partners.length', t)
+        self.assertIn('"Partners - next actions"', t)
+        proj = t[t.index("function projectsTab()"):t.index("function clientsTab()")]
+        self.assertNotIn("partners", proj)
+
+    def test_header_holds_goals_and_pills_in_order(self):
+        t = self.template()
+        self.assertIn("max-width: 1240px; margin-inline: auto", t)
+        a = t.index("app.appendChild(header)")
+        b = t.index("header.appendChild(goalsNode)")
+        c = t.index("app.appendChild(tablist)")
+        self.assertTrue(a < b < c)
+
+    def test_todo_pill_counts_in_progress_at_every_width(self):
+        t = self.template()
+        self.assertIn("var todoCount = inProgress.length + urgentItems.length", t)
+        self.assertIn('count: todoCount', t)
+        self.assertNotIn("wide ? 0 : inProgress.length", t)
+        self.assertNotIn("todoBaseCount", t)
 
 
 GOALS = {
