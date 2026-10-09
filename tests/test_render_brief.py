@@ -401,11 +401,11 @@ class HtmlTest(unittest.TestCase):
         self.assertNotIn('label: "To test"', html)
         self.assertIn("Nothing merged recently that needs a manual test.", html)
 
-    def test_tabs_are_todo_prs_testing_ideas_projects(self):
+    def test_tabs_are_todo_prs_testing_ideas_projects_clients(self):
         html = (ROOT / "scripts" / "brief_template.html").read_text()
         ids = re.findall(r'\{ id: "(\w+)", label: "([^"]+)"', html)
         self.assertEqual(ids, [("todo", "To do"), ("prs", "PRs"), ("testing", "Testing"),
-                               ("ideas", "Ideas bank"), ("projects", "Projects")])
+                               ("ideas", "Ideas bank"), ("projects", "Projects"), ("clients", "Clients")])
         self.assertNotIn('tab: "today"', html)
 
     def test_pills_are_the_only_tab_bar(self):
@@ -422,9 +422,8 @@ class HtmlLayoutTest(unittest.TestCase):
     def test_wide_layout_breakpoint_and_project_details(self):
         html = (ROOT / "scripts" / "brief_template.html").read_text()
         self.assertIn("(min-width: 1100px)", html)
-        self.assertIn("window.matchMedia", html)
         self.assertIn('el("details", { "class": "prow" }', html)
-        self.assertIn('el("aside", { "class": "side"', html)
+        self.assertIn('el("aside", { "class": "todo-side"', html)
 
 
 PNG_1X1 = (b"\x89PNG\r\n\x1a\n"
@@ -655,28 +654,48 @@ class InProgressTest(unittest.TestCase):
         self.assertIn('i.kind === "fathom" ? actionRow(i) : todoRow(i, true)', t)
         self.assertNotIn("innerHTML", t)
 
-    def test_template_two_column_only_with_in_progress_and_projects_moves_to_main(self):
+    def test_template_two_columns_on_todo_only_with_in_progress(self):
         t = self.template()
-        # the grid only applies to a wrap that has a side column
-        self.assertIn(".wrap.has-side { max-width: 1240px; display: grid;", t)
-        self.assertNotRegex(t, r"\n  \.wrap \{ max-width: 1400px; display: grid")
-        self.assertIn('app.classList.toggle("has-side", wide)', t)
-        # no in-progress items: the side column is never added to the page
-        self.assertIn("if (inProgressNode) app.appendChild(side)", t)
-        self.assertIn("var inProgressNode = inProgress.length ?", t)
-        # wide: projects at the bottom of the main column; narrow: back in its tab
-        self.assertIn("(wide ? main : panels.projects).appendChild(projectsNode)", t)
-        self.assertNotIn("(wide ? side : panels.projects)", t)
-        # narrow: in progress is the first thing in the To do panel
-        self.assertIn("panels.todo.insertBefore(inProgressNode, panels.todo.firstChild)", t)
+        # the grid applies to the To do container only when it has both columns, from 1100px
+        self.assertIn(".todo-cols.has-side { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);", t)
+        self.assertIn(".todo-cols.has-side .todo-side { grid-column: 2; grid-row: 1; position: sticky;", t)
+        self.assertIn('" has-side" : ""', t)
+        self.assertIn("inProgress.length && main.length", t)
         self.assertIn("(min-width: 1100px)", t)
+        # In progress comes first in the markup, so it leads on narrow screens
+        self.assertLess(t.index('cols.push(el("aside", { "class": "todo-side"'),
+                        t.index('cols.push(el("div", { "class": "todo-main"'))
+        # no side column outside the To do tab, and no width-dependent JS
+        self.assertNotIn(".wrap.has-side", t)
+        self.assertNotIn("wideQuery", t)
+        self.assertNotIn("matchMedia", t)
+        self.assertNotIn('app.appendChild(side)', t)
 
-    def test_todo_pill_counts_in_progress_only_while_it_is_in_the_panel(self):
+    def test_projects_only_in_its_tab_and_clients_has_its_own(self):
         t = self.template()
-        self.assertIn("todoBaseCount + (wide ? 0 : inProgress.length)", t)
-        self.assertIn('{ id: "todo", label: "To do", build: todoTab, count: todoBaseCount', t)
-        ids = re.findall(r'\{ id: "(\w+)", label: "([^"]+)"', t)
-        self.assertEqual([i for i, _ in ids], ["todo", "prs", "testing", "ideas", "projects"])
+        self.assertNotIn("projectsNode", t)
+        self.assertNotIn("projectsContent", t)
+        self.assertNotIn("(wide ? main", t)
+        self.assertEqual(t.count("projectsTab"), 2)   # defined once, used once in TABS
+        self.assertIn('build: clientsTab, count: partners.length', t)
+        self.assertIn('"Partners - next actions"', t)
+        proj = t[t.index("function projectsTab()"):t.index("function clientsTab()")]
+        self.assertNotIn("partners", proj)
+
+    def test_header_holds_goals_and_pills_in_order(self):
+        t = self.template()
+        self.assertIn("max-width: 1240px; margin-inline: auto", t)
+        a = t.index("app.appendChild(header)")
+        b = t.index("header.appendChild(goalsNode)")
+        c = t.index("app.appendChild(tablist)")
+        self.assertTrue(a < b < c)
+
+    def test_todo_pill_counts_in_progress_at_every_width(self):
+        t = self.template()
+        self.assertIn("var todoCount = inProgress.length + urgentItems.length", t)
+        self.assertIn('count: todoCount', t)
+        self.assertNotIn("wide ? 0 : inProgress.length", t)
+        self.assertNotIn("todoBaseCount", t)
 
 
 GOALS = {
