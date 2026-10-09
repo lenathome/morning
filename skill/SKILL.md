@@ -77,7 +77,7 @@ Run every Bash command with absolute paths, one command per call. Never start a 
 
 Make these tool calls in a SINGLE message (parallel tool use):
 
-1. **To-dos** — Notion MCP. Use `notion-search` with `data_source_url: collection://<todo_database_id from config's data source>` to list pages in the Tasks DB. Increase `page_size` to 25 (max) and `max_highlight_length: 0`. Then `notion-fetch` each page to read properties (Name, Due, Status, Category, Type, Client, Area, Parent, Subtasks). Filter out `Status: Done` and filter out `Type: Idea`. An Idea is not a to-do: parked ideas live in `~/product-os/backlog.md` and are reviewed at the cycle boundary, so surfacing them daily buries the actionable rows. Rows with no `Type` set are kept, because an unset Type is missing data rather than a decision. Keep `Parent` and `Subtasks` fields — they drive the parent/subtask rendering in the brief. Always read Status from the live page, never from an earlier brief file. If MCP unavailable, mark to-dos section as "Notion unavailable".
+1. **To-dos** — Notion MCP. Use `notion-search` with `data_source_url: collection://<todo_database_id from config's data source>` to list pages in the Tasks DB. Increase `page_size` to 25 (max) and `max_highlight_length: 0`. Then `notion-fetch` each page to read properties (Name, Due, Status, Category, Type, Client, Area, Parent, Subtasks). Filter out `Status: Done` and filter out `Type: Idea`. An Idea is not a to-do: parked ideas live in `~/product-os/backlog.md` and are reviewed at the cycle boundary, so surfacing them daily buries the actionable rows. Rows with no `Type` set are kept, because an unset Type is missing data rather than a decision. Keep `Parent` and `Subtasks` fields — they drive the parent/subtask rendering in the brief. A task whose live Status is `In progress` and that is not a parent grouper goes to `in_progress` (see "In progress" in the Brief structure section), not to Urgent today, Coming up or the Ideas bank, whatever its Due. A parent grouper (a row with `Subtasks`, or one named by another row's `Parent`) never goes there, even when its own Status is `In progress`; its subtasks are bucketed individually as usual. Always read Status from the live page, never from an earlier brief file. If MCP unavailable, mark to-dos section as "Notion unavailable".
 
 2. **Calendar** — Bash: `python3 ~/github/morning/scripts/fetch_calendar.py "<ekko_email_domain>" "<primary_calendar>" "<calendar.internal_contacts comma-joined, or empty string>" '<calendar.personal_events as a JSON array, or empty string>'` (values from config; second arg restricts gcalcli to your own calendar so shared calendars don't clutter the brief; third arg lists personal contacts who do not make a meeting external; fourth arg lists recurring personal events, which are never external whoever is invited and come back with `is_personal: true`)
 
@@ -104,11 +104,13 @@ Make these tool calls in a SINGLE message (parallel tool use):
 
 12. **Recent ai-log** — Bash: `ls -1 ~/ai-log`, then Read the last two files listed (the two most recent days, so a weekend gap does not hide Friday's work). If the directory is missing, skip.
 
-13. **Goals** — Bash: `python3 ~/github/morning/scripts/parse_goals.py "<paths.product_os>/goals.md"`. Returns `{quarter, status, status_note, goals: [{title, why, done_when}], not_doing}`. If the command exits non-zero, add "Goals unavailable: <first line of stderr>" to `unavailable` and omit `goals` from the brief JSON.
+13. **In-progress actions** — Read tool: `~/morning/state/in-progress.json` (Fathom action keys marked as started in earlier briefs). If the file is missing, treat it as `[]`.
+
+14. **Goals** — Bash: `python3 ~/github/morning/scripts/parse_goals.py "<paths.product_os>/goals.md"`. Returns `{quarter, status, status_note, goals: [{title, why, done_when}], not_doing}`. If the command exits non-zero, add "Goals unavailable: <first line of stderr>" to `unavailable` and omit `goals` from the brief JSON.
 
 ## Step 1a: Drop what is already done
 
-Run this over every Notion task from Step 1.1 and every Fathom action from Step 3a, before anything is bucketed into To do, Your actions, Product actions or the Ideas bank. Drop an item, silently, when any of these says it is done:
+Run this over every Notion task from Step 1.1 and every Fathom action from Step 3a, before anything is bucketed into In progress, To do, Your actions, Product actions or the Ideas bank. Drop an item, silently, when any of these says it is done:
 
 1. **Live Notion Status.** `Done` on the page fetched in Step 1.1 (waiting items follow the Waiting rule below). Never carry a task over from an earlier brief's `.json` or `.md`: those files are history, not a source of tasks.
 2. **Earlier tick-offs.** The task's page id is in the acknowledged-tasks list (Step 1.11), or the action's key is in the acknowledged-actions list (Step 1.7). A Fathom action also counts as ticked when its lowercased, whitespace-normalised text equals that of a ticked action in a previous `<briefs_dir>/<date>.json` (look the ticked keys up there): the same action raised again in a later meeting has a new key.
@@ -146,6 +148,7 @@ Loop over the meetings returned in Step 1.6:
      - **Your actions** — owner equals `fathom.user_name` from config, OR owner is unspecified and the action text mentions `fathom.user_name`.
      - **Team actions** — actions owned by anyone in `fathom.team_action_owners` from config (case-insensitive substring match on the owner string, so "Etienne" matches "Etienne Smith"). These are the people whose work the user might absorb or needs to track (typically managers, peers in tight collaboration). Other owners are excluded entirely. If `team_action_owners` is empty or missing, no team actions are surfaced.
    - Filter out (from EITHER bucket) any action whose key is in the acknowledged-actions list from Step 1.7. Tick-off works the same way regardless of bucket.
+   - An action whose key is in the in-progress list from Step 1.13 goes to `in_progress` (as a `"kind": "fathom"` item) instead of Your actions or Product actions. It is still subject to the Step 1a done-checks first.
    - Cap the team actions bucket at 20 items, ordered by meeting date descending then by position within the meeting. The user can manually look in Fathom for older ones.
 
 2. **Team sync classification.** For each meeting:
@@ -157,7 +160,7 @@ Loop over the meetings returned in Step 1.6:
 
 ## Step 4: Render the brief
 
-Write the brief's content as JSON to `<briefs_dir>/<YYYY-MM-DD>.json`, following the contract in `docs/plans/2026-10-01-brief-html-page.md` (section "The brief JSON contract"). That contract lives in this repo; the skill reads it from `~/github/morning/docs/plans/2026-10-01-brief-html-page.md`. Do not number anything: the renderer does. Put every list in final display order (standalone tasks first, then parent groups alphabetically). Apply the voice guide to every string you write. Assign a `tag` to every to-do (see "Tags on to-dos" in the Brief structure section). Copy the parsed goals JSON from Step 1 item 13 verbatim into the brief JSON's `goals` key, with no rewording. Then run:
+Write the brief's content as JSON to `<briefs_dir>/<YYYY-MM-DD>.json`, following the contract in `docs/plans/2026-10-01-brief-html-page.md` (section "The brief JSON contract"). That contract lives in this repo; the skill reads it from `~/github/morning/docs/plans/2026-10-01-brief-html-page.md`. Do not number anything: the renderer does. Put the started items in the `in_progress` key (Notion tasks with `"kind": "notion"`, Fathom actions with `"kind": "fathom"`); the renderer numbers them first, before Urgent today. Put every list in final display order (standalone tasks first, then parent groups alphabetically). Apply the voice guide to every string you write. Assign a `tag` to every to-do (see "Tags on to-dos" in the Brief structure section). Copy the parsed goals JSON from Step 1 item 14 verbatim into the brief JSON's `goals` key, with no rewording. Then run:
 
 `python3 ~/github/morning/scripts/render_brief.py <briefs_dir>/<date>.json --md <briefs_dir>/<date>.md --shared-md <briefs_dir>/<date>.shared.md --html <briefs_dir>/<date>.html --map ~/morning/state/brief-map-<date>.json --background <output.background if set, else output.backgrounds_dir>`
 
@@ -190,29 +193,36 @@ The quarter's goals strip sits under the focus line as context: it is never numb
 
 ## To do
 
+**In progress**
+
+Notion tasks with live Status `In progress` and Fathom actions marked as started. Numbering starts at 1 here. If there are none, omit this sub-heading.
+
+1. <task> (due <date>)  [<categories>]
+2. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
+
 **Urgent today**
 
-Every to-do with `Due` ≤ today. Numbering starts at 1 here. See "To-do rules" below the template for bucket logic and parent/subtask rendering. If nothing is due, omit this sub-heading.
+Every to-do with `Due` ≤ today. Numbering continues from In progress (it starts at 1 when there is none). See "To-do rules" below the template for bucket logic and parent/subtask rendering. If nothing is due, omit this sub-heading.
 
-1. <standalone task> (due today)  [<categories>]
+3. <standalone task> (due today)  [<categories>]
 
 *<Parent name>:*
 
-2. <subtask> (due today)  [<categories>]
-3. <subtask> (overdue since <date>)  [<categories>]
+4. <subtask> (due today)  [<categories>]
+5. <subtask> (overdue since <date>)  [<categories>]
 
 **Coming up** - N
 
-4. <standalone task> (due <date>)  [<categories>]
+6. <standalone task> (due <date>)  [<categories>]
 
 **Your actions**
 
-5. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
-6. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
+7. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
+8. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
 
 **Product actions**
 
-7. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
+9. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
 
 ## External meeting prep
 
@@ -243,15 +253,15 @@ Awaiting review (N):
 
 **Strategic** - N
 
-8. <standalone task>
+10. <standalone task>
 
 *<Parent name 2>:*
 
-9. <subtask>
+11. <subtask>
 
 **Operational** - N
 
-10. <standalone task>
+12. <standalone task>
 
 ## Engineering progress
 
@@ -263,6 +273,7 @@ The sections below are the rules for each part of the template above.
 ### To do and Ideas bank
 
 **Bucket logic** (each task lands in the first matching bucket):
+0. **In progress** - live Status `In progress` and not a parent grouper. Goes in the `in_progress` list, never in the three buckets below. Renders under `**In progress**` in `## To do`, before Urgent today. Fathom actions whose key is in the in-progress list (Step 1.13) join it. Order: Notion tasks first, sorted by due date (undated last), then Fathom actions in the order they came.
 1. **Urgent today** - has `Due` ≤ today. Renders under `**Urgent today**` in `## To do`.
 2. **Coming up** - has `Due` after today, ordered by due date. Renders under `**Coming up**` in `## To do`.
 3. **Ideas bank** - has no `Due` date. Renders under `## Ideas bank`, split into **Strategic** (`Category` contains `Strategic`) and **Operational** (everything else). Per-item category tags are not shown in the Ideas bank.
@@ -291,9 +302,11 @@ A parent group renders as a standalone italic line, `*<Parent name>:*`, on its o
 
 Each line shows the task title, its due date if any, and its categories as inline `[Tag1, Tag2]` after the title. Numbered lines have no checkbox.
 
-**Numbering.** Every actionable line across the WHOLE brief shares one running number sequence, in page order: Urgent today (starting at 1), Coming up, Your actions, Product actions, Testing, then the Ideas bank (Strategic, then Operational). Parent-name sub-headers are not actionable and do not consume a number; only standalone tasks, subtasks and action items do. PR lines are not numbered. The renderer assigns the numbers and writes the map to `~/morning/state/brief-map-<date>.json`; the model never numbers anything.
+**Numbering.** Every actionable line across the WHOLE brief shares one running number sequence, in page order: In progress (starting at 1), Urgent today (starting at 1 when there is no In progress), Coming up, Your actions, Product actions, Testing, then the Ideas bank (Strategic, then Operational). Parent-name sub-headers are not actionable and do not consume a number; only standalone tasks, subtasks and action items do. PR lines are not numbered. The renderer assigns the numbers and writes the map to `~/morning/state/brief-map-<date>.json`; the model never numbers anything.
 
-JSON mapping: Urgent today goes in `urgent`, Coming up in `todos.coming_up`, Strategic in `ideas.strategic`, Operational in `ideas.other`.
+JSON mapping: In progress goes in `in_progress`, Urgent today goes in `urgent`, Coming up in `todos.coming_up`, Strategic in `ideas.strategic`, Operational in `ideas.other`.
+
+A task or action in `in_progress` does not also appear in any other bucket. Tick it off like any other number; ticking a Fathom action off (Step 7) also removes it from the in-progress list.
 
 If every to-do bucket is empty, render `## To do` with "Notion DB is empty. Add tasks at <DB url>". If a sub-heading's list is empty, omit it. If Notion is unavailable, render `## To do` with "Notion unavailable".
 
@@ -324,7 +337,7 @@ Omit a bucket or sub-list that is empty. If both sub-lists are empty, write "Not
 
 The tags are alpha: the model's first guess, not reviewed, and the brief says so. The renderer adds the note; the model writes nothing extra.
 
-Every to-do gets a `tag` saying who should own it: each item in `urgent`, `todos.coming_up`, `ideas.strategic` and `ideas.other`, and each entry in `actions.yours` and `actions.product`. Testing items carry none. Shape: `"tag": {"verdict": "needs-lena" | "split" | "handoff", "who": "<first name, empty for needs-lena>", "why": "<one short sentence>"}`.
+Every to-do gets a `tag` saying who should own it: each item in `in_progress`, `urgent`, `todos.coming_up`, `ideas.strategic` and `ideas.other`, and each entry in `actions.yours` and `actions.product`. Testing items carry none. Shape: `"tag": {"verdict": "needs-lena" | "split" | "handoff", "who": "<first name, empty for needs-lena>", "why": "<one short sentence>"}`.
 
 Legend: needs-Lena = product judgement, sign-off or a relationship only you hold; split = someone else does the legwork, you decide or sign off; handoff = someone else can own it end to end.
 
@@ -341,7 +354,7 @@ The shared copy of the brief is read by Etienne and his agents, so the tags and 
 
 ### Your actions and Product actions
 
-These render inside `## To do`, after Coming up. Numbering continues from the last Coming up item (or from Urgent today if Coming up is empty). Each `**Your actions**` / `**Product actions**` heading is followed by a blank line before its numbered list starts, for the same CommonMark reason.
+These render inside `## To do`, after Coming up. Numbering continues from the last Coming up item (or from Urgent today, or In progress, if the ones before are empty). Each `**Your actions**` / `**Product actions**` heading is followed by a blank line before its numbered list starts, for the same CommonMark reason.
 
 **Your actions** - action items where you're the owner or named. The action text MUST be wrapped as a markdown link to the Fathom timestamp URL so you can jump into the recording at the exact moment the action was raised.
 
@@ -357,7 +370,7 @@ N+1. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
 N+2. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
 ...
 
-Numbering continues sequentially from the Your actions list. Testing then continues from the last action item, and the Ideas bank from the last Testing item. Owner names are NOT shown inline because all entries in this section share the same configured owner(s); putting the name on each line just adds noise. The tick-off prompt in Step 7 accepts any number from anywhere in the brief: Urgent today, Coming up, Your actions, Product actions, Testing or the Ideas bank alike.
+Numbering continues sequentially from the Your actions list. Testing then continues from the last action item, and the Ideas bank from the last Testing item. Owner names are NOT shown inline because all entries in this section share the same configured owner(s); putting the name on each line just adds noise. The tick-off prompt in Step 7 accepts any number from anywhere in the brief: In progress, Urgent today, Coming up, Your actions, Product actions, Testing or the Ideas bank alike.
 
 (If this list is empty: skip the sub-section entirely.)
 
@@ -456,9 +469,9 @@ Examples (bad):
 3. If publishing fails for any reason, say so in one line and print the full markdown archive inline instead, verbatim. The user must never end up with neither.
 4. Publish the shared copy to product-os. Run `~/github/morning/scripts/publish_brief.sh <date> <briefs_dir>/<date>.shared.md <paths.product_os>` (expand `~` to the absolute home path first, in the script path and the arguments). Use exactly that script path and run no other git command against product-os: the script does the copy, commit and push itself. Add one line to the final message with the JSON result line it prints last (`{"committed": ..., "pushed": ..., "reason": ...}`). A non-zero exit (2 = unpushed commits outside briefs/, 3 = behind origin/main, 4 = push failed) is reported with the script's message and never retried with other git commands. It never blocks the rest of the brief: Steps 7 and 8 carry on either way. If `paths.product_os` is missing from the config, say so in one line and skip this step.
 
-## Step 7: Action item tick-off
+## Step 7: Action item tick-off and start
 
-If the brief has any numbered lines (To do, Testing or Ideas bank):
+If the brief has any numbered lines (In progress, To do, Testing or Ideas bank):
 
 1. Print exactly: `Already done any? (numbers comma-separated, blank to skip):`
 2. Wait for the user's reply in the same conversation.
@@ -468,10 +481,14 @@ If the brief has any numbered lines (To do, Testing or Ideas bank):
 6. For a Fathom action: run `python3 ~/github/morning/scripts/ack_action.py <key1> <key2> ...` (batch all such keys into one call).
 7. For a Testing item (kind `test`): run `python3 ~/github/morning/scripts/ack_test.py <key1> <key2> ...` (batch all such keys into one call).
 8. Confirm to the user: `Marked N item(s) done. They won't appear tomorrow.`
+9. Then print exactly: `Started any? (numbers comma-separated, blank to skip):` and wait for the reply. Parse it as in step 3 and look the numbers up in the same map. Skip numbers the user just marked done.
+10. For a Notion to-do (kind `notion`): update that page's `Status` property to `In progress` via the Notion MCP.
+11. For a Fathom action (kind `fathom`): run `python3 ~/github/morning/scripts/mark_in_progress.py <key1> <key2> ...` (batch all such keys into one call). Testing items (kind `test`) cannot be started: ignore those numbers.
+12. Confirm to the user: `Moved N item(s) to In progress.` They show under In progress from the next brief.
 
-If the brief had no numbered lines, skip this step entirely.
+If the brief had no numbered lines, skip this step entirely. Both prompts are skipped together.
 
-Unattended runs (scheduled, no user present) never run this step. Step 0 still prints any pending project updates and stops; nothing is accepted or rejected until the user replies.
+Unattended runs (scheduled, no user present) never run this step, including the "Started any?" prompt. Step 0 still prints any pending project updates and stops; nothing is accepted or rejected until the user replies.
 
 ## Step 7b: PR park
 

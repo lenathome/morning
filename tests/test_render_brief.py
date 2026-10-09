@@ -548,6 +548,137 @@ class CliTest(unittest.TestCase):
             self.assertIn("weekday_label", r.stderr)
 
 
+IN_PROGRESS = [
+    {"kind": "notion", "id": "ip1", "title": "Draft the SDK FAQ", "due": "due 3 Oct", "categories": ["Operational"],
+     "note": "", "tag": {"verdict": "needs-lena", "who": "", "why": "Your call on the wording."}},
+    {"kind": "fathom", "key": "ipk1", "text": "Send the deck", "url": "https://fathom.video/calls/9?timestamp=1",
+     "meeting": "Partner call", "date": "2 Oct"},
+]
+
+
+def with_in_progress(items):
+    b = load()
+    b["in_progress"] = items
+    return b
+
+
+class InProgressTest(unittest.TestCase):
+    def template(self):
+        return (ROOT / "scripts" / "brief_template.html").read_text()
+
+    def test_numbered_first_and_mapped_with_kind(self):
+        brief, numbers = render_brief.number_items(with_in_progress(IN_PROGRESS))
+        self.assertEqual([i["n"] for i in brief["in_progress"]], [1, 2])
+        self.assertEqual(brief["urgent"][0]["items"][0]["n"], 3)
+        self.assertEqual(brief["ideas"]["other"][0]["items"][0]["n"], 11)
+        self.assertEqual(numbers["1"], {"kind": "notion", "id": "ip1"})
+        self.assertEqual(numbers["2"], {"kind": "fathom", "key": "ipk1"})
+        self.assertEqual(numbers["3"], {"kind": "notion", "id": "p1"})
+        self.assertEqual(len(numbers), 11)
+        c = render_brief.counts(brief)
+        self.assertEqual(c["in_progress"], 2)
+        self.assertEqual(c["max_number"], 11)
+
+    def test_markdown_section_sits_before_urgent_with_matching_lines(self):
+        brief, _ = render_brief.number_items(with_in_progress(IN_PROGRESS))
+        for shared in (False, True):
+            md = render_brief.to_markdown(brief, shared=shared)
+            self.assertIn("**In progress**\n\n"
+                          "1. Draft the SDK FAQ (due 3 Oct)  [Operational] [needs-Lena]\n"
+                          "   *Your call on the wording.*\n"
+                          '2. [Send the deck](https://fathom.video/calls/9?timestamp=1) (from "Partner call", 2 Oct)\n'
+                          "\n**Urgent today**\n\n3. Standalone urgent", md)
+            self.assertLess(md.index("## To do"), md.index("**In progress**"))
+            self.assertLess(md.index("**In progress**"), md.index("**Urgent today**"))
+
+    def test_note_comes_before_the_section_and_tags_count(self):
+        b = with_in_progress(IN_PROGRESS)
+        brief, _ = render_brief.number_items(b)
+        md = render_brief.to_markdown(brief)
+        self.assertIn("## To do\n\n_" + render_brief.ALPHA_NOTE + "_\n\n**In progress**", md)
+
+    def test_absent_or_empty_renders_exactly_as_before(self):
+        plain, plain_map = render_brief.number_items(load())
+        for value in ([], None):
+            b = load()
+            b["in_progress"] = value
+            brief, numbers = render_brief.number_items(b)
+            self.assertEqual(numbers, plain_map)
+            self.assertEqual(render_brief.to_markdown(brief), render_brief.to_markdown(plain))
+            self.assertNotIn("In progress", render_brief.to_markdown(brief))
+            self.assertEqual(render_brief.counts(brief), render_brief.counts(plain))
+
+    def test_bad_shapes_name_the_problem(self):
+        cases = [
+            ("not a list", "x", "'in_progress' is not a list"),
+            ("not an object", ["x"], "in_progress item 1 is not an object"),
+            ("no kind", [{"id": "a", "title": "T"}], "unknown kind"),
+            ("bad kind", [{"kind": "slack", "id": "a"}], "unknown kind 'slack'"),
+            ("notion without id", [{"kind": "notion", "title": "Lost task"}], "Lost task.*no 'id'"),
+            ("fathom without key", [{"kind": "fathom", "text": "Lost action"}], "Lost action.*no 'key'"),
+            ("bad tag", [{"kind": "notion", "id": "a", "title": "Tagged", "tag": {"verdict": "you"}}],
+             "Tagged.*unknown tag verdict"),
+        ]
+        for name, value, pattern in cases:
+            with self.subTest(name):
+                with self.assertRaisesRegex(ValueError, pattern):
+                    render_brief.number_items(with_in_progress(value))
+
+    def test_cli_exits_1_on_bad_in_progress(self):
+        with tempfile.TemporaryDirectory() as d:
+            bad = Path(d) / "b.json"
+            bad.write_text(json.dumps(with_in_progress([{"kind": "fathom", "text": "Lost action"}])))
+            r = subprocess.run([sys.executable, str(SCRIPT), str(bad), "--md", str(Path(d) / "x.md")],
+                               capture_output=True, text=True)
+            self.assertEqual(r.returncode, 1)
+            self.assertIn("Lost action", r.stderr)
+
+    def test_cli_map_carries_the_kinds(self):
+        with tempfile.TemporaryDirectory() as d:
+            src = Path(d) / "b.json"
+            src.write_text(json.dumps(with_in_progress(IN_PROGRESS)))
+            r = subprocess.run([sys.executable, str(SCRIPT), str(src), "--map", str(Path(d) / "m.json")],
+                               capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            m = json.loads((Path(d) / "m.json").read_text())["numbers"]
+            self.assertEqual(m["2"], {"kind": "fathom", "key": "ipk1"})
+            self.assertIn('"in_progress": 2', r.stdout)
+
+    def test_html_embeds_the_items_and_template_builds_the_section(self):
+        brief, _ = render_brief.number_items(with_in_progress(IN_PROGRESS))
+        html = render_brief.to_html(brief)
+        self.assertIn('"in_progress": [', html)
+        self.assertIn('"kind": "fathom"', html)
+        t = self.template()
+        self.assertIn("brief.in_progress", t)
+        self.assertIn('section("In progress", inProgress.length', t)
+        self.assertIn('i.kind === "fathom" ? actionRow(i) : todoRow(i, true)', t)
+        self.assertNotIn("innerHTML", t)
+
+    def test_template_two_column_only_with_in_progress_and_projects_moves_to_main(self):
+        t = self.template()
+        # the grid only applies to a wrap that has a side column
+        self.assertIn(".wrap.has-side { max-width: 1240px; display: grid;", t)
+        self.assertNotRegex(t, r"\n  \.wrap \{ max-width: 1400px; display: grid")
+        self.assertIn('app.classList.toggle("has-side", wide)', t)
+        # no in-progress items: the side column is never added to the page
+        self.assertIn("if (inProgressNode) app.appendChild(side)", t)
+        self.assertIn("var inProgressNode = inProgress.length ?", t)
+        # wide: projects at the bottom of the main column; narrow: back in its tab
+        self.assertIn("(wide ? main : panels.projects).appendChild(projectsNode)", t)
+        self.assertNotIn("(wide ? side : panels.projects)", t)
+        # narrow: in progress is the first thing in the To do panel
+        self.assertIn("panels.todo.insertBefore(inProgressNode, panels.todo.firstChild)", t)
+        self.assertIn("(min-width: 1100px)", t)
+
+    def test_todo_pill_counts_in_progress_only_while_it_is_in_the_panel(self):
+        t = self.template()
+        self.assertIn("todoBaseCount + (wide ? 0 : inProgress.length)", t)
+        self.assertIn('{ id: "todo", label: "To do", build: todoTab, count: todoBaseCount', t)
+        ids = re.findall(r'\{ id: "(\w+)", label: "([^"]+)"', t)
+        self.assertEqual([i for i, _ in ids], ["todo", "prs", "testing", "ideas", "projects"])
+
+
 GOALS = {
     "quarter": "Q4 2026", "status": "draft", "status_note": "Waiting on feedback",
     "goals": [
