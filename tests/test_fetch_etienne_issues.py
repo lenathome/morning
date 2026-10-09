@@ -3,7 +3,6 @@ import io
 import json
 import subprocess
 import sys
-import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -14,35 +13,32 @@ import fetch_etienne_issues as fei  # noqa: E402
 
 
 def issue(number, author="EtienneEkko", title="Something", labels=("from-etienne",), body="body"):
-    return {"number": number, "title": title, "url": f"https://github.com/lenathome/product-os/issues/{number}",
-            "author": {"login": author}, "labels": [{"name": l} for l in labels],
-            "updatedAt": "2026-10-08T09:00:00Z", "body": body}
+    return {"number": number, "title": title, "html_url": f"https://github.com/lenathome/product-os/issues/{number}",
+            "user": {"login": author}, "labels": [{"name": l} for l in labels],
+            "updated_at": "2026-10-08T09:00:00Z", "body": body}
 
 
-def comment(cid, author="EtienneEkko", body="hi"):
-    return {"id": cid, "author": {"login": author}, "createdAt": "2026-10-08T10:00:00Z",
-            "body": body, "url": f"https://example.com/{cid}"}
+def comment(cid, author="EtienneEkko", body="hi", at="2026-10-08T10:00:00Z"):
+    return {"id": cid, "user": {"login": author}, "created_at": at,
+            "body": body, "html_url": f"https://example.com/{cid}"}
 
 
 class FetchEtienneIssuesTest(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp.cleanup)
-        self.state = Path(self.tmp.name) / "nested" / "etienne-issues.json"
         self.issues = []
         self.comments = {}
-        p = mock.patch.object(fei, "STATE_FILE", self.state)
-        p.start()
-        self.addCleanup(p.stop)
         p = mock.patch.object(fei, "run_gh", side_effect=self.fake_gh)
         p.start()
         self.addCleanup(p.stop)
 
     def fake_gh(self, args):
-        if args[:2] == ["issue", "list"]:
+        if args[0] == "api" and args[-1].startswith("repos/lenathome/product-os/issues?"):
             return json.dumps(self.issues)
-        if args[:2] == ["issue", "view"]:
-            return json.dumps({"comments": self.comments.get(int(args[2]), [])})
+        if args[0] == "api" and "/comments?" in args[-1]:
+            number = int(args[-1].split("/issues/")[1].split("/")[0])
+            cs = self.comments.get(number, [])
+            # emulate --paginate: one JSON array per page of 2, back to back
+            return "".join(json.dumps(cs[i:i + 2]) for i in range(0, len(cs), 2)) or "[]"
         raise AssertionError(args)
 
     def run_main(self, *argv):
@@ -56,9 +52,9 @@ class FetchEtienneIssuesTest(unittest.TestCase):
         self.assertEqual(code, 0)
         return json.loads(out)["items"]
 
-    def test_new_issue_by_label_includes_only_etienne_comments(self):
+    def test_new_issue_by_label_includes_etienne_comments(self):
         self.issues = [issue(5, body="please look")]
-        self.comments[5] = [comment("c1"), comment("c2", author="lenathome")]
+        self.comments[5] = [comment("c1")]
         items = self.check()
         self.assertEqual(len(items), 1)
         it = items[0]
@@ -66,6 +62,26 @@ class FetchEtienneIssuesTest(unittest.TestCase):
         self.assertEqual([c["id"] for c in it["new_comments"]], ["c1"])
         self.assertEqual(it["new_comments"][0]["author"], "EtienneEkko")
         self.assertEqual(set(it["new_comments"][0]), {"id", "author", "created_at", "body", "url"})
+
+    def test_pull_requests_filtered_out(self):
+        pr = issue(7)
+        pr["pull_request"] = {"url": "x"}
+        self.issues = [pr, issue(8)]
+        self.assertEqual([i["number"] for i in self.check()], [8])
+
+    def test_null_body_becomes_empty_string(self):
+        self.issues = [issue(5, body=None)]
+        self.assertEqual(self.check()[0]["body"], "")
+
+    def test_multi_page_comments(self):
+        self.issues = [issue(5)]
+        self.comments[5] = [comment("c1", at="2026-10-08T09:00:00Z"),
+                            comment("c2", at="2026-10-08T09:30:00Z"),
+                            comment("c3", author="lenathome", at="2026-10-08T10:00:00Z"),
+                            comment("c4", at="2026-10-08T11:00:00Z"),
+                            comment("c5", at="2026-10-08T12:00:00Z")]
+        items = self.check()
+        self.assertEqual([c["id"] for c in items[0]["new_comments"]], ["c4", "c5"])
 
     def test_explicit_check_subcommand_matches_default(self):
         self.issues = [issue(5)]
@@ -92,53 +108,43 @@ class FetchEtienneIssuesTest(unittest.TestCase):
         self.issues = [issue(9), issue(2)]
         self.assertEqual([i["number"] for i in self.check()], [2, 9])
 
-    def test_after_mark_nothing_then_update_with_only_new_comment(self):
+    def test_new_when_no_comment_by_us(self):
         self.issues = [issue(5)]
         self.comments[5] = [comment("c1")]
-        code, out, _ = self.run_main("mark", "5")
-        self.assertEqual((code, json.loads(out)), (0, {"marked": [5]}))
-        self.assertEqual(self.check(), [])
-        self.comments[5].append(comment("c2", body="more"))
+        items = self.check()
+        self.assertEqual([i["kind"] for i in items], ["new"])
+
+    def test_update_only_comments_after_our_latest(self):
+        self.issues = [issue(5)]
+        self.comments[5] = [
+            comment("c1", at="2026-10-08T09:00:00Z"),
+            comment("c2", author="lenathome", at="2026-10-08T10:00:00Z"),
+            comment("c3", at="2026-10-08T11:00:00Z", body="more"),
+        ]
         items = self.check()
         self.assertEqual(len(items), 1)
         self.assertEqual((items[0]["kind"], items[0]["body"]), ("update", ""))
-        self.assertEqual([c["id"] for c in items[0]["new_comments"]], ["c2"])
+        self.assertEqual([c["id"] for c in items[0]["new_comments"]], ["c3"])
 
-    def test_comment_by_lenathome_after_mark_yields_nothing(self):
+    def test_nothing_after_our_comment_not_listed(self):
         self.issues = [issue(5)]
-        self.comments[5] = [comment("c1")]
-        self.run_main("mark", "5")
-        self.comments[5].append(comment("c2", author="lenathome"))
+        self.comments[5] = [comment("c1", at="2026-10-08T09:00:00Z"),
+                            comment("c2", author="lenathome", at="2026-10-08T10:00:00Z")]
         self.assertEqual(self.check(), [])
 
-    def test_check_does_not_write_state(self):
+    def test_timestamps_compared_as_datetimes(self):
         self.issues = [issue(5)]
-        self.check()
-        self.assertFalse(self.state.exists())
+        self.comments[5] = [comment("c1", author="lenathome", at="2026-10-08T10:00:00+00:00"),
+                            comment("c2", at="2026-10-08T10:00:00Z")]
+        self.assertEqual(self.check(), [])
 
-    def test_mark_records_all_authors_and_keeps_other_state(self):
-        self.state.parent.mkdir(parents=True)
-        self.state.write_text(json.dumps({"issues": {"7": {"seen_comment_ids": ["x"], "seen_at": "t"}}}))
-        self.comments[5] = [comment("c1"), comment("c2", author="lenathome")]
-        self.run_main("mark", "5")
-        data = json.loads(self.state.read_text())["issues"]
-        self.assertEqual(data["5"]["seen_comment_ids"], ["c1", "c2"])
-        self.assertTrue(data["5"]["seen_at"].endswith("Z"))
-        self.assertEqual(data["7"], {"seen_comment_ids": ["x"], "seen_at": "t"})
-
-    def test_forget_removes_entry(self):
-        self.comments[5] = [comment("c1")]
-        self.run_main("mark", "5", "6")
-        code, out, _ = self.run_main("forget", "5")
-        self.assertEqual((code, json.loads(out)), (0, {"forgotten": [5]}))
-        self.assertEqual(list(json.loads(self.state.read_text())["issues"]), ["6"])
-
-    def test_missing_state_is_empty_and_mark_creates_nested_dir(self):
-        self.assertFalse(self.state.parent.exists())
-        self.issues = [issue(5)]
-        self.assertEqual(len(self.check()), 1)
-        self.run_main("mark", "5")
-        self.assertTrue(self.state.exists())
+    def test_pending_lists_needs_lena_sorted(self):
+        self.issues = [issue(9, labels=("from-etienne", "needs-lena")), issue(2, labels=("from-etienne",)),
+                       issue(4, labels=("from-etienne", "needs-lena"), author="other")]
+        code, out, _ = self.run_main("pending")
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(out), {"items": [
+            {"number": 9, "title": "Something", "url": "https://github.com/lenathome/product-os/issues/9"}]})
 
     def test_gh_failure_exits_1(self):
         err = subprocess.CalledProcessError(1, ["gh"], stderr="boom happened\nsecond line\n")
@@ -147,12 +153,8 @@ class FetchEtienneIssuesTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertEqual(stderr.strip(), "gh failed: boom happened")
 
-    def test_mark_without_numbers_exits_2(self):
-        code, _, _ = self.run_main("mark")
-        self.assertEqual(code, 2)
-
-    def test_mark_non_integer_exits_2(self):
-        code, _, _ = self.run_main("mark", "abc")
+    def test_unknown_flag_exits_2(self):
+        code, _, _ = self.run_main("check", "--bogus")
         self.assertEqual(code, 2)
 
 
