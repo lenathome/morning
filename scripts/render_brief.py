@@ -241,8 +241,7 @@ def _goals_md(goals: dict | None) -> list[str]:
         return []
     L = [f"## {goals['quarter']} goals", ""]
     if goals.get("status", "") != "agreed":
-        note = goals.get("status_note", "").strip()
-        L += [f"_Draft: {note}_" if note else "_Draft_", ""]
+        L += ["_Draft_", ""]
     for g in goals["goals"]:
         L += [f"- **{g['title']}**"]
         if g.get("why", "").strip():
@@ -250,8 +249,6 @@ def _goals_md(goals: dict | None) -> list[str]:
         if g.get("done_when"):
             L += ["  - Done when:"] + [f"    - {x}" for x in g["done_when"]]
     L += [""]
-    if goals.get("not_doing"):
-        L += ["Not doing: " + "; ".join(x.rstrip(".") for x in goals["not_doing"]), ""]
     return L
 
 
