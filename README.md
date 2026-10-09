@@ -47,6 +47,16 @@ The tool is a Claude Code skill plus small Python and shell scripts. The skill i
 
 The brief is JSON. Claude writes it to `~/morning/briefs/<date>.json` and never numbers anything. `scripts/render_brief.py` validates it, numbers every actionable line and writes four files: a markdown archive, a shared markdown copy without the external meeting prep (`--shared-md`), an HTML page (`scripts/brief_template.html` with the JSON embedded, rendered in the browser) and a map from number to Notion page or Fathom action. The tick-off step reads that map, which is why numbers stay stable between the page and the chat.
 
+### Background photo
+
+The page can show a seasonal photo behind the header. Put one photo per season in `~/morning/backgrounds/` named `spring`, `summer`, `autumn` and `winter` (`.jpg`), and the date picks which one shows. To add or swap one, shrink it with the prep script, which saves a 1600px, low-quality JPEG (about 200KB) over the old file:
+
+```
+scripts/prep_background.sh ~/Pictures/leaves.jpg autumn
+```
+
+Set `output.background` in `config.yaml` to use one file all year. With no photo the page looks as before. The photo is embedded in the page, so keep files under about 600KB.
+
 I built it with Claude Code. The spec and the implementation plans in `docs/plans` were written first and each plan is split into tasks for agents to execute one at a time. The scripts use the Python standard library only.
 
 ## Setup
