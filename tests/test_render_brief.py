@@ -581,11 +581,24 @@ class GoalsTest(unittest.TestCase):
         for shared in (False, True):
             md = render_brief.to_markdown(brief, shared=shared)
             focus_end = md.index("\n\n", md.index("> **Today's focus:**")) + 2
-            self.assertTrue(md[focus_end:].startswith("## Q4 2026 goals\n\n_Draft: Waiting on feedback_\n\n"))
+            self.assertTrue(md[focus_end:].startswith("## Q4 2026 goals\n\n_Draft_\n\n"))
             self.assertIn("- **Harden the API**\n  - Why: Partners build on it.\n"
                           "  - Done when:\n    - Header is live.\n    - Re-quote ships.\n", md)
             self.assertIn("- **Explore Shopify**\n\n", md)
-            self.assertIn("Not doing: The carbon update; The Verra deal\n", md)
+            self.assertNotIn("Not doing", md)
+            self.assertNotIn("Waiting on feedback", md)
+
+    def test_status_note_and_not_doing_are_not_displayed(self):
+        brief, _ = render_brief.number_items(with_goals(GOALS))
+        md = render_brief.to_markdown(brief)
+        self.assertNotIn("Waiting on feedback", md)
+        self.assertNotIn("Not doing", md)
+        # The page embeds the brief JSON, so the raw text is in the data; what matters is that the
+        # template has no element or label that renders it.
+        html = render_brief.to_html(brief)
+        self.assertNotIn("Not doing", html)
+        for marker in ("gnote", "notdoing", "goals.status_note", "goals.not_doing"):
+            self.assertNotIn(marker, html)
 
     def test_agreed_goals_have_no_draft_line(self):
         brief, _ = render_brief.number_items(with_goals({**GOALS, "status": "agreed"}))

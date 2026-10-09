@@ -213,11 +213,9 @@ tr:last-child td { border-bottom: 0; }
 /* goals strip: context under the header, not numbered. Rows reuse the project row styles. */
 .goals h2 { flex-wrap: wrap; }
 .goals .pill.draft { background: var(--warn-soft); color: var(--warn); text-transform: none; letter-spacing: 0; }
-.goals .gnote { font-size: 12.5px; color: var(--muted); }
 .goals .detail p.glabel { font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
-.goals .notdoing { font-size: 12.5px; color: var(--muted); }
-/* over a seasonal photo (body.has-bg), the heading and note get a soft panel so they stay legible */
-body.has-bg .goals > h2, body.has-bg .goals > .gnote {
+/* over a seasonal photo (body.has-bg), the heading gets a soft panel so it stays legible */
+body.has-bg .goals > h2 {
   align-self: flex-start; color: var(--fg); border-radius: 6px; padding: 4px 8px;
   background: color-mix(in srgb, var(--bg) 72%, transparent);
   backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
@@ -478,9 +476,7 @@ body.has-bg .goals > h2, body.has-bg .goals > .gnote {
     var draft = goals.status !== "agreed";
     return el("section", { "class": "group goals", "aria-label": "Goals" }, [
       el("h2", {}, [(goals.quarter || "") + " goals", draft ? span("pill draft", "Draft") : null]),
-      draft && goals.status_note ? el("div", { "class": "gnote", text: goals.status_note }) : null,
-      el("div", { "class": "panel prows" }, goals.goals.map(goalRow)),
-      (goals.not_doing || []).length ? el("div", { "class": "notdoing", text: "Not doing: " + goals.not_doing.map(function (x) { return x.replace(/\.$/, ""); }).join("; ") }) : null
+      el("div", { "class": "panel prows" }, goals.goals.map(goalRow))
     ]);
   }
 
