@@ -104,6 +104,8 @@ Make these tool calls in a SINGLE message (parallel tool use):
 
 12. **Recent ai-log** — Bash: `ls -1 ~/ai-log`, then Read the last two files listed (the two most recent days, so a weekend gap does not hide Friday's work). If the directory is missing, skip.
 
+13. **Goals** — Bash: `python3 ~/github/morning/scripts/parse_goals.py "<paths.product_os>/goals.md"`. Returns `{quarter, status, status_note, goals: [{title, why, done_when}], not_doing}`. If the command exits non-zero, add "Goals unavailable: <first line of stderr>" to `unavailable` and omit `goals` from the brief JSON.
+
 ## Step 1a: Drop what is already done
 
 Run this over every Notion task from Step 1.1 and every Fathom action from Step 3a, before anything is bucketed into To do, Your actions, Product actions or the Ideas bank. Drop an item, silently, when any of these says it is done:
@@ -155,7 +157,7 @@ Loop over the meetings returned in Step 1.6:
 
 ## Step 4: Render the brief
 
-Write the brief's content as JSON to `<briefs_dir>/<YYYY-MM-DD>.json`, following the contract in `docs/plans/2026-10-01-brief-html-page.md` (section "The brief JSON contract"). That contract lives in this repo; the skill reads it from `~/github/morning/docs/plans/2026-10-01-brief-html-page.md`. Do not number anything: the renderer does. Put every list in final display order (standalone tasks first, then parent groups alphabetically). Apply the voice guide to every string you write. Assign a `tag` to every to-do (see "Tags on to-dos" in the Brief structure section). Then run:
+Write the brief's content as JSON to `<briefs_dir>/<YYYY-MM-DD>.json`, following the contract in `docs/plans/2026-10-01-brief-html-page.md` (section "The brief JSON contract"). That contract lives in this repo; the skill reads it from `~/github/morning/docs/plans/2026-10-01-brief-html-page.md`. Do not number anything: the renderer does. Put every list in final display order (standalone tasks first, then parent groups alphabetically). Apply the voice guide to every string you write. Assign a `tag` to every to-do (see "Tags on to-dos" in the Brief structure section). Copy the parsed goals JSON from Step 1 item 13 verbatim into the brief JSON's `goals` key, with no rewording. Then run:
 
 `python3 ~/github/morning/scripts/render_brief.py <briefs_dir>/<date>.json --md <briefs_dir>/<date>.md --shared-md <briefs_dir>/<date>.shared.md --html <briefs_dir>/<date>.html --map ~/morning/state/brief-map-<date>.json`
 
@@ -174,6 +176,8 @@ If the entire orchestration fails before rendering, write a one-line error to `~
 ## Brief structure
 
 The model writes the brief JSON (Step 4); `render_brief.py` produces the markdown archive and the page from it. Apply the voice guide at every step.
+
+The quarter's goals strip sits under the focus line as context: it is never numbered, never in the number map and never ticked off.
 
 ### Markdown archive layout (produced by render_brief.py)
 
