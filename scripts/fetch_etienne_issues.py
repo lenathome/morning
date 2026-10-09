@@ -54,8 +54,26 @@ def login_of(obj: dict | None) -> str:
     return ((obj or {}).get("login") or "").lower()
 
 
+def parse_pages(raw: str) -> list[dict]:
+    """Parse `gh api --paginate` output: one or more JSON arrays back to back."""
+    decoder = json.JSONDecoder()
+    out: list[dict] = []
+    i, n = 0, len(raw)
+    while i < n:
+        while i < n and raw[i].isspace():
+            i += 1
+        if i >= n:
+            break
+        value, i = decoder.raw_decode(raw, i)
+        if isinstance(value, list):
+            out.extend(value)
+        else:
+            out.append(value)
+    return out
+
+
 def qualifies(issue: dict, authors: set[str]) -> bool:
-    if login_of(issue.get("author")) not in authors:
+    if login_of(issue.get("user")) not in authors:
         return False
     labels = {(l.get("name") or "").lower() for l in issue.get("labels") or []}
     title = (issue.get("title") or "").lower()
@@ -63,17 +81,17 @@ def qualifies(issue: dict, authors: set[str]) -> bool:
 
 
 def fetch_comments(number: int) -> list[dict]:
-    raw = run_gh(["issue", "view", str(number), "-R", REPO, "--json", "comments"])
-    return json.loads(raw).get("comments") or []
+    raw = run_gh(["api", "--paginate", f"repos/{REPO}/issues/{number}/comments?per_page=100"])
+    return parse_pages(raw)
 
 
 def shape_comment(c: dict) -> dict:
     return {
         "id": c.get("id"),
-        "author": (c.get("author") or {}).get("login", ""),
-        "created_at": c.get("createdAt"),
-        "body": c.get("body", ""),
-        "url": c.get("url"),
+        "author": (c.get("user") or {}).get("login", ""),
+        "created_at": c.get("created_at"),
+        "body": c.get("body") or "",
+        "url": c.get("html_url"),
     }
 
 
@@ -84,9 +102,8 @@ def parse_ts(value: str | None) -> datetime:
 
 
 def list_qualifying(authors: set[str]) -> list[dict]:
-    raw = run_gh(["issue", "list", "-R", REPO, "--state", "open", "--limit", "100",
-                  "--json", "number,title,url,author,labels,updatedAt,body"])
-    issues = [i for i in json.loads(raw) if qualifies(i, authors)]
+    raw = run_gh(["api", f"repos/{REPO}/issues?state=open&per_page=100"])
+    issues = [i for i in parse_pages(raw) if "pull_request" not in i and qualifies(i, authors)]
     return sorted(issues, key=lambda i: i["number"])
 
 
@@ -94,15 +111,15 @@ def cmd_check(authors: set[str]) -> dict:
     items = []
     for issue in list_qualifying(authors):
         comments = fetch_comments(issue["number"])
-        theirs = [c for c in comments if login_of(c.get("author")) in authors]
-        ours = [c for c in comments if login_of(c.get("author")) not in authors]
-        base = {"number": issue["number"], "title": issue["title"], "url": issue["url"]}
+        theirs = [c for c in comments if login_of(c.get("user")) in authors]
+        ours = [c for c in comments if login_of(c.get("user")) not in authors]
+        base = {"number": issue["number"], "title": issue["title"], "url": issue["html_url"]}
         if not ours:
-            items.append({**base, "kind": "new", "body": issue.get("body", ""),
+            items.append({**base, "kind": "new", "body": issue.get("body") or "",
                           "new_comments": [shape_comment(c) for c in theirs]})
             continue
-        latest = max(parse_ts(c.get("createdAt")) for c in ours)
-        fresh = [c for c in theirs if parse_ts(c.get("createdAt")) > latest]
+        latest = max(parse_ts(c.get("created_at")) for c in ours)
+        fresh = [c for c in theirs if parse_ts(c.get("created_at")) > latest]
         if fresh:
             items.append({**base, "kind": "update", "body": "",
                           "new_comments": [shape_comment(c) for c in fresh]})
@@ -114,7 +131,7 @@ def cmd_pending(authors: set[str]) -> dict:
     for issue in list_qualifying(authors):
         labels = {(l.get("name") or "").lower() for l in issue.get("labels") or []}
         if NEEDS_LENA in labels:
-            items.append({"number": issue["number"], "title": issue["title"], "url": issue["url"]})
+            items.append({"number": issue["number"], "title": issue["title"], "url": issue["html_url"]})
     return {"items": items}
 
 

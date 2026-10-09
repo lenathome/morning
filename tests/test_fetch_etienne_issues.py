@@ -13,14 +13,14 @@ import fetch_etienne_issues as fei  # noqa: E402
 
 
 def issue(number, author="EtienneEkko", title="Something", labels=("from-etienne",), body="body"):
-    return {"number": number, "title": title, "url": f"https://github.com/lenathome/product-os/issues/{number}",
-            "author": {"login": author}, "labels": [{"name": l} for l in labels],
-            "updatedAt": "2026-10-08T09:00:00Z", "body": body}
+    return {"number": number, "title": title, "html_url": f"https://github.com/lenathome/product-os/issues/{number}",
+            "user": {"login": author}, "labels": [{"name": l} for l in labels],
+            "updated_at": "2026-10-08T09:00:00Z", "body": body}
 
 
 def comment(cid, author="EtienneEkko", body="hi", at="2026-10-08T10:00:00Z"):
-    return {"id": cid, "author": {"login": author}, "createdAt": at,
-            "body": body, "url": f"https://example.com/{cid}"}
+    return {"id": cid, "user": {"login": author}, "created_at": at,
+            "body": body, "html_url": f"https://example.com/{cid}"}
 
 
 class FetchEtienneIssuesTest(unittest.TestCase):
@@ -32,10 +32,13 @@ class FetchEtienneIssuesTest(unittest.TestCase):
         self.addCleanup(p.stop)
 
     def fake_gh(self, args):
-        if args[:2] == ["issue", "list"]:
+        if args[0] == "api" and args[-1].startswith("repos/lenathome/product-os/issues?"):
             return json.dumps(self.issues)
-        if args[:2] == ["issue", "view"]:
-            return json.dumps({"comments": self.comments.get(int(args[2]), [])})
+        if args[0] == "api" and "/comments?" in args[-1]:
+            number = int(args[-1].split("/issues/")[1].split("/")[0])
+            cs = self.comments.get(number, [])
+            # emulate --paginate: one JSON array per page of 2, back to back
+            return "".join(json.dumps(cs[i:i + 2]) for i in range(0, len(cs), 2)) or "[]"
         raise AssertionError(args)
 
     def run_main(self, *argv):
@@ -59,6 +62,26 @@ class FetchEtienneIssuesTest(unittest.TestCase):
         self.assertEqual([c["id"] for c in it["new_comments"]], ["c1"])
         self.assertEqual(it["new_comments"][0]["author"], "EtienneEkko")
         self.assertEqual(set(it["new_comments"][0]), {"id", "author", "created_at", "body", "url"})
+
+    def test_pull_requests_filtered_out(self):
+        pr = issue(7)
+        pr["pull_request"] = {"url": "x"}
+        self.issues = [pr, issue(8)]
+        self.assertEqual([i["number"] for i in self.check()], [8])
+
+    def test_null_body_becomes_empty_string(self):
+        self.issues = [issue(5, body=None)]
+        self.assertEqual(self.check()[0]["body"], "")
+
+    def test_multi_page_comments(self):
+        self.issues = [issue(5)]
+        self.comments[5] = [comment("c1", at="2026-10-08T09:00:00Z"),
+                            comment("c2", at="2026-10-08T09:30:00Z"),
+                            comment("c3", author="lenathome", at="2026-10-08T10:00:00Z"),
+                            comment("c4", at="2026-10-08T11:00:00Z"),
+                            comment("c5", at="2026-10-08T12:00:00Z")]
+        items = self.check()
+        self.assertEqual([c["id"] for c in items[0]["new_comments"]], ["c4", "c5"])
 
     def test_explicit_check_subcommand_matches_default(self):
         self.issues = [issue(5)]
