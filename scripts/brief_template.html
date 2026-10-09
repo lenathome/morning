@@ -495,7 +495,6 @@ body.has-bg .goals > h2, body.has-bg .goals > .gnote {
   /* To do: the to-do content on the left, In progress on the right (first in the markup, so it leads on narrow screens). */
   function todoTab() {
     var main = [];
-    if (brief.alpha_note) main.push(el("div", { "class": "meta" }, [span("pill other", "alpha"), span("", brief.alpha_note)]));
     if (urgentItems.length) main.push(section("Urgent today", urgentItems.length, todoPanel(urgent)));
     var comingN = countGroups(todos.coming_up);
     if (comingN) main.push(section("Coming up", comingN, todoPanel(todos.coming_up)));

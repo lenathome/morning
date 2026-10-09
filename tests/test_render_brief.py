@@ -16,8 +16,8 @@ sys.path.insert(0, str(SCRIPT.parent))
 import render_brief  # noqa: E402
 
 
-class AlphaNoteTest(unittest.TestCase):
-    NOTE = "_Owner tags are alpha: a first guess at who could own each to-do, not yet reviewed._\n\n"
+class TagNoteTest(unittest.TestCase):
+    NOTE_TEXT = "Owner tags are alpha"
 
     def untag(self, b):
         for g in b["urgent"] + b["todos"]["coming_up"] + b["ideas"]["strategic"] + b["ideas"]["other"]:
@@ -27,27 +27,19 @@ class AlphaNoteTest(unittest.TestCase):
             a.pop("tag", None)
         return b
 
-    def test_md_and_shared_md_have_the_note_once_under_the_to_do_heading(self):
+    def test_no_alpha_note_in_md_shared_md_or_html_even_when_tagged(self):
         brief, _ = render_brief.number_items(load())
+        self.assertTrue(any(i.get("tag") for g in brief["urgent"] for i in g["items"]))
         for shared in (False, True):
             md = render_brief.to_markdown(brief, shared=shared)
-            self.assertEqual(md.count(self.NOTE), 1)
-            self.assertIn("## To do\n\n" + self.NOTE + "**Urgent today**", md)
-
-    def test_html_embeds_the_note_once_and_template_shows_it(self):
-        brief, _ = render_brief.number_items(load())
+            self.assertNotIn(self.NOTE_TEXT, md)
+            self.assertNotIn("alpha", md.lower())
+            self.assertIn("## To do\n\n**Urgent today**", md)
         html = render_brief.to_html(brief)
-        self.assertEqual(html.count(render_brief.ALPHA_NOTE), 1)
+        self.assertNotIn(self.NOTE_TEXT, html)
+        self.assertNotIn("alpha_note", html)
         template = (ROOT / "scripts" / "brief_template.html").read_text()
-        self.assertIn("brief.alpha_note", template)
-        self.assertIn('span("pill other", "alpha")', template)
-
-    def test_no_note_when_nothing_is_tagged(self):
-        brief, _ = render_brief.number_items(self.untag(load()))
-        for shared in (False, True):
-            self.assertNotIn("alpha", render_brief.to_markdown(brief, shared=shared))
-        self.assertNotIn(render_brief.ALPHA_NOTE, render_brief.to_html(brief))
-        self.assertNotIn('"alpha_note":', render_brief.to_html(brief))
+        self.assertNotIn("alpha", template.lower())
 
     def test_numbering_is_unchanged(self):
         tagged, tagged_map = render_brief.number_items(load())
@@ -590,11 +582,11 @@ class InProgressTest(unittest.TestCase):
             self.assertLess(md.index("## To do"), md.index("**In progress**"))
             self.assertLess(md.index("**In progress**"), md.index("**Urgent today**"))
 
-    def test_note_comes_before_the_section_and_tags_count(self):
+    def test_in_progress_follows_the_heading_directly(self):
         b = with_in_progress(IN_PROGRESS)
         brief, _ = render_brief.number_items(b)
         md = render_brief.to_markdown(brief)
-        self.assertIn("## To do\n\n_" + render_brief.ALPHA_NOTE + "_\n\n**In progress**", md)
+        self.assertIn("## To do\n\n**In progress**", md)
 
     def test_absent_or_empty_renders_exactly_as_before(self):
         plain, plain_map = render_brief.number_items(load())
