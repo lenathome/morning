@@ -3,7 +3,7 @@
 
 Usage:
     python3 render_brief.py <brief.json> [--md OUT.md] [--shared-md OUT.md] [--html OUT.html] [--map OUT.json]
-                           [--background PATH_OR_DIR]
+                           [--background PATH_OR_DIR] [--triage TRIAGE.json]
 
 The model writes the brief's content once as JSON (contract in
 docs/plans/2026-10-01-brief-html-page.md). This script owns the numbering, so
@@ -16,6 +16,12 @@ to a shared repo.
 --background takes an image file, or a folder holding spring/summer/autumn/winter
 .jpg/.jpeg/.webp/.png (the season comes from the brief's date). The image is
 embedded in the HTML as a data: URI; a missing file means no background.
+
+--triage takes the file pr_triage_reader.py wrote (~/morning/state/triage-<date>.json)
+and joins it onto the Testing items by `repo#number`, for the page only: the
+markdown and the shared markdown never carry triage data (product-os#5, rule 6).
+An item with no match gets "No triage today". A missing or unreadable file, or
+a run for another date, means no triage on the page at all.
 
 stdout: one JSON line of counts, e.g. {"urgent": 8, "overdue": 5, ...}, which
 the skill prints as the chat header.
@@ -407,6 +413,46 @@ def background_data_uri(image: Path) -> str:
     return f"data:{mime};base64," + base64.b64encode(raw).decode("ascii")
 
 
+def join_triage(brief: dict, triage: dict | None) -> dict:
+    """A copy of the brief with the triage joined onto its Testing items, for the page only.
+
+    The data is copied as is and never followed: the page shows it with
+    textContent and links only through safeUrl()."""
+    out = copy.deepcopy(brief)
+    ok = (isinstance(triage, dict) and triage.get("status") == "ok" and triage.get("valid_for") == brief.get("date")
+          and isinstance(triage.get("prs"), dict))
+    if not out.get("testing"):
+        return out
+    if not ok:
+        status = str(triage.get("status") or "unavailable") if isinstance(triage, dict) else "unavailable"
+        out["triage"] = {"status": "stale" if status == "ok" else status}
+        return out
+    withheld = set(triage.get("withheld") or [])
+    trial = triage.get("trial") if isinstance(triage.get("trial"), dict) else None
+    out["triage"] = {"status": "ok", "run_id": triage.get("run_id"), "trial": trial,
+                     "withheld": sorted(withheld)}
+    for t in out["testing"]:
+        key = f"{t['repo']}#{t['number']}"
+        pr = triage["prs"].get(key)
+        if isinstance(pr, dict):
+            t["triage"] = pr
+        elif key in withheld:
+            t["triage_note"] = "Triage withheld: it held something that should not be there"
+        else:
+            t["triage_note"] = "No triage today"
+    return out
+
+
+def load_triage(path: str | None) -> dict | None:
+    if not path:
+        return None
+    try:
+        data = json.loads(Path(path).expanduser().read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError):
+        return {"status": "unavailable"}
+    return data if isinstance(data, dict) else {"status": "unavailable"}
+
+
 def to_html(brief: dict, background: Path | None = None) -> str:
     data = json.dumps(brief, ensure_ascii=False).replace("<", "\\u003c")
     bg = json.dumps(background_data_uri(background)).replace("<", "\\u003c") if background else "null"
@@ -444,6 +490,7 @@ def main() -> None:
     ap.add_argument("--html")
     ap.add_argument("--map")
     ap.add_argument("--background")
+    ap.add_argument("--triage")
     args = ap.parse_args()
     try:
         brief, numbers = number_items(json.loads(Path(args.brief).read_text()))
@@ -455,7 +502,8 @@ def main() -> None:
     if args.shared_md:
         Path(args.shared_md).expanduser().write_text(to_markdown(brief, shared=True))
     if args.html:
-        Path(args.html).expanduser().write_text(to_html(brief, pick_background(args.background, brief["date"])))
+        page = join_triage(brief, load_triage(args.triage)) if args.triage else brief
+        Path(args.html).expanduser().write_text(to_html(page, pick_background(args.background, brief["date"])))
     if args.map:
         Path(args.map).expanduser().write_text(json.dumps({"date": brief["date"], "numbers": numbers}, indent=2))
     print(json.dumps(counts(brief)))

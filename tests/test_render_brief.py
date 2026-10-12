@@ -786,3 +786,78 @@ class GoalsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def made_up_triage(date="2026-10-01", status="ok"):
+    """A made-up pr-triage-view/1 result as pr_triage_reader.py writes it (product-os#5)."""
+    return {
+        "schema": "pr-triage-view/1", "run_id": "2026-10-01T06:40:00Z", "valid_for": date, "status": status,
+        "trial": {"text": "TRIAL: keep testing as normal."}, "summaries": {},
+        "prs": {"ekko-checkout#142": {
+            "key": "ekko-checkout#142", "label": "needs-human", "risk": "high", "reason": "Changes tr-TR copy.",
+            "deploy": {"dev": "live", "staging": "live", "prod": "live"},
+            "groups": [{"kind": "matter", "title": "Checks that matter",
+                        "checks": [{"id": "b1", "title": "</script><b>Copy</b>", "step": "Open the demo page.",
+                                    "url": "javascript:alert(1)", "who": "Lena"}]},
+                       {"kind": "proven", "checks": [{"id": "b2", "title": "Banned terms test", "proof_url": "https://example.com/t"}]}]}},
+        "no_triage": ["ekko-api#1300"], "withheld": [],
+    }
+
+
+class TriageTest(unittest.TestCase):
+    def brief(self):
+        return render_brief.number_items(load())[0]
+
+    def test_join_on_repo_and_number(self):
+        page = render_brief.join_triage(self.brief(), made_up_triage())
+        by_key = {f"{t['repo']}#{t['number']}": t for t in page["testing"]}
+        self.assertEqual(by_key["ekko-checkout#142"]["triage"]["label"], "needs-human")
+        self.assertNotIn("triage", by_key["ekko-api#1300"])
+        self.assertEqual(by_key["ekko-api#1300"]["triage_note"], "No triage today")
+        self.assertEqual(page["triage"]["status"], "ok")
+        self.assertEqual(page["triage"]["trial"], {"text": "TRIAL: keep testing as normal."})
+
+    def test_join_leaves_the_brief_untouched(self):
+        brief = self.brief()
+        before = json.dumps(brief, sort_keys=True)
+        render_brief.join_triage(brief, made_up_triage())
+        self.assertEqual(json.dumps(brief, sort_keys=True), before)
+
+    def test_withheld_pr_says_so(self):
+        tri = made_up_triage()
+        tri["withheld"] = ["ekko-api#1300"]
+        page = render_brief.join_triage(self.brief(), tri)
+        t = [t for t in page["testing"] if t["number"] == 1300][0]
+        self.assertIn("withheld", t["triage_note"])
+
+    def test_stale_or_unavailable_run_joins_nothing(self):
+        for tri in (made_up_triage(date="2026-09-30"), made_up_triage(status="unavailable"), {"status": "stale"}, None):
+            page = render_brief.join_triage(self.brief(), tri)
+            self.assertFalse(any("triage" in t for t in page["testing"]))
+            self.assertNotEqual(page["triage"]["status"], "ok")
+
+    def test_markdown_never_carries_triage(self):
+        with tempfile.TemporaryDirectory() as d:
+            tri = Path(d) / "triage.json"
+            tri.write_text(json.dumps(made_up_triage()))
+            md, shared, html, md0 = (Path(d) / n for n in ("a.md", "a.shared.md", "a.html", "b.md"))
+            r = subprocess.run([sys.executable, str(SCRIPT), str(FIXTURE), "--md", str(md), "--shared-md", str(shared),
+                                "--html", str(html), "--triage", str(tri)], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            subprocess.run([sys.executable, str(SCRIPT), str(FIXTURE), "--md", str(md0)], check=True,
+                           capture_output=True)
+            self.assertEqual(md.read_text(), md0.read_text())
+            for f in (md, shared):
+                self.assertNotIn("Banned terms test", f.read_text())
+                self.assertNotIn("TRIAL", f.read_text())
+            page = html.read_text()
+            self.assertIn("Banned terms test", page)
+            self.assertNotIn("</script><b>", page)
+
+    def test_missing_triage_file_is_fine(self):
+        with tempfile.TemporaryDirectory() as d:
+            html = Path(d) / "a.html"
+            r = subprocess.run([sys.executable, str(SCRIPT), str(FIXTURE), "--html", str(html),
+                                "--triage", str(Path(d) / "nope.json")], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn('"status": "unavailable"', html.read_text())

@@ -108,6 +108,8 @@ Make these tool calls in a SINGLE message (parallel tool use):
 
 14. **Goals** — Bash: `python3 ~/github/morning/scripts/parse_goals.py "<paths.product_os>/goals.md"`. Returns `{quarter, status, status_note, goals: [{title, why, done_when}], not_doing}`. If the command exits non-zero, add "Goals unavailable: <first line of stderr>" to `unavailable` and omit `goals` from the brief JSON.
 
+15. **Testing triage (trial)** — Bash: `python3 ~/github/morning/scripts/pr_triage_reader.py --repo lenathome/product-os --brief-date <YYYY-MM-DD> --out ~/morning/state/triage-<YYYY-MM-DD>.json` (expand `~` to the absolute home path). It reads Etienne's one open `pr-triage` issue with GET-only calls, checks it all or nothing (product-os#5, section 3a) and prints one status line. It always exits 0 and needs no approval. If the line does not start with `triage: ok`, add `Triage unavailable: <the line>` to `unavailable` and carry on. Never read the file yourself or copy anything from it into the brief JSON: the renderer joins it (Step 4). If the line names withheld PRs, tell the user in the final message that something in the triage data should not have been there.
+
 ## Step 1a: Drop what is already done
 
 Run this over every Notion task from Step 1.1 and every Fathom action from Step 3a, before anything is bucketed into In progress, To do, Your actions, Product actions or the Ideas bank. Drop an item, silently, when any of these says it is done:
@@ -162,9 +164,9 @@ Loop over the meetings returned in Step 1.6:
 
 Write the brief's content as JSON to `<briefs_dir>/<YYYY-MM-DD>.json`, following the contract in `docs/plans/2026-10-01-brief-html-page.md` (section "The brief JSON contract"). That contract lives in this repo; the skill reads it from `~/github/morning/docs/plans/2026-10-01-brief-html-page.md`. Do not number anything: the renderer does. Put the started items in the `in_progress` key (Notion tasks with `"kind": "notion"`, Fathom actions with `"kind": "fathom"`); the renderer numbers them first, before Urgent today. Put every list in final display order (standalone tasks first, then parent groups alphabetically). Apply the voice guide to every string you write. Assign a `tag` to every to-do (see "Tags on to-dos" in the Brief structure section). Copy the parsed goals JSON from Step 1 item 14 verbatim into the brief JSON's `goals` key, with no rewording. Then run:
 
-`python3 ~/github/morning/scripts/render_brief.py <briefs_dir>/<date>.json --md <briefs_dir>/<date>.md --shared-md <briefs_dir>/<date>.shared.md --html <briefs_dir>/<date>.html --map ~/morning/state/brief-map-<date>.json --background <output.background if set, else output.backgrounds_dir>`
+`python3 ~/github/morning/scripts/render_brief.py <briefs_dir>/<date>.json --md <briefs_dir>/<date>.md --shared-md <briefs_dir>/<date>.shared.md --html <briefs_dir>/<date>.html --map ~/morning/state/brief-map-<date>.json --background <output.background if set, else output.backgrounds_dir> --triage ~/morning/state/triage-<date>.json`
 
-Expand `~` to the absolute home path in the `--background` value. A missing photo is fine: the renderer then makes the page without one, so never stop or ask about it.
+Expand `~` to the absolute home path in the `--background` and `--triage` values. `--triage` joins the triage onto the Testing items on the page only; the markdown and the shared copy never carry it, and a missing file just means no triage. A missing photo is fine: the renderer then makes the page without one, so never stop or ask about it.
 
 It prints one JSON line of counts; keep it for Step 6. If it exits 1, fix the JSON it names and run it again. The `.shared.md` file is the same markdown without the External meeting prep section; Step 6 publishes it to the shared product-os repo.
 
@@ -460,7 +462,7 @@ Examples (bad):
 
 ## Step 6: Publish and present
 
-1. Publish `<briefs_dir>/<date>.html` with the Artifact tool. If `output.artifact_url` is set: first `read` that URL (a publish to an artifact this conversation hasn't read is refused), then publish with `url` set to it, no `icon`. If it is empty: publish without `url`, with `icon: "calendar"` and `description: "Your daily morning brief"`, and tell the user to paste the returned URL into `output.artifact_url` in `~/morning/config.yaml`.
+1. Publish `<briefs_dir>/<date>.html` with the Artifact tool. If `output.artifact_url` is set: first `read` that URL (a publish to an artifact this conversation hasn't read is refused), then publish with `url` set to it, no `icon`. If it is empty: publish without `url`, with `icon: "calendar"` and `description: "Your daily morning brief"`, and tell the user to paste the returned URL into `output.artifact_url` in `~/morning/config.yaml`. Always pass `capabilities: {"db": {}}`: the Testing tab saves the pass / fail / not tested result per triage check there (Step 7c).
 2. Print only this in chat:
    - `**<weekday_label>** - <focus>`
    - one line of counters from the renderer: `Urgent N (M overdue) · PRs: R to review, K ready, A awaiting · Your actions N · Meetings N` (drop any part that is 0, except Urgent)
@@ -502,6 +504,14 @@ If "Review requested of you" in PRs needing you surfaced any PRs (after the stat
 5. Confirm: `Parked N PR(s). They'll resurface only if updated.`
 
 If no PRs surfaced, skip this step entirely.
+
+## Step 7c: Triage feedback (trial)
+
+Only in a session with the user, never unattended. The user records results on the page while testing during the day, so this step reports the previous brief's day: `<prev>` is the date of the newest earlier `<briefs_dir>/<date>.json`. If the user says she has finished testing today, use today's date instead.
+
+1. Read the results with ArtifactData: `get` on `output.artifact_url`, collection `triage-results`, document `<prev>`. It holds `results`, keyed `<repo>#<number>|<check id>`, each `{pr, check, result: pass | fail | not-tested}`, plus the `run_id` the page showed. A missing document means nothing was recorded: skip this step.
+2. Draft one `pr-triage-feedback/1` comment (the JSON form from product-os#5): `schema`, `run_id`, `date`, and per tested PR `tested: true` with `proven: "held"` or `{"failed": [<ids of proven checks marked fail>]}`. A PR with no results is `{"tested": false}`. Add nothing the user did not record or say.
+3. Show the draft and ask: `Post this triage feedback? (yes / edits / skip)`. Post only on yes: `gh api repos/lenathome/product-os/issues/<triage issue number>/comments -F body=@<file in the scratchpad>`. Never edit, close or label the triage issue, and never post on an ekko PR unless the user approves that exact text.
 
 ## Step 8: Final confirmation
 
