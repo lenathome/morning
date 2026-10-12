@@ -9,12 +9,23 @@ You are sweeping the user's Claude Code sessions since the last run. This runs u
 
 ## Unattended rules
 
-- The only writes allowed: the digest files in `~/ai-log/`, the proposals queue (through `proposals.py`) and `~/morning/state/sweep-last-run.txt`.
+- The only writes allowed: the digest files in `~/ai-log/`, the proposals queue (through `proposals.py`), `~/morning/state/sweep-last-run.txt` and the fast-forward of `~/github/morning` in Step 0.
 - Never edit project files in `~/product-os/projects/`. Proposals only.
 - Run every Bash command with absolute paths, one command per call. Never start with `cd` or chain commands with `;`, `&&` or a loop: a compound command asks for approval even when each part is allowed.
 - Never accept or reject a proposal. That happens in the brief.
 - Never ask a question. If something is ambiguous, skip it and count it as skipped.
 - If the extractor fails, stop without updating the last-run file and say why in one line.
+
+## Step 0: Run from the latest main
+
+This skill and the scripts it calls (`extract_sessions.py`, `parse_projects.py`, `proposals.py`) load from the local checkout at `~/github/morning`, which can fall behind `origin/main`. Bring it up to date first, one command per call:
+
+1. `git -C /Users/lenathome/github/morning branch --show-current` must print `main`. If it doesn't, don't switch branches: carry on and note it (see 4).
+2. `git -C /Users/lenathome/github/morning fetch origin`
+3. `git -C /Users/lenathome/github/morning merge --ff-only origin/main`
+   - `Already up to date.`: carry on.
+   - It fast-forwarded: read `/Users/lenathome/github/morning/sweep/SKILL.md` again with the Read tool and follow the new version from this point on.
+4. If any of these fails, never reset, stash or force anything. Carry on with the sweep and add `Morning repo not on latest main: <first line of the error>` as the first line of the Step 7 output.
 
 ## Step 1: Work out the window
 
