@@ -429,7 +429,10 @@ def join_triage(brief: dict, triage: dict | None) -> dict:
         return out
     withheld = set(triage.get("withheld") or [])
     trial = triage.get("trial") if isinstance(triage.get("trial"), dict) else None
-    out["triage"] = {"status": "ok", "run_id": triage.get("run_id"), "trial": trial,
+    notes = triage.get("group_notes")
+    if not (isinstance(notes, dict) and all(isinstance(k, str) and isinstance(v, str) for k, v in notes.items())):
+        notes = {}
+    out["triage"] = {"status": "ok", "run_id": triage.get("run_id"), "trial": trial, "group_notes": notes,
                      "withheld": sorted(withheld)}
     for t in out["testing"]:
         key = f"{t['repo']}#{t['number']}"

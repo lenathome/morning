@@ -12,6 +12,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "scripts" / "render_brief.py"
 FIXTURE = ROOT / "tests" / "fixtures" / "brief-sample.json"
+TRIAGE_BRIEF = ROOT / "tests" / "fixtures" / "brief-triage-sample.json"
+TRIAGE_FILE = ROOT / "tests" / "fixtures" / "triage-sample.json"
 sys.path.insert(0, str(SCRIPT.parent))
 import render_brief  # noqa: E402
 
@@ -792,14 +794,19 @@ def made_up_triage(date="2026-10-01", status="ok"):
     """A made-up pr-triage-view/1 result as pr_triage_reader.py writes it (product-os#5)."""
     return {
         "schema": "pr-triage-view/1", "run_id": "2026-10-01T06:40:00Z", "valid_for": date, "status": status,
-        "trial": {"text": "TRIAL: keep testing as normal."}, "summaries": {},
+        "trial": {"banner": "TRIAL: keep testing as normal."}, "summaries": {},
+        "group_notes": {"matter": "Test these.", "proven": "Optional."},
         "prs": {"ekko-checkout#142": {
-            "key": "ekko-checkout#142", "label": "needs-human", "risk": "high", "reason": "Changes tr-TR copy.",
-            "deploy": {"dev": "live", "staging": "live", "prod": "live"},
-            "groups": [{"kind": "matter", "title": "Checks that matter",
-                        "checks": [{"id": "b1", "title": "</script><b>Copy</b>", "step": "Open the demo page.",
-                                    "url": "javascript:alert(1)", "who": "Lena"}]},
-                       {"kind": "proven", "checks": [{"id": "b2", "title": "Banned terms test", "proof_url": "https://example.com/t"}]}]}},
+            "key": "ekko-checkout#142", "label": "needs-human", "label_text": "Test by hand", "risk": "high",
+            "reason": "Changes tr-TR copy.",
+            "deploy": {"summary": "Live on dev.", "envs": [{"env": "dev", "state": "live", "text": "live", "tone": "good"}]},
+            "groups": [{"id": "matter", "title": "Checks that matter", "collapsed": False, "count": 1,
+                        "steps": [{"n": 1, "id": "b1", "behaviour": "</script><b>Copy</b>", "kind_text": "Main change",
+                                   "action": "Open the demo page.", "url": "javascript:alert(1)", "url_ok": False,
+                                   "who_can_check": "Lena"}]},
+                       {"id": "proven", "collapsed": True, "count": 1,
+                        "steps": [{"n": 2, "id": "b2", "behaviour": "Banned terms test",
+                                   "proof": {"title": "CI test", "link": "https://example.com/t"}}]}]}},
         "no_triage": ["ekko-api#1300"], "withheld": [],
     }
 
@@ -815,7 +822,14 @@ class TriageTest(unittest.TestCase):
         self.assertNotIn("triage", by_key["ekko-api#1300"])
         self.assertEqual(by_key["ekko-api#1300"]["triage_note"], "No triage today")
         self.assertEqual(page["triage"]["status"], "ok")
-        self.assertEqual(page["triage"]["trial"], {"text": "TRIAL: keep testing as normal."})
+        self.assertEqual(page["triage"]["trial"], {"banner": "TRIAL: keep testing as normal."})
+        self.assertEqual(page["triage"]["group_notes"], {"matter": "Test these.", "proven": "Optional."})
+
+    def test_bad_group_notes_are_dropped(self):
+        for bad in (None, ["x"], {"matter": 5}):
+            tri = made_up_triage()
+            tri["group_notes"] = bad
+            self.assertEqual(render_brief.join_triage(self.brief(), tri)["triage"]["group_notes"], {})
 
     def test_join_leaves_the_brief_untouched(self):
         brief = self.brief()
@@ -853,6 +867,28 @@ class TriageTest(unittest.TestCase):
             page = html.read_text()
             self.assertIn("Banned terms test", page)
             self.assertNotIn("</script><b>", page)
+
+    def test_real_shape_fixture_joins_triage_and_group_notes(self):
+        brief = render_brief.number_items(json.loads(TRIAGE_BRIEF.read_text()))[0]
+        tri = json.loads(TRIAGE_FILE.read_text())
+        page = render_brief.join_triage(brief, tri)
+        self.assertEqual(page["triage"]["group_notes"], tri["group_notes"])
+        self.assertEqual(page["triage"]["trial"]["banner"], "TRIAL: keep testing as normal.")
+        by_key = {f"{t['repo']}#{t['number']}": t for t in page["testing"]}
+        self.assertEqual(sorted(by_key), ["receipts#7", "shop-web#41", "shop-web#42"])
+        self.assertTrue(all("triage" in t for t in by_key.values()))
+        self.assertEqual(by_key["shop-web#42"]["triage"]["groups"][0]["steps"][0]["id"], "b1")
+
+    def test_real_shape_fixture_html_and_markdown(self):
+        with tempfile.TemporaryDirectory() as d:
+            md, html = Path(d) / "a.md", Path(d) / "a.html"
+            r = subprocess.run([sys.executable, str(SCRIPT), str(TRIAGE_BRIEF), "--md", str(md), "--html", str(html),
+                                "--triage", str(TRIAGE_FILE)], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            page = html.read_text()
+            self.assertIn("Checks that matter", page)
+            self.assertIn("The main change and anything high risk", page)
+            self.assertNotIn("The main change and anything high risk", md.read_text())
 
     def test_missing_triage_file_is_fine(self):
         with tempfile.TemporaryDirectory() as d:
