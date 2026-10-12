@@ -7,6 +7,9 @@ Usage:
 Each key is a stable hash computed by SKILL.md as:
     sha1(meeting_id + lowercased_whitespace_normalised_action_text)[:16]
 
+Any key it acknowledges is also removed from ~/morning/state/in-progress.json
+(see mark_in_progress.py), if that file exists: a done action is no longer in progress.
+
 The script appends new keys to ~/morning/state/acknowledged-actions.json
 (a JSON array of strings) and writes it back. Existing keys are not
 duplicated. The state file is created lazily if it doesn't exist.
@@ -24,6 +27,22 @@ from pathlib import Path
 
 
 STATE_FILE = Path(os.path.expanduser("~/morning/state/acknowledged-actions.json"))
+IN_PROGRESS_FILE = Path(os.path.expanduser("~/morning/state/in-progress.json"))
+
+
+def clear_in_progress(keys: list[str]) -> None:
+    """Drop `keys` from the in-progress list. Leaves a missing or unreadable file alone."""
+    if not IN_PROGRESS_FILE.exists():
+        return
+    try:
+        current = json.loads(IN_PROGRESS_FILE.read_text())
+    except json.JSONDecodeError:
+        return
+    if not isinstance(current, list):
+        return
+    kept = [k for k in current if k not in set(keys)]
+    if len(kept) != len(current):
+        IN_PROGRESS_FILE.write_text(json.dumps(kept, indent=2))
 
 
 def main() -> None:
@@ -57,6 +76,7 @@ def main() -> None:
             added.append(k)
 
     STATE_FILE.write_text(json.dumps(existing, indent=2))
+    clear_in_progress(new_keys)
     print(f"acknowledged {len(added)} new action(s); total acked: {len(existing)}")
 
 
