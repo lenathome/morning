@@ -40,7 +40,10 @@ def page_md(k, prs, run_id=RUN, of=1):
     return f"<!-- pr-triage-view page={k} -->\n\n```json\n{data}\n```\n", data
 
 
-def build(prs_by_page, date=DATE, schema=ptr.SCHEMA, run_failed=False):
+NOTES = {"matter": "The main change. Test these.", "proven": "Optional."}
+
+
+def build(prs_by_page, date=DATE, schema=ptr.SCHEMA, run_failed=False, group_notes=NOTES):
     """(index markdown, {page: markdown}) for made-up pages."""
     pages, entries, summaries = {}, [], {}
     for k, prs in enumerate(prs_by_page, 1):
@@ -51,6 +54,8 @@ def build(prs_by_page, date=DATE, schema=ptr.SCHEMA, run_failed=False):
             summaries[key] = {"label": "needs-human", "title": "summary"}
     idx = {"schema": schema, "kind": "index", "run_id": RUN, "valid_for": date, "run_failed": run_failed,
            "trial": {"text": "TRIAL: keep testing as normal."}, "pages": entries, "prs": summaries}
+    if group_notes is not None:
+        idx["group_notes"] = group_notes
     return f"# Testing triage\n\n```json\n{json.dumps(idx, indent=1)}\n```\n", pages
 
 
@@ -101,6 +106,28 @@ class EvaluateTest(unittest.TestCase):
         out, _ = ptr.evaluate(body, finder({}), DATE)
         self.assertEqual(out["prs"], {})
         self.assertEqual(out["no_triage"], ["web-app#12"])
+
+    def test_group_notes_pass_through(self):
+        body, pages = build([{"web-app#12": made_up_pr("web-app#12")}])
+        out, _ = ptr.evaluate(body, finder(pages), DATE)
+        self.assertEqual(out["group_notes"], NOTES)
+
+    def test_bad_group_notes_become_empty(self):
+        for bad in (None, ["x"], {"matter": 5}, {"matter": None}, "text"):
+            body, pages = build([{"web-app#12": made_up_pr("web-app#12")}], group_notes=bad)
+            out, _ = ptr.evaluate(body, finder(pages), DATE)
+            self.assertEqual(out["status"], "ok")
+            self.assertEqual(out["group_notes"], {})
+
+    def test_group_notes_are_always_present(self):
+        self.assertEqual(ptr.result("stale")["group_notes"], {})
+        self.assertEqual(ptr.result("unavailable")["group_notes"], {})
+
+    def test_personal_data_in_group_notes_makes_the_run_unavailable(self):
+        body, pages = build([{"web-app#12": made_up_pr("web-app#12")}],
+                            group_notes={"matter": "Ask jane@realcompany.co.uk"})
+        with self.assertRaises(ptr.Unavailable):
+            ptr.evaluate(body, finder(pages), DATE)
 
     def test_personal_data_is_withheld(self):
         pr = made_up_pr("web-app#12")

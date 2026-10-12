@@ -1,0 +1,49 @@
+{
+ "date": "2026-10-12",
+ "weekday_label": "Monday 12 Oct 2026",
+ "focus": "Check the rounding change.",
+ "testing": [
+  {
+   "repo": "shop-web",
+   "number": 42,
+   "url": "https://github.com/acme/shop-web/pull/42",
+   "title": "Round suggested amounts per currency",
+   "project": "",
+   "merged": "9 Oct",
+   "live": "dev, staging",
+   "steps": [
+    "Open the staging checkout with a basket over 10 EUR",
+    "Check the options read 1, 2 and 5"
+   ],
+   "inferred": true
+  },
+  {
+   "repo": "receipts",
+   "number": 7,
+   "url": "https://github.com/acme/receipts/pull/7",
+   "title": "Round suggested amounts per currency",
+   "project": "",
+   "merged": "9 Oct",
+   "live": "dev",
+   "steps": [
+    "Wait until it is live on staging",
+    "Open the checkout and check the options"
+   ],
+   "inferred": true
+  },
+  {
+   "repo": "shop-web",
+   "number": 41,
+   "url": "https://github.com/acme/shop-web/pull/41",
+   "title": "Round suggested amounts per currency",
+   "project": "",
+   "merged": "9 Oct",
+   "live": "dev, staging",
+   "steps": [
+    "Open the staging checkout",
+    "Check the options read 1, 2 and 5"
+   ],
+   "inferred": true
+  }
+ ]
+}

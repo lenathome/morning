@@ -1,0 +1,471 @@
+{
+ "schema": "pr-triage-view/1",
+ "run_id": "2026-10-09T10:40:00Z",
+ "valid_for": "2026-10-12",
+ "status": "ok",
+ "trial": {
+  "active": true,
+  "banner": "TRIAL: keep testing as normal.",
+  "detail": "This triage is checked against your own testing. Nothing on your list has been removed: run your own steps and the checks under \"Already proven\", and say whether each proof held.",
+  "feedback": "For each Testing item you tick off, write one line, repo#number: label right; steps complete; proven held; groups ok; someone_else none; bug none (or wrong, missing <what>, failed <which>, <n> should <group>, the check numbers, or the bug in one line; proven none when nothing is under Already proven), or use the pr-triage-feedback/1 JSON block posted on issue #5. Anything else is treated as a possible failure and followed up by hand, so if unsure, write it out plainly."
+ },
+ "group_notes": {
+  "matter": "The main change and anything high risk. Test these.",
+  "proven": "Optional. CI or a check on the deployed site already proves these, and a reviewer agreed. Open one to run it anyway.",
+  "someone_else": "You can't check these yourself. Pass them on if they matter today.",
+  "deeper": "More checks we found, listed here so nothing is hidden. Etienne's tool keeps their steps; not needed for the trial."
+ },
+ "summaries": {},
+ "prs": {
+  "shop-web#42": {
+   "key": "shop-web#42",
+   "org": "acme",
+   "repo": "shop-web",
+   "number": 42,
+   "url": "https://github.com/acme/shop-web/pull/42",
+   "title": "Round suggested amounts per currency",
+   "label": "needs-human",
+   "label_text": "Test by hand",
+   "reason": "Some behaviours need a hand test. 2 of its 4 checks are already proven.",
+   "risk": "high",
+   "risk_text": "High risk: pricing",
+   "deploy": {
+    "summary": "Live on dev and staging. Prod: waiting for approval (2 days).",
+    "test_env": "staging",
+    "live_where_you_test": true,
+    "as_of": "2026-10-09T10:41:00Z",
+    "envs": [
+     {
+      "env": "dev",
+      "state": "live",
+      "text": "live",
+      "tone": "good"
+     },
+     {
+      "env": "staging",
+      "state": "live",
+      "text": "live",
+      "tone": "good"
+     },
+     {
+      "env": "prod",
+      "state": "waiting-approval",
+      "text": "waiting for approval (2 days)",
+      "tone": "warn"
+     }
+    ],
+    "brief_disagrees": "",
+    "ready_text": "",
+    "live_since": "2026-10-08T10:12:00Z"
+   },
+   "totals": {
+    "checks": 4,
+    "minutes_focus": 4,
+    "minutes_all": 8,
+    "text": "About 4 min for the checks that matter, 8 min for all of yours."
+   },
+   "plan_note": "",
+   "groups": [
+    {
+     "id": "matter",
+     "title": "Checks that matter",
+     "audience": "you",
+     "optional": false,
+     "collapsed": false,
+     "count": 2,
+     "minutes": 4,
+     "steps": [
+      {
+       "n": 1,
+       "id": "b1",
+       "behaviour": "Behaviour b1 holds",
+       "kind_text": "Main change",
+       "high_risk": true,
+       "env": "staging",
+       "url": "https://staging.shop.example.com/checkout",
+       "url_ok": true,
+       "test_data": "Any basket over 10 EUR.",
+       "action": "Open the checkout.",
+       "expected": "The options read 1, 2 and 5.",
+       "minutes": 2,
+       "inferred": true,
+       "warnings": [],
+       "why": "Main change; no test covers it."
+      },
+      {
+       "n": 2,
+       "id": "b3",
+       "behaviour": "Behaviour b3 holds",
+       "kind_text": "Nearby behaviour",
+       "high_risk": true,
+       "env": "staging",
+       "url": "https://staging.shop.example.com/checkout",
+       "url_ok": true,
+       "test_data": "Any basket over 10 EUR.",
+       "action": "Open the checkout.",
+       "expected": "The options read 1, 2 and 5.",
+       "minutes": 2,
+       "inferred": true,
+       "warnings": [],
+       "why": "High risk: pricing. A test exists (rounds b3, src/round.test.ts:12), but no reviewer has confirmed this proof yet — test it by hand."
+      }
+     ]
+    },
+    {
+     "id": "proven",
+     "title": "Already proven",
+     "audience": "you",
+     "optional": true,
+     "collapsed": true,
+     "count": 2,
+     "minutes": 4,
+     "steps": [
+      {
+       "n": 3,
+       "id": "b2",
+       "behaviour": "Behaviour b2 holds",
+       "kind_text": "Edge case",
+       "high_risk": true,
+       "env": "staging",
+       "url": "https://staging.shop.example.com/checkout",
+       "url_ok": true,
+       "test_data": "Any basket over 10 EUR.",
+       "action": "Open the checkout.",
+       "expected": "The options read 1, 2 and 5.",
+       "minutes": 2,
+       "inferred": true,
+       "warnings": [],
+       "proof": {
+        "kind": "ci",
+        "title": "CI test",
+        "summary": "rounds b2 in src/round.test.ts, line 12, checks this.",
+        "file": "src/round.test.ts",
+        "line": 12,
+        "test": "rounds b2",
+        "link": "https://github.com/acme/shop-web/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/src/round.test.ts#L12",
+        "reviewer": "agreed",
+        "proof_id": "b56a2a7e56b18c61"
+       },
+       "why": "rounds b2 (src/round.test.ts:12) asserts expect(round(\"b2\")).toBe(1); a reviewer re-read it and agreed: Fails if it breaks."
+      },
+      {
+       "n": 4,
+       "id": "b4",
+       "behaviour": "Behaviour b4 holds",
+       "kind_text": "Edge case",
+       "high_risk": true,
+       "env": "staging",
+       "url": "https://staging.shop.example.com/checkout",
+       "url_ok": true,
+       "test_data": "Any basket over 10 EUR.",
+       "action": "Open the checkout.",
+       "expected": "The options read 1, 2 and 5.",
+       "minutes": 2,
+       "inferred": true,
+       "warnings": [],
+       "proof": {
+        "kind": "asset",
+        "title": "Deployed file check",
+        "summary": "The deployed file on staging contains the expected text.",
+        "expect": "Sizin için yuvarlandı",
+        "result": "Found on staging (HTTP 200).",
+        "url": "https://staging.static.example.com/i18n/tr-TR.json",
+        "env": "staging",
+        "checked_at": "2026-10-09T10:45:00Z",
+        "reviewer": "agreed",
+        "proof_id": "596612a392554c26"
+       },
+       "why": "The deployed file on staging.static.example.com contains \"Sizin için yuvarlandı\"; a reviewer re-read it and agreed: Fails if it breaks."
+      }
+     ]
+    }
+   ],
+   "decided": {
+    "deployed": "Live on staging since Thu 10:12 UTC (deploy run 4812, includes this merge). Dev: live. Prod: waiting for approval (2 days).",
+    "ci": "2 test jobs ran and passed: unit and e2e.",
+    "risk": "High risk: touches pricing.",
+    "result": "Test by hand: 2 of 4 checks are proven; high-risk PRs are never cleared as a whole.",
+    "site_checks": [
+     "staging.static.example.com: looked for \"Sizin için yuvarlandı\" in /i18n/tr-TR.json, found (HTTP 200)."
+    ],
+    "could_not_check": [
+     "The real card charge in EUR (needs real data)"
+    ],
+    "focus_first": "Start with the rounding on the checkout page."
+   }
+  },
+  "receipts#7": {
+   "key": "receipts#7",
+   "org": "acme",
+   "repo": "receipts",
+   "number": 7,
+   "url": "https://github.com/acme/receipts/pull/7",
+   "title": "Round suggested amounts per currency",
+   "label": "not-deployed",
+   "label_text": "Not live where you test yet",
+   "reason": "Some behaviours need a hand test.",
+   "risk": "medium",
+   "risk_text": "Medium risk",
+   "deploy": {
+    "summary": "Live on dev. Staging: waiting for approval (1 day). Prod: waiting for approval (2 days).",
+    "test_env": "staging",
+    "live_where_you_test": false,
+    "as_of": "2026-10-09T10:41:00Z",
+    "envs": [
+     {
+      "env": "dev",
+      "state": "live",
+      "text": "live",
+      "tone": "good"
+     },
+     {
+      "env": "staging",
+      "state": "waiting-approval",
+      "text": "waiting for approval (1 day)",
+      "tone": "warn"
+     },
+     {
+      "env": "prod",
+      "state": "waiting-approval",
+      "text": "waiting for approval (2 days)",
+      "tone": "warn"
+     }
+    ],
+    "brief_disagrees": "",
+    "ready_text": ""
+   },
+   "totals": {
+    "checks": 1,
+    "minutes_focus": 2,
+    "minutes_all": 2,
+    "text": "About 2 min for the checks that matter once it's live, 2 min for all of yours."
+   },
+   "plan_note": "Run this plan once it's live on staging.",
+   "groups": [
+    {
+     "id": "matter",
+     "title": "Checks that matter",
+     "audience": "you",
+     "optional": false,
+     "collapsed": false,
+     "count": 1,
+     "minutes": 2,
+     "steps": [
+      {
+       "n": 5,
+       "id": "b1",
+       "behaviour": "Behaviour b1 holds",
+       "kind_text": "Main change",
+       "high_risk": false,
+       "env": "staging",
+       "url": "https://staging.shop.example.com/checkout",
+       "url_ok": true,
+       "test_data": "Any basket over 10 EUR.",
+       "action": "Open the checkout.",
+       "expected": "The options read 1, 2 and 5.",
+       "minutes": 2,
+       "inferred": true,
+       "warnings": [],
+       "why": "Main change; no test covers it."
+      }
+     ]
+    }
+   ],
+   "decided": {
+    "deployed": "Not live on staging: waiting for approval (1 day, waiting at approve-staging, run 4815). Dev: live. Prod: waiting for approval (2 days).",
+    "ci": "2 test jobs ran and passed: unit and e2e.",
+    "risk": "Medium risk: changes code outside the high-risk areas.",
+    "result": "Not live where you test yet: staging waiting for approval (1 day); a reviewer re-checked the deploy and agreed.",
+    "site_checks": [],
+    "could_not_check": [],
+    "focus_first": "Check b1 first."
+   }
+  },
+  "shop-web#41": {
+   "key": "shop-web#41",
+   "org": "acme",
+   "repo": "shop-web",
+   "number": 41,
+   "url": "https://github.com/acme/shop-web/pull/41",
+   "title": "Round suggested amounts per currency",
+   "label": "needs-human",
+   "label_text": "Test by hand",
+   "reason": "Some behaviours need a hand test. 1 of its 5 checks is already proven.",
+   "risk": "medium",
+   "risk_text": "Medium risk",
+   "deploy": {
+    "summary": "Live on dev and staging. Prod: waiting for approval (2 days).",
+    "test_env": "staging",
+    "live_where_you_test": true,
+    "as_of": "2026-10-09T10:41:00Z",
+    "envs": [
+     {
+      "env": "dev",
+      "state": "live",
+      "text": "live",
+      "tone": "good"
+     },
+     {
+      "env": "staging",
+      "state": "live",
+      "text": "live",
+      "tone": "good"
+     },
+     {
+      "env": "prod",
+      "state": "waiting-approval",
+      "text": "waiting for approval (2 days)",
+      "tone": "warn"
+     }
+    ],
+    "brief_disagrees": "",
+    "ready_text": ""
+   },
+   "totals": {
+    "checks": 5,
+    "minutes_focus": 2,
+    "minutes_all": 8,
+    "text": "About 2 min for the checks that matter, 8 min for all of yours. 1 check is for someone else."
+   },
+   "plan_note": "",
+   "groups": [
+    {
+     "id": "matter",
+     "title": "Checks that matter",
+     "audience": "you",
+     "optional": false,
+     "collapsed": false,
+     "count": 1,
+     "minutes": 2,
+     "steps": [
+      {
+       "n": 6,
+       "id": "b1",
+       "behaviour": "Behaviour b1 holds",
+       "kind_text": "Main change",
+       "high_risk": false,
+       "env": "staging",
+       "url": "https://staging.shop.example.com/checkout",
+       "url_ok": true,
+       "test_data": "Any basket over 10 EUR.",
+       "action": "Open the checkout.",
+       "expected": "The options read 1, 2 and 5.",
+       "minutes": 2,
+       "inferred": true,
+       "warnings": [],
+       "why": "Main change; no test covers it."
+      }
+     ]
+    },
+    {
+     "id": "proven",
+     "title": "Already proven",
+     "audience": "you",
+     "optional": true,
+     "collapsed": true,
+     "count": 1,
+     "minutes": 2,
+     "steps": [
+      {
+       "n": 7,
+       "id": "b2",
+       "behaviour": "Behaviour b2 holds",
+       "kind_text": "Edge case",
+       "high_risk": false,
+       "env": "staging",
+       "url": "https://staging.shop.example.com/checkout",
+       "url_ok": true,
+       "test_data": "Any basket over 10 EUR.",
+       "action": "Open the checkout.",
+       "expected": "The options read 1, 2 and 5.",
+       "minutes": 2,
+       "inferred": true,
+       "warnings": [],
+       "proof": {
+        "kind": "ci",
+        "title": "CI test",
+        "summary": "rounds b2 in src/round.test.ts, line 12, checks this.",
+        "file": "src/round.test.ts",
+        "line": 12,
+        "test": "rounds b2",
+        "link": "https://github.com/acme/shop-web/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/src/round.test.ts#L12",
+        "reviewer": "agreed",
+        "proof_id": "b56a2a7e56b18c61"
+       },
+       "why": "rounds b2 (src/round.test.ts:12) asserts expect(round(\"b2\")).toBe(1); a reviewer re-read it and agreed: Fails if it breaks."
+      }
+     ]
+    },
+    {
+     "id": "someone_else",
+     "title": "For someone else",
+     "audience": "someone_else",
+     "optional": false,
+     "collapsed": false,
+     "count": 1,
+     "minutes": 2,
+     "steps": [
+      {
+       "n": 8,
+       "id": "b3",
+       "behaviour": "Behaviour b3 holds",
+       "kind_text": "Main change",
+       "high_risk": false,
+       "env": "staging",
+       "url": "",
+       "url_ok": false,
+       "test_data": "Any basket over 10 EUR.",
+       "action": "Open the checkout.",
+       "expected": "The options read 1, 2 and 5.",
+       "minutes": 2,
+       "inferred": true,
+       "warnings": [],
+       "who_can_check": "an engineer with the staging export bucket",
+       "why": "Needs an engineer with the staging export bucket."
+      }
+     ]
+    },
+    {
+     "id": "deeper",
+     "title": "More checks",
+     "audience": "you",
+     "optional": true,
+     "collapsed": true,
+     "count": 2,
+     "minutes": 4,
+     "steps": [
+      {
+       "n": 9,
+       "id": "b4",
+       "behaviour": "Behaviour b4 holds",
+       "kind_text": "Edge case",
+       "high_risk": false,
+       "minutes": 2,
+       "why": "Edge case, optional on a PR that isn't high risk."
+      },
+      {
+       "n": 10,
+       "id": "b5",
+       "behaviour": "Behaviour b5 holds",
+       "kind_text": "Nearby behaviour",
+       "high_risk": false,
+       "minutes": 2,
+       "why": "Nearby behaviour, optional on a PR that isn't high risk."
+      }
+     ]
+    }
+   ],
+   "decided": {
+    "deployed": "Live on staging. Dev: live. Prod: waiting for approval (2 days).",
+    "ci": "2 test jobs ran and passed: unit and e2e.",
+    "risk": "Medium risk: changes code outside the high-risk areas.",
+    "result": "Test by hand: 1 of 5 checks is proven; 4 have no automated proof.",
+    "site_checks": [],
+    "could_not_check": [],
+    "focus_first": "Check b1 first."
+   }
+  }
+ },
+ "no_triage": [],
+ "withheld": []
+}

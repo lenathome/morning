@@ -17,7 +17,8 @@ What it does
       triage: unavailable (gh failed)
   It exits 0 in all of these, so the brief carries on as normal. Only bad arguments exit non-zero.
 - Output: {"schema": "pr-triage-view/1", "run_id", "valid_for", "status": "ok|stale|unsupported|unavailable",
-  "trial": the trial banner object to show once (or null), "summaries": {key: short card for each PR, used when its
+  "trial": the trial banner object to show once (or null), "group_notes": {group id: one-line note, from the
+  index; {} when absent or not all strings}, "summaries": {key: short card for each PR, used when its
   page is lost}, "prs": {"<repo>#<number>": PR object exactly as published}, "no_triage": [keys], "withheld": [keys]}.
   Join `prs` on the tick-off key `repo#number`; a Testing item with no entry shows "No triage today". In the file,
   `<`, `>` and `&` are written as \\u escapes so it can sit inside a <script> block; the strings are unchanged.
@@ -255,11 +256,12 @@ def read_page(entry, find, run_id, of):
     return prs
 
 
-def result(status, run_id=None, valid_for=None, prs=None, no_triage=None, withheld=None, trial=None, summaries=None):
+def result(status, run_id=None, valid_for=None, prs=None, no_triage=None, withheld=None, trial=None, summaries=None,
+           group_notes=None):
     """`trial` is the banner to show once (contract 2.10); `summaries` give a short card for any PR whose page was
-    lost (contract 2.2)."""
+    lost (contract 2.2). `group_notes` explain the four groups, shown once."""
     return {'schema': SCHEMA, 'run_id': run_id, 'valid_for': valid_for, 'status': status, 'trial': trial,
-            'summaries': summaries or {}, 'prs': prs or {}, 'no_triage': no_triage or [], 'withheld': withheld or []}
+            'group_notes': group_notes or {}, 'summaries': summaries or {}, 'prs': prs or {}, 'no_triage': no_triage or [], 'withheld': withheld or []}
 
 
 def evaluate(body, find, brief_date):
@@ -307,8 +309,11 @@ def evaluate(body, find, brief_date):
         line += f"; withheld: suspicious content ({', '.join(withheld_l)})"
     trial = idx.get('trial') if isinstance(idx.get('trial'), dict) else None
     shown = {k: summaries[k] for k in order if k in summaries and k not in withheld and isinstance(summaries[k], dict)}
+    notes = idx.get('group_notes')
+    if not (isinstance(notes, dict) and all(isinstance(k, str) and isinstance(v, str) for k, v in notes.items())):
+        notes = {}
     return result('ok', run_id, valid_for, {k: prs[k] for k in order if k in prs}, no_triage, withheld_l, trial,
-                  shown), line
+                  shown, notes), line
 
 
 def read(repo, brief_date, from_dir_path=None):
