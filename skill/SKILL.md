@@ -52,6 +52,17 @@ leverage, delve, it's worth noting, seamless, game-changer, empower, transformat
 
 Load `~/morning/config.yaml`. All paths in this skill resolve relative to that config. If the config is missing, stop and tell the user to copy `config.example.yaml` to `~/morning/config.yaml` and fill in values.
 
+## Before Step 0: Run from the latest main
+
+This skill, its scripts and the JSON contract all load from the local checkout at `~/github/morning`. If that checkout is behind `origin/main`, the brief silently drops whatever has merged since (on 12 Oct 2026 a checkout 8 commits behind left out the In progress section). So bring it up to date before anything else, one command per call:
+
+1. `git -C /Users/lenathome/github/morning branch --show-current` must print `main`. If it doesn't, don't switch branches: carry on and note it (see 4).
+2. `git -C /Users/lenathome/github/morning fetch origin`
+3. `git -C /Users/lenathome/github/morning merge --ff-only origin/main`
+   - `Already up to date.`: carry on.
+   - It fast-forwarded: the copy of this skill you loaded is now out of date. Read `/Users/lenathome/github/morning/skill/SKILL.md` again with the Read tool and follow the new version from this point on.
+4. If any of these fails (fetch error, not on `main`, or the merge refuses because local `main` has diverged or has uncommitted changes), never reset, stash or force anything. Carry on with the brief, add `Morning repo not on latest main: <first line of the error>` to `unavailable`, and make it the first line of the final chat message, so the user knows the brief may be missing recent changes.
+
 ## Step 0: Project updates first
 
 Before fetching anything for the brief, deal with the project updates queued by the session-sweep skill.
