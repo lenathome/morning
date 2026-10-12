@@ -165,6 +165,29 @@ h2 .count { font-family: var(--font-mono); font-weight: 400; }
 .live.good { background: var(--good-soft); color: var(--good); }
 .live.warn { background: var(--warn-soft); color: var(--warn); }
 .steps { margin: 0; padding-left: 20px; font-size: 13.5px; display: flex; flex-direction: column; gap: 2px; }
+/* triage (product-os#5 trial): Etienne's groups beside Lena's own steps from 900px, below them on a phone */
+.testcols { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+@media (min-width: 900px) { .testcols.has-triage { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 16px; align-items: start; } }
+.colhead { font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 0 0 4px; }
+.triage { display: flex; flex-direction: column; gap: 6px; min-width: 0; border-left: 3px solid var(--accent-soft); padding-left: 10px; }
+.triage .pills { display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.tpill { font-size: 11.5px; font-weight: 600; border-radius: 999px; padding: 1px 8px; background: var(--surface-2); color: var(--muted); }
+.tpill.good { background: var(--good-soft); color: var(--good); }
+.tpill.warn { background: var(--warn-soft); color: var(--warn); }
+.tpill.bad { background: var(--bad-soft); color: var(--bad); }
+.tgroup { border-top: 1px solid var(--line); padding-top: 6px; }
+.tgroup > summary { cursor: pointer; font-size: 13px; font-weight: 600; }
+.tgroup h4 { font-size: 13px; margin: 0; font-weight: 600; }
+.checks { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 13.5px; }
+.check { display: flex; flex-direction: column; gap: 3px; min-width: 0; overflow-wrap: anywhere; }
+.check .ctitle { font-weight: 500; }
+.result { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.result button { font: inherit; font-size: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 999px; padding: 4px 10px; min-height: 28px; cursor: pointer; }
+.result button[aria-pressed="true"][data-r="pass"] { background: var(--good-soft); border-color: var(--good); color: var(--good); font-weight: 600; }
+.result button[aria-pressed="true"][data-r="fail"] { background: var(--bad-soft); border-color: var(--bad); color: var(--bad); font-weight: 600; }
+.result button[aria-pressed="true"][data-r="not-tested"] { background: var(--surface-2); border-color: var(--muted); font-weight: 600; }
+.result button:disabled { cursor: default; opacity: 0.6; }
+.trialbanner { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 8px 12px; font-weight: 600; font-size: 13.5px; }
 
 /* meetings */
 .mtime { font-family: var(--font-mono); font-size: 13px; color: var(--accent); }
@@ -385,8 +408,146 @@ body.has-bg .goals > h2 {
       pr.note ? el("div", { "class": "meta", text: pr.note }) : null
     ]);
   }
+  /* ---------- triage (product-os#5): data from Etienne's tool, shown as text, never followed ---------- */
+  var triage = brief.triage || null;
+  var GROUP_NAMES = { matter: "Checks that matter", proven: "Already proven", someone_else: "For someone else",
+                      optional: "Optional deeper checks", more: "More checks" };
+  var COLLAPSED = { proven: true, optional: true, more: true };
+  var RESULTS = [["pass", "Pass"], ["fail", "Fail"], ["not-tested", "Not tested"]];
+  var ENVS = ["dev", "staging", "prod"];
+
+  /* Per-check results live in the page's db, one document per brief date, so the agent can read them back
+     for the daily feedback. Without db (signed out, not granted) the control is shown disabled. */
+  var results = { doc: null, body: null, writing: Promise.resolve(), buttons: [] };
+  function resultKey(key, id) { return key + "|" + id; }
+  function paintResults() {
+    var map = (results.body && results.body.results) || {};
+    results.buttons.forEach(function (b) {
+      b.disabled = !results.doc;
+      var cur = map[b.getAttribute("data-k")];
+      b.setAttribute("aria-pressed", String(!!cur && cur.result === b.getAttribute("data-r")));
+    });
+  }
+  function setResult(key, id, value) {
+    if (!results.doc) return;
+    var body = JSON.parse(JSON.stringify(results.body || {}));
+    body.date = brief.date;
+    body.run_id = (triage && triage.run_id) || null;
+    body.results = body.results || {};
+    var k = resultKey(key, id);
+    if (body.results[k] && body.results[k].result === value) delete body.results[k];
+    else body.results[k] = { pr: key, check: id, result: value, at: new Date().toISOString() };
+    results.body = body;
+    paintResults();
+    results.writing = results.writing.then(function () { return results.doc.set(body); })
+      .catch(function () { /* the snapshot brings back what was stored */ });
+  }
+  function resultControl(key, id) {
+    return el("div", { "class": "result", role: "group", "aria-label": "Result" }, RESULTS.map(function (r) {
+      var b = el("button", { type: "button", "data-r": r[0], "data-k": resultKey(key, id), "aria-pressed": "false",
+        onclick: function () { setResult(key, id, r[0]); } }, [r[1]]);
+      b.disabled = true;
+      results.buttons.push(b);
+      return b;
+    }));
+  }
+  if (triage && triage.status === "ok" && window.claude && typeof window.claude.use === "function") {
+    window.claude.use("db").then(function (db) {
+      if (!db) return;
+      results.doc = db.doc("triage-results/" + String(brief.date).replace(/[^0-9-]/g, ""));
+      results.doc.onSnapshot(function (snap) {
+        results.body = snap.exists ? snap.data() : null;
+        paintResults();
+      }, function () { results.doc = null; paintResults(); });
+      paintResults();
+    }).catch(function () { /* no db: the control stays disabled */ });
+  }
+
+  function str(x) { return typeof x === "string" ? x : (typeof x === "number" ? String(x) : ""); }
+  function deployPills(t, pr) {
+    var dep = pr.deploy || pr.deploy_state || {};
+    if (typeof dep !== "object") return [];
+    var pills = ENVS.filter(function (e) { return str(dep[e]); }).map(function (e) {
+      var v = str(dep[e]);
+      return span("tpill " + (v === "live" ? "good" : v === "failed" ? "bad" : "warn"), e + ": " + v);
+    });
+    /* rule 8: flag when our deploy state and Lena's live: text disagree; both stay shown */
+    var live = String(t.live || "").toLowerCase();
+    var ours = ENVS.filter(function (e) { return str(dep[e]) === "live"; });
+    var mine = /not deployed/.test(live) ? [] : ENVS.filter(function (e) { return live.indexOf(e) >= 0; });
+    var known = ENVS.filter(function (e) { return str(dep[e]); });
+    if (known.length && ours.join() !== mine.filter(function (e) { return known.indexOf(e) >= 0; }).join())
+      pills.push(span("tpill bad", "differs from your live: text"));
+    return pills;
+  }
+  function checkRow(key, c, titleOnly) {
+    if (!c || typeof c !== "object") return null;
+    var title = str(c.title) || str(c.text) || str(c.id);
+    var proof = c.proof && typeof c.proof === "object" ? c.proof : { url: c.proof_url, title: c.proof };
+    var parts = [el("div", { "class": "ctitle", text: title })];
+    if (titleOnly) {
+      var more = [];
+      if (str(c.step)) more.push(el("div", { text: str(c.step) }));
+      if (str(proof.title)) more.push(el("div", { "class": "meta", text: "Proof: " + str(proof.title) }));
+      if (str(proof.url)) more.push(link(safeUrl(proof.url), "Open the proof"));
+      if (more.length) parts.push(el("details", {}, [el("summary", { "class": "meta", text: "Detail" })].concat(more)));
+    } else {
+      if (str(c.step)) parts.push(el("div", { text: str(c.step) }));
+      var start = str(c.url) || str(c.start_url);
+      if (start) parts.push(link(safeUrl(start), "Start page"));
+      else if (str(c.start_note)) parts.push(el("div", { "class": "meta", text: str(c.start_note) }));
+    }
+    if (str(c.who)) parts.push(el("div", { "class": "meta", text: "Who: " + str(c.who) }));
+    if (str(c.id)) parts.push(resultControl(key, str(c.id)));
+    return el("li", { "class": "check" }, parts);
+  }
+  function groupBlock(key, g) {
+    if (!g || typeof g !== "object") return null;
+    var kind = str(g.kind) || str(g.id);
+    var checks = Array.isArray(g.checks) ? g.checks : (Array.isArray(g.items) ? g.items : []);
+    if (!checks.length) return null;
+    var name = (str(g.title) || GROUP_NAMES[kind] || kind) + " (" + checks.length + ")" +
+      (typeof g.minutes === "number" ? ", about " + g.minutes + " min" : "");
+    var list = el("ul", { "class": "checks" }, checks.map(function (c) {
+      return checkRow(key, c, kind === "proven" || kind === "more");
+    }));
+    if (COLLAPSED[kind]) return el("details", { "class": "tgroup" }, [el("summary", { text: name }), list]);
+    return el("div", { "class": "tgroup" }, [el("h4", { text: name }), list]);
+  }
+  function triageBlock(t) {
+    var key = t.repo + "#" + t.number;
+    if (!triage) return null;
+    if (!t.triage) {
+      return el("div", { "class": "triage" }, [el("p", { "class": "colhead", text: "Triage (trial)" }),
+        el("div", { "class": "meta", text: t.triage_note || "No triage today" })]);
+    }
+    var pr = t.triage;
+    var pills = [];
+    if (str(pr.label)) pills.push(span("tpill", str(pr.label)));
+    if (str(pr.risk)) pills.push(span("tpill " + (pr.risk === "high" ? "bad" : "warn"), "risk: " + str(pr.risk)));
+    pills = pills.concat(deployPills(t, pr));
+    var tot = pr.totals && typeof pr.totals === "object" ? pr.totals : {};
+    var totLine = [typeof tot.checks === "number" ? tot.checks + (tot.checks === 1 ? " check" : " checks") + " that matter" : "",
+                   typeof tot.minutes === "number" ? "about " + tot.minutes + " min" : ""].filter(Boolean).join(", ");
+    var setup = Array.isArray(pr.setup) ? pr.setup.filter(function (x) { return str(x); }) : [];
+    return el("div", { "class": "triage" }, [
+      el("p", { "class": "colhead", text: "Triage (trial)" }),
+      pills.length ? el("div", { "class": "pills" }, pills) : null,
+      str(pr.reason) ? el("div", { text: str(pr.reason) }) : null,
+      str(pr.focus) ? el("div", { "class": "why", text: str(pr.focus) }) : null,
+      totLine ? el("div", { "class": "meta", text: totLine }) : null,
+      setup.length ? el("ul", { "class": "nlist" }, setup.map(function (x) { return el("li", { text: str(x) }); })) : null
+    ].concat((Array.isArray(pr.groups) ? pr.groups : []).map(function (g) { return groupBlock(key, g); })));
+  }
   function testCard(t) {
     var live = String(t.live || "");
+    var side = triageBlock(t);
+    var mine = el("div", { "class": "rowbody" }, [
+      side ? el("p", { "class": "colhead", text: "Your steps" }) : null,
+      live ? span("live " + (live.indexOf("prod") >= 0 ? "good" : "warn"), "live: " + live) : null,
+      el("ol", { "class": "steps" }, (t.steps || []).map(function (s) { return el("li", { text: s }); })),
+      t.inferred ? el("div", { "class": "meta", text: "steps inferred from the diff" }) : null
+    ]);
     return el("div", { "class": "card" }, [
       el("div", { "class": "testrow" }, [
         span("num", String(t.n)),
@@ -397,9 +558,7 @@ body.has-bg .goals > h2 {
             t.project ? span("tag", t.project) : null
           ]),
           t.merged ? el("div", { "class": "meta", text: "merged " + t.merged }) : null,
-          live ? span("live " + (live.indexOf("prod") >= 0 ? "good" : "warn"), "live: " + live) : null,
-          el("ol", { "class": "steps" }, (t.steps || []).map(function (s) { return el("li", { text: s }); })),
-          t.inferred ? el("div", { "class": "meta", text: "steps inferred from the diff" }) : null
+          el("div", { "class": "testcols" + (side ? " has-triage" : "") }, [mine, side])
         ])
       ])
     ]);
@@ -519,7 +678,18 @@ body.has-bg .goals > h2 {
     return out;
   }
   function testingTab() {
-    return testing.length ? [section("Recently merged", testing.length, el("div", { "class": "cards" }, testing.map(testCard)))] : [];
+    if (!testing.length) return [];
+    var top = [];
+    if (triage && triage.status === "ok") {
+      var trialText = triage.trial && str(triage.trial.text);
+      top.push(el("div", { "class": "trialbanner", role: "note", text: trialText || "TRIAL: keep testing as normal." }));
+      if ((triage.withheld || []).length)
+        top.push(el("div", { "class": "banner", role: "status",
+          text: "Triage withheld for " + triage.withheld.join(", ") + ": it held something that should not be there." }));
+    } else if (triage) {
+      top.push(el("div", { "class": "meta", text: "No triage today (" + str(triage.status) + ")" }));
+    }
+    return top.concat([section("Recently merged", testing.length, el("div", { "class": "cards" }, testing.map(testCard)))]);
   }
   function ideasTab() {
     var out = [];
