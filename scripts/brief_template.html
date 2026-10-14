@@ -153,6 +153,14 @@ h2 .count { font-family: var(--font-mono); font-weight: 400; }
 .due-today { color: var(--warn); font-weight: 600; }
 .tag { font-family: var(--font-mono); font-size: 11.5px; background: var(--surface-2); color: var(--muted); border-radius: 4px; padding: 1px 6px; }
 
+/* live overlay: a row or card marked done (or a parked PR) stays in place, muted, with its title struck through.
+   Colours come from the tokens, so it reads in light and dark. */
+.updated { font-size: 12.5px; color: var(--muted); }
+.row.done, .card.done { color: var(--muted); }
+.done .num { color: var(--muted); }
+.row.done .rowbody > :first-child, .row.done a, .card.done .prtitle a { text-decoration: line-through; color: var(--muted); }
+.done .due-overdue, .done .due-today { color: var(--muted); font-weight: 400; }
+
 /* prs */
 .cards { display: flex; flex-direction: column; gap: 8px; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
@@ -319,31 +327,44 @@ body.has-bg .goals > h2 {
     return;
   }
 
-  var inProgress = brief.in_progress || [];
-  var urgent = brief.urgent || [];
-  var prs = brief.prs || {};
-  var actions = brief.actions || {};
-  var todos = brief.todos || {};
-  var ideas = brief.ideas || {};
-  var meetings = brief.meetings || [];
-  var projects = brief.projects || [];
-  var partners = brief.partners || [];
-  var yours = actions.yours || [];
-  var product = actions.product || [];
-  var testing = brief.testing || [];
-
   function groupItems(groups) {
     return (groups || []).reduce(function (a, g) { return a.concat(g.items || []); }, []);
   }
   function countGroups(groups) { return groupItems(groups).length; }
+  /* The live overlay marks items and PRs `done`; section and pill counts only count what is still open. */
+  function openCount(list) { return (list || []).filter(function (x) { return !x.done; }).length; }
+  function openInGroups(groups) { return openCount(groupItems(groups)); }
 
-  var urgentItems = groupItems(urgent);
-  var overdue = urgentItems.filter(function (i) { return String(i.due || "").indexOf("overdue") === 0; }).length;
-  var prTotal = (prs.review_requested || []).length + (prs.ready || []).length + (prs.awaiting || []).length;
+  /* Everything the tabs show comes from these values. derive() sets them from a brief, so the page can be rebuilt
+     from the original brief plus the latest overlay without reloading. */
+  var inProgress, urgent, prs, actions, todos, ideas, meetings, projects, partners, yours, product, testing;
+  var urgentItems, overdue, prTotal;
+  function derive(d) {
+    inProgress = d.in_progress || [];
+    urgent = d.urgent || [];
+    prs = d.prs || {};
+    actions = d.actions || {};
+    todos = d.todos || {};
+    ideas = d.ideas || {};
+    meetings = d.meetings || [];
+    projects = d.projects || [];
+    partners = d.partners || [];
+    yours = actions.yours || [];
+    product = actions.product || [];
+    testing = d.testing || [];
+    urgentItems = groupItems(urgent);
+    overdue = urgentItems.filter(function (i) { return !i.done && String(i.due || "").indexOf("overdue") === 0; }).length;
+    prTotal = openCount(prs.review_requested) + openCount(prs.ready) + openCount(prs.awaiting);
+  }
+  derive(brief);
 
   /* ---------- builders ---------- */
-  function numberedRow(n, body) {
-    return el("div", { "class": "row" }, [span("num", String(n)), el("div", { "class": "rowbody" }, body)]);
+  function numberedRow(n, body, done) {
+    return el("div", { "class": "row" + (done ? " done" : "") }, [span("num", String(n)), el("div", { "class": "rowbody" }, body)]);
+  }
+  function dueSpan(due) {
+    var d = String(due);
+    return span(d.indexOf("overdue") === 0 ? "due-overdue" : (d.indexOf("due today") === 0 ? "due-today" : ""), d);
   }
   function tagPill(item) {
     var t = item.tag;
@@ -358,11 +379,7 @@ body.has-bg .goals > h2 {
   }
   function todoRow(item, showTags) {
     var meta = [];
-    if (item.due) {
-      var d = String(item.due);
-      var cls = d.indexOf("overdue") === 0 ? "due-overdue" : (d.indexOf("due today") === 0 ? "due-today" : "");
-      meta.push(span(cls, d));
-    }
+    if (item.due) meta.push(dueSpan(item.due));
     if (showTags) (item.categories || []).forEach(function (c) { meta.push(span("tag", c)); });
     if (item.note) meta.push(span("", item.note));
     meta.push(tagPill(item));
@@ -371,7 +388,7 @@ body.has-bg .goals > h2 {
       el("div", { text: item.title }),
       meta.length ? el("div", { "class": "meta" }, meta) : null,
       whyLine(item)
-    ]);
+    ], item.done);
   }
   function todoPanel(groups, showTags) {
     var panel = el("div", { "class": "panel" });
@@ -386,9 +403,10 @@ body.has-bg .goals > h2 {
   function actionRow(a) {
     return numberedRow(a.n, [
       el("div", {}, [link(safeUrl(a.url), a.text)]),
-      el("div", { "class": "meta" }, [span("", a.meeting + ", " + a.date), tagPill(a)]),
+      el("div", { "class": "meta" }, [span("", a.meeting + ", " + a.date),
+        a.due ? dueSpan(a.due) : null, a.note ? span("", a.note) : null, tagPill(a)]),
       whyLine(a)
-    ]);
+    ], a.done);
   }
   function actionPanel(list) {
     var panel = el("div", { "class": "panel" });
@@ -408,7 +426,7 @@ body.has-bg .goals > h2 {
     ]);
   }
   function prCard(pr) {
-    return el("div", { "class": "card" }, [
+    return el("div", { "class": "card" + (pr.done ? " done" : "") }, [
       el("div", { "class": "prtitle" }, [
         link(safeUrl(pr.url), "#" + pr.number + " " + pr.title),
         span("tag", pr.repo),
@@ -642,7 +660,7 @@ body.has-bg .goals > h2 {
       el("ol", { "class": "steps" }, (t.steps || []).map(function (s) { return el("li", { text: s }); })),
       t.inferred ? el("div", { "class": "meta", text: "steps inferred from the diff" }) : null
     ]);
-    return el("div", { "class": "card" }, [
+    return el("div", { "class": "card" + (t.done ? " done" : "") }, [
       el("div", { "class": "testrow" }, [
         span("num", String(t.n)),
         el("div", { "class": "rowbody" }, [
@@ -744,11 +762,10 @@ body.has-bg .goals > h2 {
   /* To do: the to-do content on the left, In progress on the right (first in the markup, so it leads on narrow screens). */
   function todoTab() {
     var main = [];
-    if (urgentItems.length) main.push(section("Urgent today", urgentItems.length, todoPanel(urgent)));
-    var comingN = countGroups(todos.coming_up);
-    if (comingN) main.push(section("Coming up", comingN, todoPanel(todos.coming_up)));
-    if (yours.length) main.push(section("Your actions", yours.length, actionPanel(yours)));
-    if (product.length) main.push(section("Product actions", product.length, actionPanel(product)));
+    if (urgentItems.length) main.push(section("Urgent today", openCount(urgentItems), todoPanel(urgent)));
+    if (countGroups(todos.coming_up)) main.push(section("Coming up", openInGroups(todos.coming_up), todoPanel(todos.coming_up)));
+    if (yours.length) main.push(section("Your actions", openCount(yours), actionPanel(yours)));
+    if (product.length) main.push(section("Product actions", openCount(product), actionPanel(product)));
     if (meetings.length) {
       main.push(section("External meeting prep", meetings.length,
         el("div", { "class": "cards" }, meetings.map(meetingCard))));
@@ -756,7 +773,7 @@ body.has-bg .goals > h2 {
     var cols = [];
     if (inProgress.length) {
       cols.push(el("aside", { "class": "todo-side", "aria-label": "In progress" },
-        [section("In progress", inProgress.length, inProgressPanel(inProgress))]));
+        [section("In progress", openCount(inProgress), inProgressPanel(inProgress))]));
     }
     if (main.length) cols.push(el("div", { "class": "todo-main" }, main));
     if (!cols.length) return [];
@@ -767,7 +784,7 @@ body.has-bg .goals > h2 {
     [["Review requested", prs.review_requested], ["Ready to merge", prs.ready], ["Awaiting review", prs.awaiting]]
       .forEach(function (s) {
         var list = s[1] || [];
-        if (list.length) out.push(section(s[0], list.length, el("div", { "class": "cards" }, list.map(prCard))));
+        if (list.length) out.push(section(s[0], openCount(list), el("div", { "class": "cards" }, list.map(prCard))));
       });
     return out;
   }
@@ -789,13 +806,12 @@ body.has-bg .goals > h2 {
     } else if (triage) {
       top.push(el("div", { "class": "meta", text: "No triage today (" + str(triage.status) + ")" }));
     }
-    return top.concat([section("Recently merged", testing.length, el("div", { "class": "cards" }, testing.map(testCard)))]);
+    return top.concat([section("Recently merged", openCount(testing), el("div", { "class": "cards" }, testing.map(testCard)))]);
   }
   function ideasTab() {
     var out = [];
     [["Strategic", ideas.strategic], ["Operational", ideas.other]].forEach(function (s) {
-      var c = countGroups(s[1]);
-      if (c) out.push(section(s[0], c, todoPanel(s[1], false)));
+      if (countGroups(s[1])) out.push(section(s[0], openInGroups(s[1]), todoPanel(s[1], false)));
     });
     return out;
   }
@@ -846,23 +862,29 @@ body.has-bg .goals > h2 {
     return [section("Partners - next actions", partners.length, el("div", { "class": "panel tablewrap" }, [table]))];
   }
 
-  /* The To do pill counts everything on its tab, In progress included, at every width. */
-  var todoCount = inProgress.length + urgentItems.length + countGroups(todos.coming_up) + yours.length + product.length + meetings.length;
-  var TABS = [
-    { id: "todo", label: "To do", build: todoTab, count: todoCount, empty: "Nothing to do." },
-    { id: "prs", label: "PRs", build: prsTab, count: prTotal, empty: "No pull requests need you." },
-    { id: "testing", label: "Testing", build: testingTab, count: testing.length,
-      empty: "Nothing merged recently that needs a manual test." },
-    { id: "ideas", label: "Ideas bank", build: ideasTab,
-      count: countGroups(ideas.strategic) + countGroups(ideas.other), empty: "No ideas parked." },
-    { id: "projects", label: "Projects", build: projectsTab, count: projects.length, empty: "No projects." },
-    { id: "clients", label: "Clients", build: clientsTab, count: partners.length, empty: "No clients." }
-  ];
+  /* The To do pill counts everything still open on its tab, In progress included, at every width. Built on each
+     render, because the counts change with the overlay. */
+  function tabs() {
+    return [
+      { id: "todo", label: "To do", build: todoTab, empty: "Nothing to do.",
+        count: openCount(inProgress) + openCount(urgentItems) + openInGroups(todos.coming_up) + openCount(yours) +
+               openCount(product) + meetings.length },
+      { id: "prs", label: "PRs", build: prsTab, count: prTotal, empty: "No pull requests need you." },
+      { id: "testing", label: "Testing", build: testingTab, count: openCount(testing),
+        empty: "Nothing merged recently that needs a manual test." },
+      { id: "ideas", label: "Ideas bank", build: ideasTab,
+        count: openInGroups(ideas.strategic) + openInGroups(ideas.other), empty: "No ideas parked." },
+      { id: "projects", label: "Projects", build: projectsTab, count: projects.length, empty: "No projects." },
+      { id: "clients", label: "Clients", build: clientsTab, count: partners.length, empty: "No clients." }
+    ];
+  }
 
   /* ---------- header: date and title, goals strip, then the pill row ---------- */
+  var updatedEl = el("div", { "class": "updated", role: "status", hidden: "" });
   var header = el("header", {}, [
     el("div", { "class": "date", text: brief.weekday_label || brief.date }),
-    el("h1", { "class": "focus", text: "Morning brief" })
+    el("h1", { "class": "focus", text: "Morning brief" }),
+    updatedEl
   ]);
   app.appendChild(header);
   if ((brief.unavailable || []).length) {
@@ -874,30 +896,67 @@ body.has-bg .goals > h2 {
 
   /* ---------- pills: one per tab, and the only tab bar ---------- */
   /* Each pill carries its tab's label and count; To do also shows the overdue figure. A tab with nothing in it gets
-     no pill, except To do, which always shows. */
-  var tablist = el("div", { "class": "chips", role: "tablist", "aria-label": "Brief sections" });
+     no pill, except To do, which always shows. A tab that was there at load stays after a live update, even at 0, so
+     the row does not jump. renderTabs() builds the new bar and panels first and swaps them in last, so a failure
+     while building leaves the page as it was. */
+  var tablist = null;
   var panels = {};
   var tabButtons = {};
   var visibleIds = [];
-  TABS.forEach(function (t) {
-    var content = t.build();
-    if (!content.length && t.id !== "todo") return;
-    visibleIds.push(t.id);
-    var b = el("button", { "class": "chip", role: "tab", type: "button", id: "tab-" + t.id,
-      "aria-controls": "panel-" + t.id, "aria-selected": "false",
-      onclick: function () { select(t.id, true); } }, [
-      span("", t.label), el("b", { text: String(t.count) }),
-      t.id === "todo" && overdue > 0 ? span("overdue", overdue + " overdue") : null
-    ]);
-    tabButtons[t.id] = b;
-    tablist.appendChild(b);
-    panels[t.id] = el("div", { "class": "tabpanel", role: "tabpanel", id: "panel-" + t.id, "aria-labelledby": "tab-" + t.id, hidden: "" },
-      content.length ? content : [el("p", { "class": "empty", text: t.empty })]);
-  });
-  app.appendChild(tablist);
-  visibleIds.forEach(function (id) { app.appendChild(panels[id]); });
-
+  var shownAtLoad = null;
   var current = "todo";
+  function renderTabs() {
+    var keep = shownAtLoad || {};
+    var nList = el("div", { "class": "chips", role: "tablist", "aria-label": "Brief sections" });
+    var nPanels = {}, nButtons = {}, nIds = [];
+    var prevButtons = results.buttons;
+    results.buttons = [];   /* the Testing controls are rebuilt, so paintResults() must see the new ones */
+    try {
+      tabs().forEach(function (t) {
+        var content = t.build();
+        if (!content.length && t.id !== "todo" && !keep[t.id]) return;
+        nIds.push(t.id);
+        var b = el("button", { "class": "chip", role: "tab", type: "button", id: "tab-" + t.id,
+          "aria-controls": "panel-" + t.id, "aria-selected": "false",
+          onclick: function () { select(t.id, true); } }, [
+          span("", t.label), el("b", { text: String(t.count) }),
+          t.id === "todo" && overdue > 0 ? span("overdue", overdue + " overdue") : null
+        ]);
+        nButtons[t.id] = b;
+        nList.appendChild(b);
+        nPanels[t.id] = el("div", { "class": "tabpanel", role: "tabpanel", id: "panel-" + t.id, "aria-labelledby": "tab-" + t.id, hidden: "" },
+          content.length ? content : [el("p", { "class": "empty", text: t.empty })]);
+      });
+    } catch (e) { results.buttons = prevButtons; throw e; }
+    nList.addEventListener("keydown", onTabKey);
+
+    /* what the reader had: scroll position, a focused pill, opened <details> */
+    var scrollY = window.scrollY;
+    var focusId = document.activeElement && /^tab-/.test(document.activeElement.id || "") ? document.activeElement.id : null;
+    var opened = {};
+    visibleIds.forEach(function (id) {
+      Array.prototype.forEach.call(panels[id].querySelectorAll("details"), function (d, i) {
+        if (d.open) (opened[id] = opened[id] || []).push(i);
+      });
+    });
+    if (tablist && tablist.parentNode) tablist.parentNode.removeChild(tablist);
+    visibleIds.forEach(function (id) { if (panels[id].parentNode) panels[id].parentNode.removeChild(panels[id]); });
+
+    tablist = nList; panels = nPanels; tabButtons = nButtons; visibleIds = nIds;
+    if (!shownAtLoad) { shownAtLoad = {}; nIds.forEach(function (id) { shownAtLoad[id] = true; }); }
+    app.appendChild(tablist);
+    visibleIds.forEach(function (id) { app.appendChild(panels[id]); });
+    Object.keys(opened).forEach(function (id) {
+      if (!panels[id]) return;
+      var ds = panels[id].querySelectorAll("details");
+      opened[id].forEach(function (i) { if (ds[i]) ds[i].open = true; });
+    });
+    select(current, false);
+    paintResults();
+    if (scrollY && window.scrollY !== scrollY) window.scrollTo(0, scrollY);
+    if (focusId && document.getElementById(focusId)) document.getElementById(focusId).focus();
+  }
+
   function select(id, scrollUp) {
     if (visibleIds.indexOf(id) < 0) id = "todo";
     current = id;
@@ -910,7 +969,7 @@ body.has-bg .goals > h2 {
     try { localStorage.setItem("morning-brief-tab", id); } catch (e) { /* storage unavailable */ }
     if (scrollUp && tablist.getBoundingClientRect().top < 0) tablist.scrollIntoView({ block: "start" });
   }
-  tablist.addEventListener("keydown", function (e) {
+  function onTabKey(e) {
     var cur = visibleIds.indexOf(document.activeElement && document.activeElement.id.replace("tab-", ""));
     if (cur < 0) return;
     var next = e.key === "ArrowRight" ? cur + 1 : e.key === "ArrowLeft" ? cur - 1 : null;
@@ -919,11 +978,143 @@ body.has-bg .goals > h2 {
     select(visibleIds[next], false);
     tabButtons[visibleIds[next]].focus();
     e.preventDefault();
-  });
+  }
 
-  var saved = "todo";
-  try { saved = localStorage.getItem("morning-brief-tab") || "todo"; } catch (e) { saved = "todo"; }
-  select(saved, false);
+  try { current = localStorage.getItem("morning-brief-tab") || "todo"; } catch (e) { current = "todo"; }
+  renderTabs();
+
+  /* ---------- live overlay ---------- */
+  /* Claude writes what changed since the page was published to the doc brief-updates/<date>: item numbers marked
+     done or started, a changed due date, note or tag, and parked PRs. The page only reads it. It is data, never
+     followed: each field is type-checked, unknown numbers and fields are ignored, and everything is shown with
+     textContent. The overlay is always applied to a fresh copy of the original brief, never to the last result. */
+  var ITEM_HOMES = ["progress", "urgent", "coming", "yours", "product", "testing", "ideas"];
+  var STARTABLE = { urgent: 1, coming: 1, yours: 1, product: 1, ideas: 1 };
+  function cleanTag(t) {
+    t = obj(t);
+    if (["needs-lena", "split", "handoff"].indexOf(t.verdict) < 0) return null;
+    var who = t.who == null ? "" : t.who, why = t.why == null ? "" : t.why;
+    if (typeof who !== "string" || typeof why !== "string") return null;
+    if (t.verdict !== "needs-lena" && !who.trim()) return null;
+    return { verdict: t.verdict, who: who, why: why };
+  }
+  function applyOverlay(base, ov) {
+    var d = JSON.parse(JSON.stringify(base));
+    d.in_progress = arr(d.in_progress);
+    d.urgent = arr(d.urgent);
+    d.todos = obj(d.todos); d.todos.coming_up = arr(d.todos.coming_up);
+    d.actions = obj(d.actions); d.actions.yours = arr(d.actions.yours); d.actions.product = arr(d.actions.product);
+    d.testing = arr(d.testing);
+    d.ideas = obj(d.ideas); d.ideas.strategic = arr(d.ideas.strategic); d.ideas.other = arr(d.ideas.other);
+    d.prs = obj(d.prs);
+
+    /* every list an item can sit in, by where it lives */
+    function groupLists(gs) { return gs.map(function (g) { return obj(g).items; }).filter(Array.isArray); }
+    function listsFor(home) {
+      if (home === "progress") return [d.in_progress];
+      if (home === "urgent") return groupLists(d.urgent);
+      if (home === "coming") return groupLists(d.todos.coming_up);
+      if (home === "yours") return [d.actions.yours];
+      if (home === "product") return [d.actions.product];
+      if (home === "testing") return [d.testing];
+      return groupLists(d.ideas.strategic).concat(groupLists(d.ideas.other));
+    }
+    var index = {};
+    ITEM_HOMES.forEach(function (home) {
+      listsFor(home).forEach(function (list) {
+        list.forEach(function (i) { if (i && typeof i.n === "number") index[i.n] = { item: i, home: home }; });
+      });
+    });
+
+    var changes = obj(ov.items);
+    var started = [];
+    Object.keys(changes).filter(function (k) { return /^\d+$/.test(k) && index[k]; })
+      .sort(function (a, b) { return a - b; })
+      .forEach(function (k) {
+        var rec = obj(changes[k]), hit = index[k], item = hit.item;
+        if (hit.home !== "testing") {
+          if (typeof rec.due === "string") item.due = rec.due;
+          if (typeof rec.note === "string") item.note = rec.note;
+          var tag = cleanTag(rec.tag);
+          if (tag) item.tag = tag;
+        }
+        if (rec.status === "done") item.done = true;
+        else if (rec.status === "started" && STARTABLE[hit.home]) started.push(hit);
+      });
+    /* started: out of its section, onto the end of In progress, same number. The row builder follows `kind`. */
+    started.forEach(function (hit) {
+      listsFor(hit.home).forEach(function (list) {
+        var at = list.indexOf(hit.item);
+        if (at >= 0) list.splice(at, 1);
+      });
+      hit.item.kind = hit.home === "yours" || hit.home === "product" ? "fathom" : "notion";
+      d.in_progress.push(hit.item);
+    });
+
+    /* a parked PR is shown the way a done item is */
+    var parked = obj(ov.prs);
+    ["review_requested", "ready", "awaiting"].forEach(function (k) {
+      arr(d.prs[k]).forEach(function (pr) {
+        if (pr && Object.prototype.hasOwnProperty.call(parked, pr.url) && obj(parked[pr.url]).status === "parked") pr.done = true;
+      });
+    });
+    return d;
+  }
+  /* The newest `at` among the overlay's records, as "Updated HH:MM" in the reader's local time; "" if there is none. */
+  function updatedText(ov) {
+    var best = 0, any = false;
+    [obj(ov.items), obj(ov.prs)].forEach(function (m) {
+      Object.keys(m).forEach(function (k) {
+        if (!m[k] || typeof m[k] !== "object") return;
+        any = true;
+        var t = typeof m[k].at === "string" ? Date.parse(m[k].at) : NaN;
+        if (!isNaN(t) && t > best) best = t;
+      });
+    });
+    if (!any || !best) return "";
+    var when = new Date(best);
+    function two(x) { return (x < 10 ? "0" : "") + x; }
+    return "Updated " + two(when.getHours()) + ":" + two(when.getMinutes());
+  }
+
+  var shown = brief;          /* the data the page is showing now: the last good state */
+  var lastOverlay = "{}";     /* JSON of the overlay behind it; the built brief counts as an empty overlay */
+  function showOverlay(ov, json) {
+    var next = applyOverlay(brief, ov);
+    derive(next);
+    try { renderTabs(); } catch (e) { derive(shown); throw e; }
+    shown = next;
+    lastOverlay = json;
+    var text = updatedText(ov);
+    updatedEl.textContent = text;
+    updatedEl.hidden = !text;
+  }
+
+  /* Poll while the page is visible; no db or doc, or a failed read, keeps the last good state and stays quiet. */
+  var overlayDoc = null, reading = false;
+  function readOverlay() {
+    if (reading) return;
+    reading = true;
+    Promise.resolve().then(function () {
+      if (overlayDoc) return null;
+      return window.claude.use("db").then(function (db) {
+        if (db) overlayDoc = db.doc("brief-updates/" + String(brief.date).replace(/[^0-9-]/g, ""));
+      });
+    }).then(function () {
+      return overlayDoc ? overlayDoc.get() : null;
+    }).then(function (snap) {
+      var data = snap && snap.exists ? snap.data() : null;
+      if (!data || typeof data !== "object" || Array.isArray(data)) return;
+      var json = JSON.stringify(data);
+      if (json !== lastOverlay) showOverlay(data, json);
+    }).then(function () { reading = false; }, function () { reading = false; });
+  }
+  function pollOverlay() { if (document.visibilityState === "visible") readOverlay(); }
+  if (window.claude && typeof window.claude.use === "function") {
+    readOverlay();
+    setInterval(pollOverlay, 30000);
+    document.addEventListener("visibilitychange", pollOverlay);
+  }
 })();
 </script>
 </body>
