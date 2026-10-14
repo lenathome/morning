@@ -473,7 +473,7 @@ Examples (bad):
 
 ## Step 6: Publish and present
 
-1. Publish `<briefs_dir>/<date>.html` with the Artifact tool. If `output.artifact_url` is set: first `read` that URL (a publish to an artifact this conversation hasn't read is refused), then publish with `url` set to it, no `icon`. If it is empty: publish without `url`, with `icon: "calendar"` and `description: "Your daily morning brief"`, and tell the user to paste the returned URL into `output.artifact_url` in `~/morning/config.yaml`. Always pass `capabilities: {"db": {}}`: the Testing tab saves the pass / fail / not tested result per triage check there (Step 7c).
+1. Publish `<briefs_dir>/<date>.html` with the Artifact tool. If `output.artifact_url` is set: first `read` that URL (a publish to an artifact this conversation hasn't read is refused), then publish with `url` set to it, no `icon`. If it is empty: publish without `url`, with `icon: "calendar"` and `description: "Your daily morning brief"`, and tell the user to paste the returned URL into `output.artifact_url` in `~/morning/config.yaml`. Always pass `capabilities: {"db": {}}`: the db holds both the Testing tab's pass / fail / not tested result per triage check (Step 7c) and the live updates to the brief (Step 7d).
 2. Print only this in chat:
    - `**<weekday_label>** - <focus>`
    - one line of counters from the renderer: `Urgent N (M overdue) · PRs: R to review, K ready, A awaiting · Your actions N · Meetings N` (drop any part that is 0, except Urgent)
@@ -493,11 +493,11 @@ If the brief has any numbered lines (In progress, To do, Testing or Ideas bank):
 5. For a Notion to-do: update that page's `Status` property to `Done` via the Notion MCP, then run `python3 ~/github/morning/scripts/ack_task.py <id1> <id2> ...` (batch all such ids into one call) so the next brief drops it even if the Notion write fails or is reverted.
 6. For a Fathom action: run `python3 ~/github/morning/scripts/ack_action.py <key1> <key2> ...` (batch all such keys into one call).
 7. For a Testing item (kind `test`): run `python3 ~/github/morning/scripts/ack_test.py <key1> <key2> ...` (batch all such keys into one call).
-8. Confirm to the user: `Marked N item(s) done. They won't appear tomorrow.`
+8. Confirm to the user: `Marked N item(s) done. They won't appear tomorrow.` Then write the live update (Step 7d).
 9. Then print exactly: `Started any? (numbers comma-separated, blank to skip):` and wait for the reply. Parse it as in step 3 and look the numbers up in the same map. Skip numbers the user just marked done.
 10. For a Notion to-do (kind `notion`): update that page's `Status` property to `In progress` via the Notion MCP.
 11. For a Fathom action (kind `fathom`): run `python3 ~/github/morning/scripts/mark_in_progress.py <key1> <key2> ...` (batch all such keys into one call). Testing items (kind `test`) cannot be started: ignore those numbers.
-12. Confirm to the user: `Moved N item(s) to In progress.` They show under In progress from the next brief.
+12. Confirm to the user: `Moved N item(s) to In progress.` They show under In progress from the next brief. Then write the live update (Step 7d).
 
 If the brief had no numbered lines, skip this step entirely. Both prompts are skipped together.
 
@@ -512,7 +512,7 @@ If "Review requested of you" in PRs needing you surfaced any PRs (after the stat
 2. Wait for the user's reply.
 3. For each PR number, look up its URL and `updatedAt` from the data fetched in Step 1.4.
 4. Run: `python3 ~/github/morning/scripts/ack_pr.py "<pr_url>" "<updated_at_iso>"`
-5. Confirm: `Parked N PR(s). They'll resurface only if updated.`
+5. Confirm: `Parked N PR(s). They'll resurface only if updated.` Then write the live update (Step 7d): parked PRs go under `prs`, keyed by the PR URL.
 
 If no PRs surfaced, skip this step entirely.
 
@@ -523,6 +523,36 @@ Only in a session with the user, never unattended. The user records results on t
 1. Read the results with ArtifactData: `get` on `output.artifact_url`, collection `triage-results`, document `<prev>`. It holds `results`, keyed `<repo>#<number>|<check id>`, each `{pr, check, result: pass | fail | not-tested}`, plus the `run_id` the page showed. A missing document means nothing was recorded: skip this step.
 2. Draft one `pr-triage-feedback/1` comment (the JSON form from product-os#5): `schema`, `run_id`, `date`, and per tested PR `tested: true` with `proven: "held"` or `{"failed": [<ids of proven checks marked fail>]}`. A PR with no results is `{"tested": false}`. Add nothing the user did not record or say.
 3. Show the draft and ask: `Post this triage feedback? (yes / edits / skip)`. Post only on yes: `gh api repos/lenathome/product-os/issues/<triage issue number>/comments -F body=@<file in the scratchpad>`. Never edit, close or label the triage issue, and never post on an ekko PR unless the user approves that exact text.
+
+## Step 7d: Live page updates
+
+Only in a session with the user, never unattended (Step 7 does not run then either). When the user reports an item done, started, moved or re-tagged, write a record to the brief page's database, so the open page shows the change without a new brief. The page strikes through done items and keeps their numbers, moves started items to In progress, replaces the due date, note and tag the row shows with the record's, strikes through parked PRs and updates the pill counts. It re-reads every 30 seconds while open. A moved item stays in its section until the next brief.
+
+This covers Step 7 and Step 7b, and also any later message in the same session where the user says item N is done, started, moved to a new date or should carry a different tag. Look each number up in `~/morning/state/brief-map-<date>.json` as Step 7 does. For each change, do the state write first and write the record only after it succeeds:
+
+- Done: Notion `Status` to `Done` plus `ack_task.py` (Notion), `ack_action.py` (Fathom) or `ack_test.py` (Testing), as in Step 7. Record `status: "done"`.
+- Started: Notion `Status` to `In progress`, or `mark_in_progress.py` for Fathom. Testing items cannot be started. Record `status: "started"`.
+- Moved: update the Notion task's `Due` date. Fathom actions and Testing items have no due date: tell the user so in one line and write nothing. Record `due`, in the brief JSON's own wording: `due today`, `due 17 Oct`, `overdue since 12 Oct`.
+- Re-tagged: no external write, the record is the only place it lives. Record `tag` as the user gave it: `verdict` (`needs-lena`, `split` or `handoff`), `who` (a first name, or empty) and `why` (one short sentence). Never re-derive it from the project's owner field or `people.md`: tags come from the user's calls, not project owners.
+
+If a state write fails, say so in one line and do not write the record for that item.
+
+The record is one document on `output.artifact_url`, collection `brief-updates`, doc id `<date>`: the brief's date, `YYYY-MM-DD`, the same date as the `brief-map-<date>.json` whose numbers the user is using.
+
+```
+{ "date": "2026-10-14",
+  "items": { "<n>": {"status": "done" | "started", "due": "<display string>", "note": "<string>", "tag": {"verdict": "needs-lena" | "split" | "handoff", "who": "<first name or empty>", "why": "<one short sentence>"}, "at": "<ISO 8601 now>"} },
+  "prs": { "<pr url>": {"status": "parked", "at": "<ISO 8601 now>"} } }
+```
+
+Every per-item field except `at` is optional: write only what changed.
+
+1. `get` the document with ArtifactData: `url` = `output.artifact_url`, collection `brief-updates`, `doc_id` `<date>`. Not found: start from `{"date": "<date>", "items": {}, "prs": {}}`.
+2. Merge. For each changed number, update only the fields that changed on that number's record and set `at` to now. Keep every other record and field.
+3. `set` the whole merged document, with `if_version` set to the version from step 1 (omit it only when the document did not exist). On a version conflict, `get` again and redo the merge once.
+4. A failed write is reported in one line. It never blocks or undoes the Notion or state write.
+
+Batch all changes from one reply into one `get` and one `set`.
 
 ## Step 8: Final confirmation
 

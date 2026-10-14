@@ -643,8 +643,8 @@ class InProgressTest(unittest.TestCase):
         self.assertIn('"in_progress": [', html)
         self.assertIn('"kind": "fathom"', html)
         t = self.template()
-        self.assertIn("brief.in_progress", t)
-        self.assertIn('section("In progress", inProgress.length', t)
+        self.assertIn("inProgress = d.in_progress || []", t)
+        self.assertIn('section("In progress", openCount(inProgress)', t)
         self.assertIn('i.kind === "fathom" ? actionRow(i) : todoRow(i, true)', t)
         self.assertNotIn("innerHTML", t)
 
@@ -686,10 +686,45 @@ class InProgressTest(unittest.TestCase):
 
     def test_todo_pill_counts_in_progress_at_every_width(self):
         t = self.template()
-        self.assertIn("var todoCount = inProgress.length + urgentItems.length", t)
-        self.assertIn('count: todoCount', t)
+        # counts only what is still open: the live overlay marks done items, which drop out of every count
+        self.assertIn("count: openCount(inProgress) + openCount(urgentItems)", t)
         self.assertNotIn("wide ? 0 : inProgress.length", t)
         self.assertNotIn("todoBaseCount", t)
+
+
+class LiveOverlayTest(unittest.TestCase):
+    def template(self):
+        return (ROOT / "scripts" / "brief_template.html").read_text()
+
+    def test_template_reads_the_overlay_doc_and_never_writes_it(self):
+        t = self.template()
+        self.assertIn('db.doc("brief-updates/" + String(brief.date).replace(/[^0-9-]/g, ""))', t)
+        self.assertIn("overlayDoc.get()", t)
+        self.assertNotIn("overlayDoc.set", t)
+        # the overlay is untrusted: it is applied to a fresh copy of the original brief and shown as text only
+        self.assertIn("JSON.parse(JSON.stringify(base))", t)
+        self.assertNotIn("innerHTML", t)
+
+    def test_template_polls_only_while_the_page_is_visible(self):
+        t = self.template()
+        self.assertIn('document.visibilityState === "visible"', t)
+        self.assertIn("setInterval(pollOverlay, 30000)", t)
+        self.assertIn('document.addEventListener("visibilitychange", pollOverlay)', t)
+        # the first paint never waits for the db
+        self.assertLess(t.index("renderTabs();\n\n  /* ---------- live overlay"), t.index("readOverlay();\n    setInterval"))
+
+    def test_template_keeps_the_page_state_on_re_render(self):
+        t = self.template()
+        self.assertIn("results.buttons = [];", t)
+        self.assertIn("paintResults();", t[t.index("function renderTabs()"):t.index("function select(")])
+        self.assertIn("window.scrollTo(0, scrollY)", t)
+
+    def test_html_still_embeds_the_brief_for_the_overlay_to_start_from(self):
+        brief, _ = render_brief.number_items(load())
+        html = render_brief.to_html(brief)
+        self.assertIn('<script id="brief-data" type="application/json">{"date": "2026-10-01"', html)
+        self.assertIn('"n": 1', html)
+        self.assertNotIn("/*__BRIEF_JSON__*/", html)
 
 
 GOALS = {
