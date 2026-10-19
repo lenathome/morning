@@ -42,7 +42,8 @@ for r in "${repo_arr[@]}"; do
     oid=$(echo "$pr" | jq -r '.mergeCommit.oid // ""')
     deploys="[]"
     if [[ -n "$oid" ]]; then
-      runs=$(gh run list -R "$full" --commit "$oid" --json workflowName,status,conclusion,databaseId 2>/dev/null || echo "[]")
+      # gh defaults to 20 runs; comment-triggered noise runs on the same commit can push the deploy run past that.
+      runs=$(gh run list -R "$full" --commit "$oid" --limit 1000 --json workflowName,status,conclusion,databaseId 2>/dev/null || echo "[]")
       deploy_runs=$(echo "$runs" | jq -c '.[] | select(.workflowName | test("deploy|release|publish"; "i"))')
       while read -r run; do
         [[ -z "$run" ]] && continue
