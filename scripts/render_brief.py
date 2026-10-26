@@ -17,7 +17,8 @@ to a shared repo.
 .jpg/.jpeg/.webp/.png (the season comes from the brief's date). The image is
 embedded in the HTML as a data: URI; a missing file means no background.
 
---triage takes the file pr_triage_reader.py wrote (~/morning/state/triage-<date>.json)
+--triage takes the file triage_from_notion.py wrote (~/morning/state/triage-<date>.json,
+read from the Notion triage database)
 and joins it onto the Testing items by `repo#number`, for the page only: the
 markdown and the shared markdown never carry triage data (product-os#5, rule 6).
 An item with no match gets "No triage today". A missing or unreadable file, or
