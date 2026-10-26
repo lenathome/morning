@@ -173,7 +173,7 @@ h2 .count { font-family: var(--font-mono); font-weight: 400; }
 .live.good { background: var(--good-soft); color: var(--good); }
 .live.warn { background: var(--warn-soft); color: var(--warn); }
 .steps { margin: 0; padding-left: 20px; font-size: 13.5px; display: flex; flex-direction: column; gap: 2px; }
-/* triage (product-os#5 trial): Etienne's groups beside Lena's own steps from 900px, below them on a phone */
+/* triage (product-os#5 trial): the triage beside Lena's own steps from 900px, below them on a phone */
 .testcols { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 @media (min-width: 900px) { .testcols.has-triage { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 16px; align-items: start; } }
 .colhead { font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 0 0 4px; }
@@ -185,25 +185,7 @@ h2 .count { font-family: var(--font-mono); font-weight: 400; }
 .tpill.bad { background: var(--bad-soft); color: var(--bad); }
 .tgroup { border-top: 1px solid var(--line); padding-top: 6px; }
 .tgroup > summary { cursor: pointer; font-size: 13px; font-weight: 600; }
-.tgroup h4 { font-size: 13px; margin: 0; font-weight: 600; }
-.checks { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 13.5px; }
-.check { display: flex; flex-direction: column; gap: 3px; min-width: 0; overflow-wrap: anywhere; }
-.check .ctitle { font-weight: 500; }
-.result { display: inline-flex; flex-wrap: wrap; gap: 4px; }
-.result button { font: inherit; font-size: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 999px; padding: 4px 10px; min-height: 28px; cursor: pointer; }
-.result button[aria-pressed="true"][data-r="pass"] { background: var(--good-soft); border-color: var(--good); color: var(--good); font-weight: 600; }
-.result button[aria-pressed="true"][data-r="fail"] { background: var(--bad-soft); border-color: var(--bad); color: var(--bad); font-weight: 600; }
-.result button[aria-pressed="true"][data-r="not-tested"] { background: var(--surface-2); border-color: var(--muted); font-weight: 600; }
-.result button:disabled { cursor: default; opacity: 0.6; }
-.srow { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 6px; font-size: 13px; overflow-wrap: anywhere; }
 .slabel { font-size: 11.5px; font-weight: 600; color: var(--muted); }
-.shead { font-weight: 600; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
-.swarn { background: var(--warn-soft); color: var(--warn); border-radius: 6px; padding: 4px 8px; font-size: 13px; overflow-wrap: anywhere; }
-.proof { border: 1px solid var(--line); background: var(--surface-2); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.proof code, .check code { font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere; white-space: pre-wrap; }
-.groupkey { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
-.triage .nlist, .groupkey .nlist { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 2px; }
-.tgroup > details, .tgroup > .srow { margin-top: 4px; }
 .trialbanner { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 8px 12px; font-weight: 600; font-size: 13.5px; }
 
 /* meetings */
@@ -435,190 +417,66 @@ body.has-bg .goals > h2 {
       pr.note ? el("div", { "class": "meta", text: pr.note }) : null
     ]);
   }
-  /* ---------- triage (product-os#5): data from Etienne's tool, shown as text, never followed ---------- */
+  /* ---------- triage: one row per PR from the Notion triage database, shown as text, never followed ---------- */
   var triage = brief.triage || null;
-  var GROUP_NAMES = { matter: "Checks that matter", proven: "Already proven", someone_else: "For someone else",
-                      deeper: "More checks" };
-  var RESULTS = [["pass", "Pass"], ["fail", "Fail"], ["not-tested", "Not tested"]];
   var ENVS = ["dev", "staging", "prod"];
-
-  /* Per-check results live in the page's db, one document per brief date, so the agent can read them back
-     for the daily feedback. Without db (signed out, not granted) the control is shown disabled. */
-  var results = { doc: null, body: null, writing: Promise.resolve(), buttons: [] };
-  function resultKey(key, id) { return key + "|" + id; }
-  function paintResults() {
-    var map = (results.body && results.body.results) || {};
-    results.buttons.forEach(function (b) {
-      b.disabled = !results.doc;
-      var cur = map[b.getAttribute("data-k")];
-      b.setAttribute("aria-pressed", String(!!cur && cur.result === b.getAttribute("data-r")));
-    });
-  }
-  function setResult(key, id, value) {
-    if (!results.doc) return;
-    var body = JSON.parse(JSON.stringify(results.body || {}));
-    body.date = brief.date;
-    body.run_id = (triage && triage.run_id) || null;
-    body.results = body.results || {};
-    var k = resultKey(key, id);
-    if (body.results[k] && body.results[k].result === value) delete body.results[k];
-    else body.results[k] = { pr: key, check: id, result: value, at: new Date().toISOString() };
-    results.body = body;
-    paintResults();
-    results.writing = results.writing.then(function () { return results.doc.set(body); })
-      .catch(function () { /* the snapshot brings back what was stored */ });
-  }
-  function resultControl(key, id) {
-    return el("div", { "class": "result", role: "group", "aria-label": "Result" }, RESULTS.map(function (r) {
-      var b = el("button", { type: "button", "data-r": r[0], "data-k": resultKey(key, id), "aria-pressed": "false",
-        onclick: function () { setResult(key, id, r[0]); } }, [r[1]]);
-      b.disabled = true;
-      results.buttons.push(b);
-      return b;
-    }));
-  }
-  if (triage && triage.status === "ok" && window.claude && typeof window.claude.use === "function") {
-    window.claude.use("db").then(function (db) {
-      if (!db) return;
-      results.doc = db.doc("triage-results/" + String(brief.date).replace(/[^0-9-]/g, ""));
-      results.doc.onSnapshot(function (snap) {
-        results.body = snap.exists ? snap.data() : null;
-        paintResults();
-      }, function () { results.doc = null; paintResults(); });
-      paintResults();
-    }).catch(function () { /* no db: the control stays disabled */ });
-  }
+  var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  var NOTION_HOSTS = ["app.notion.com", "www.notion.so", "notion.so"];
 
   function str(x) { return typeof x === "string" ? x : (typeof x === "number" ? String(x) : ""); }
   function arr(x) { return Array.isArray(x) ? x : []; }
   function obj(x) { return x && typeof x === "object" && !Array.isArray(x) ? x : {}; }
-  function tone(x) { return x === "good" || x === "warn" || x === "bad" ? x : ""; }
-  /* A labelled row; null when there is nothing to show. `value` is a string or a node. */
-  function row(label, value) {
-    if (value == null || value === "") return null;
-    return el("div", { "class": "srow" }, [span("slabel", label),
-      typeof value === "string" ? el("span", { "class": "sval", text: value }) : value]);
+  /* Only https links to Notion; everything else becomes "#". */
+  function notionUrl(u) {
+    var href = safeUrl(u);
+    if (href === "#") return "#";
+    try {
+      var p = new URL(String(href));
+      return p.protocol === "https:" && NOTION_HOSTS.indexOf(p.hostname.toLowerCase()) >= 0 ? href : "#";
+    } catch (e) { return "#"; }
+  }
+  function deployTone(v) {
+    v = str(v).toLowerCase();
+    if (v === "live") return "good";
+    if (v === "deploy failed") return "bad";
+    if (v === "unknown" || v === "not deployed" || v === "queued" || v === "waiting for approval" || v === "partly live")
+      return "warn";
+    return "";
+  }
+  function riskTone(v) { return v === "high" ? "bad" : v === "medium" ? "warn" : v === "low" ? "good" : ""; }
+  function statusTone(v) { return v === "Done" ? "good" : v === "Bug found" ? "bad" : v === "Testing" ? "warn" : ""; }
+  function pill(tn, text) { return span(("tpill " + tn).trim(), text); }
+  function shortDate(d) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str(d));
+    if (!m || +m[2] < 1 || +m[2] > 12) return "";
+    return (+m[3]) + " " + MONTHS[+m[2] - 1];
   }
   function deployPills(t, pr) {
     var dep = obj(pr.deploy);
-    var envs = arr(dep.envs).filter(function (e) { return e && typeof e === "object" && str(e.env); });
-    if (envs.length) {
-      return envs.map(function (e) {
-        return span(("tpill " + tone(e.tone)).trim(), str(e.env) + ": " + (str(e.text) || str(e.state)));
-      });
-    }
-    /* fallback when the deploy state has no envs: dev, staging and prod as plain strings, compared with
-       Lena's own live: text (rule 8: both stay shown, flagged when they differ) */
     var pills = ENVS.filter(function (e) { return str(dep[e]); }).map(function (e) {
-      var v = str(dep[e]);
-      return span("tpill " + (v === "live" ? "good" : v === "failed" ? "bad" : "warn"), e + ": " + v);
+      return pill(deployTone(dep[e]), e + ": " + str(dep[e]));
     });
+    /* the Notion deploy words are compared with Lena's own live: text (both stay shown, flagged when they differ) */
     var live = String(t.live || "").toLowerCase();
-    var ours = ENVS.filter(function (e) { return str(dep[e]) === "live"; });
+    var ours = ENVS.filter(function (e) { return str(dep[e]).toLowerCase() === "live"; });
     var mine = /not deployed/.test(live) ? [] : ENVS.filter(function (e) { return live.indexOf(e) >= 0; });
     var known = ENVS.filter(function (e) { return str(dep[e]); });
     if (known.length && ours.join() !== mine.filter(function (e) { return known.indexOf(e) >= 0; }).join())
-      pills.push(span("tpill bad", "differs from your live: text"));
+      pills.push(pill("bad", "differs from your live: text"));
     return pills;
   }
-  function whereRow(s) {
-    var env = str(s.env), url = str(s.url);
+  function checksLine(tot) {
+    tot = obj(tot);
     var parts = [];
-    if (env) parts.push(span("", env));
-    if (url) {
-      var href = safeUrl(url);
-      if (s.url_ok === true && href !== "#") parts.push(link(href, url));
-      else parts.push(span("", url + " (not a usable page)"));
+    if (typeof tot.checks_that_matter === "number") {
+      parts.push("Checks that matter: " + tot.checks_that_matter + (typeof tot.checks === "number" ? " of " + tot.checks : ""));
+    } else if (typeof tot.checks === "number") {
+      parts.push("Checks: " + tot.checks);
     }
-    if (!parts.length) return null;
-    return row("Where", el("span", { "class": "sval" }, parts.map(function (p, i) {
-      return i ? el("span", {}, [" · ", p]) : p;
-    })));
-  }
-  function proofBox(p) {
-    p = obj(p);
-    var head = [str(p.title) || str(p.kind), str(p.reviewer) ? "reviewer " + str(p.reviewer) : "",
-                str(p.proof_id) ? "proof " + str(p.proof_id) : ""].filter(Boolean).join(" · ");
-    var fileText = str(p.file) ? str(p.file) + (str(p.line) ? ":" + str(p.line) : "") : "";
-    var fileNode = null;
-    if (fileText) {
-      var h = str(p.link) ? safeUrl(p.link) : "#";
-      fileNode = h !== "#" ? link(h, fileText) : span("", fileText);
-    }
-    var checked = null;
-    if (str(p.url)) {
-      var u = safeUrl(p.url);
-      checked = u !== "#" ? link(u, str(p.url)) : span("", str(p.url));
-    }
-    return el("div", { "class": "proof" }, [
-      head ? el("div", { "class": "shead", text: head }) : null,
-      str(p.summary) ? el("div", { text: str(p.summary) }) : null,
-      fileNode ? row("Where", fileNode) : null,
-      str(p.test) ? row("Test", str(p.test)) : null,
-      str(p.assertion) ? row("Assertion", el("code", { text: str(p.assertion) })) : null,
-      checked ? row("Checked", checked) : null,
-      row("Expected", str(p.expect)),
-      row("Result", str(p.result)),
-      row("Why it proves it", str(p.why))
-    ]);
-  }
-  function stepRow(key, s) {
-    s = obj(s);
-    var id = str(s.id);
-    var num = str(s.n) || id;
-    var title = [num ? "#" + num : "", str(s.kind_text), str(s.behaviour)].filter(Boolean).join(" · ");
-    var time = typeof s.minutes === "number" ? s.minutes + " min" + (s.inferred ? " · inferred from the diff" : "") : "";
-    return el("li", { "class": "check" }, [
-      el("div", { "class": "shead" }, [title, s.high_risk ? span("tpill bad", "high risk") : null]),
-      row("Why here", str(s.why)),
-      row("Who", str(s.who_can_check)),
-      whereRow(s),
-      row("Test data", str(s.test_data)),
-      row("Do", str(s.action)),
-      row("Expect", str(s.expected))
-    ].concat([row("Time", time)])
-     .concat(arr(s.warnings).filter(function (w) { return str(w); }).map(function (w) {
-       return el("div", { "class": "swarn", text: str(w) });
-     }))
-     .concat([s.proof ? proofBox(s.proof) : null, id ? resultControl(key, id) : null]));
-  }
-  function groupBlock(key, g) {
-    g = obj(g);
-    var steps = arr(g.steps);
-    if (!steps.length) return null;
-    var id = str(g.id);
-    var count = typeof g.count === "number" ? g.count : steps.length;
-    var name = (str(g.title) || GROUP_NAMES[id] || id) + " · " + count;
-    var list = el("ul", { "class": "checks" }, steps.map(function (s) { return stepRow(key, s); }));
-    var note = str(g.note) ? el("div", { "class": "meta", text: str(g.note) }) : null;
-    if (g.collapsed === true)
-      return el("details", { "class": "tgroup" }, [el("summary", { text: name }), note, list]);
-    return el("div", { "class": "tgroup" }, [el("h4", { text: name }), note, list]);
-  }
-  function listBlock(label, items) {
-    items = arr(items).filter(function (x) { return str(x); });
-    if (!items.length) return null;
-    return el("div", {}, [el("div", { "class": "slabel", text: label }),
-      el("ul", { "class": "nlist" }, items.map(function (x) { return el("li", { text: str(x) }); }))]);
-  }
-  function decidedBlock(pr) {
-    var d = obj(pr.decided);
-    if (Object.keys(d).length) {
-      return el("details", { "class": "tgroup" }, [el("summary", { text: "How we decided" }),
-        row("Deployed", str(d.deployed)), row("CI", str(d.ci)), row("Risk", str(d.risk)),
-        row("Result", str(d.result)), row("Focus first", str(d.focus_first)),
-        listBlock("Checked on the deployed site", d.site_checks),
-        listBlock("What nothing could check", d.could_not_check)]);
-    }
-    var a = obj(pr.agent_notes);
-    if (!Object.keys(a).length) return null;
-    return el("details", { "class": "tgroup" }, [el("summary", { text: "What the agent checked" }),
-      str(a.intro) ? el("div", { text: str(a.intro) }) : null,
-      listBlock("Checked", a.checked), listBlock("Could not check", a.could_not_check),
-      row("Focus first", str(a.focus_first))]);
+    if (typeof tot.minutes === "number") parts.push("about " + tot.minutes + " min");
+    return parts.join(" · ");
   }
   function triageBlock(t) {
-    var key = t.repo + "#" + t.number;
     if (!triage) return null;
     if (!t.triage) {
       return el("div", { "class": "triage" }, [el("p", { "class": "colhead", text: "Triage (trial)" }),
@@ -626,30 +484,21 @@ body.has-bg .goals > h2 {
     }
     var pr = obj(t.triage);
     var pills = [];
-    if (str(pr.label_text) || str(pr.label)) pills.push(span("tpill", str(pr.label_text) || str(pr.label)));
-    if (str(pr.risk_text) || str(pr.risk))
-      pills.push(span("tpill " + (pr.risk === "high" ? "bad" : "warn"), str(pr.risk_text) || ("risk: " + str(pr.risk))));
+    if (str(pr.label)) pills.push(pill("", str(pr.label)));
+    if (str(pr.risk)) pills.push(pill(riskTone(pr.risk), "risk: " + str(pr.risk)));
     pills = pills.concat(deployPills(t, pr));
-    var dep = obj(pr.deploy), tot = obj(pr.totals);
+    var checks = checksLine(pr.totals);
+    var change = [str(pr.last_change), shortDate(pr.changed_on)].filter(Boolean).join(", ");
+    var href = str(pr.notion_url) ? notionUrl(pr.notion_url) : "#";
     return el("div", { "class": "triage" }, [
       el("p", { "class": "colhead", text: "Triage (trial)" }),
       pills.length ? el("div", { "class": "pills" }, pills) : null,
-      str(dep.summary) ? el("div", { "class": "meta", text: str(dep.summary) }) : null,
-      str(dep.brief_disagrees) ? el("div", { "class": "swarn", text: str(dep.brief_disagrees) }) : null,
-      str(pr.reason) ? el("div", { text: str(pr.reason) }) : null,
-      str(tot.text) ? el("div", { "class": "meta", text: str(tot.text) }) : null,
-      str(pr.plan_note) ? el("div", { "class": "swarn", text: str(pr.plan_note) }) : null
-    ].concat(arr(pr.groups).map(function (g) { return groupBlock(key, g); })).concat([decidedBlock(pr)]));
-  }
-  function groupKeyBlock() {
-    var notes = obj(triage && triage.group_notes);
-    var order = Object.keys(GROUP_NAMES).filter(function (k) { return str(notes[k]); });
-    Object.keys(notes).forEach(function (k) { if (order.indexOf(k) < 0 && str(notes[k])) order.push(k); });
-    if (!order.length) return null;
-    return el("div", { "class": "groupkey" }, [el("div", { "class": "colhead", text: "What the groups mean" }),
-      el("ul", { "class": "nlist" }, order.map(function (k) {
-        return el("li", {}, [el("strong", { text: GROUP_NAMES[k] || k }), " " + str(notes[k])]);
-      }))]);
+      checks ? el("div", { text: checks }) : null,
+      change ? el("div", { "class": "meta", text: change }) : null,
+      str(pr.status) ? el("div", { "class": "pills" }, [span("slabel", "Status"), pill(statusTone(pr.status), str(pr.status))]) : null,
+      str(pr.notes) ? el("div", { text: str(pr.notes) }) : null,
+      href !== "#" ? el("div", {}, [link(href, "Open checks in Notion")]) : null
+    ]);
   }
   function testCard(t) {
     var live = String(t.live || "");
@@ -798,11 +647,6 @@ body.has-bg .goals > h2 {
       if (str(tr.feedback))
         top.push(el("details", { "class": "tgroup" }, [el("summary", { text: "How to give feedback" }),
           el("div", { "class": "meta", text: str(tr.feedback) })]));
-      var gn = groupKeyBlock();
-      if (gn) top.push(gn);
-      if ((triage.withheld || []).length)
-        top.push(el("div", { "class": "banner", role: "status",
-          text: "Triage withheld for " + triage.withheld.join(", ") + ": it held something that should not be there." }));
     } else if (triage) {
       top.push(el("div", { "class": "meta", text: "No triage today (" + str(triage.status) + ")" }));
     }
@@ -909,25 +753,21 @@ body.has-bg .goals > h2 {
     var keep = shownAtLoad || {};
     var nList = el("div", { "class": "chips", role: "tablist", "aria-label": "Brief sections" });
     var nPanels = {}, nButtons = {}, nIds = [];
-    var prevButtons = results.buttons;
-    results.buttons = [];   /* the Testing controls are rebuilt, so paintResults() must see the new ones */
-    try {
-      tabs().forEach(function (t) {
-        var content = t.build();
-        if (!content.length && t.id !== "todo" && !keep[t.id]) return;
-        nIds.push(t.id);
-        var b = el("button", { "class": "chip", role: "tab", type: "button", id: "tab-" + t.id,
-          "aria-controls": "panel-" + t.id, "aria-selected": "false",
-          onclick: function () { select(t.id, true); } }, [
-          span("", t.label), el("b", { text: String(t.count) }),
-          t.id === "todo" && overdue > 0 ? span("overdue", overdue + " overdue") : null
-        ]);
-        nButtons[t.id] = b;
-        nList.appendChild(b);
-        nPanels[t.id] = el("div", { "class": "tabpanel", role: "tabpanel", id: "panel-" + t.id, "aria-labelledby": "tab-" + t.id, hidden: "" },
-          content.length ? content : [el("p", { "class": "empty", text: t.empty })]);
-      });
-    } catch (e) { results.buttons = prevButtons; throw e; }
+    tabs().forEach(function (t) {
+      var content = t.build();
+      if (!content.length && t.id !== "todo" && !keep[t.id]) return;
+      nIds.push(t.id);
+      var b = el("button", { "class": "chip", role: "tab", type: "button", id: "tab-" + t.id,
+        "aria-controls": "panel-" + t.id, "aria-selected": "false",
+        onclick: function () { select(t.id, true); } }, [
+        span("", t.label), el("b", { text: String(t.count) }),
+        t.id === "todo" && overdue > 0 ? span("overdue", overdue + " overdue") : null
+      ]);
+      nButtons[t.id] = b;
+      nList.appendChild(b);
+      nPanels[t.id] = el("div", { "class": "tabpanel", role: "tabpanel", id: "panel-" + t.id, "aria-labelledby": "tab-" + t.id, hidden: "" },
+        content.length ? content : [el("p", { "class": "empty", text: t.empty })]);
+    });
     nList.addEventListener("keydown", onTabKey);
 
     /* what the reader had: scroll position, a focused pill, opened <details> */
@@ -952,7 +792,6 @@ body.has-bg .goals > h2 {
       opened[id].forEach(function (i) { if (ds[i]) ds[i].open = true; });
     });
     select(current, false);
-    paintResults();
     if (scrollY && window.scrollY !== scrollY) window.scrollTo(0, scrollY);
     if (focusId && document.getElementById(focusId)) document.getElementById(focusId).focus();
   }

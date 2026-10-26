@@ -13,7 +13,6 @@ ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "scripts" / "render_brief.py"
 FIXTURE = ROOT / "tests" / "fixtures" / "brief-sample.json"
 TRIAGE_BRIEF = ROOT / "tests" / "fixtures" / "brief-triage-sample.json"
-TRIAGE_FILE = ROOT / "tests" / "fixtures" / "triage-sample.json"
 sys.path.insert(0, str(SCRIPT.parent))
 import render_brief  # noqa: E402
 
@@ -715,9 +714,10 @@ class LiveOverlayTest(unittest.TestCase):
 
     def test_template_keeps_the_page_state_on_re_render(self):
         t = self.template()
-        self.assertIn("results.buttons = [];", t)
-        self.assertIn("paintResults();", t[t.index("function renderTabs()"):t.index("function select(")])
         self.assertIn("window.scrollTo(0, scrollY)", t)
+        # the per-check result controls are gone, so nothing may still refer to them
+        self.assertNotIn("results.", t)
+        self.assertNotIn("paintResults", t)
 
     def test_html_still_embeds_the_brief_for_the_overlay_to_start_from(self):
         brief, _ = render_brief.number_items(load())
@@ -821,28 +821,18 @@ class GoalsTest(unittest.TestCase):
             self.assertIn("title", r.stderr)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 def made_up_triage(date="2026-10-01", status="ok"):
-    """A made-up pr-triage-view/1 result as pr_triage_reader.py writes it (product-os#5)."""
+    """A made-up triage file in the shape triage_from_notion.py writes (one Notion row per PR)."""
     return {
-        "schema": "pr-triage-view/1", "run_id": "2026-10-01T06:40:00Z", "valid_for": date, "status": status,
-        "trial": {"banner": "TRIAL: keep testing as normal."}, "summaries": {},
-        "group_notes": {"matter": "Test these.", "proven": "Optional."},
+        "valid_for": date, "status": status, "run_id": None,
+        "trial": {"banner": "TRIAL: keep testing as normal."}, "group_notes": {}, "withheld": [],
         "prs": {"ekko-checkout#142": {
-            "key": "ekko-checkout#142", "label": "needs-human", "label_text": "Test by hand", "risk": "high",
-            "reason": "Changes tr-TR copy.",
-            "deploy": {"summary": "Live on dev.", "envs": [{"env": "dev", "state": "live", "text": "live", "tone": "good"}]},
-            "groups": [{"id": "matter", "title": "Checks that matter", "collapsed": False, "count": 1,
-                        "steps": [{"n": 1, "id": "b1", "behaviour": "</script><b>Copy</b>", "kind_text": "Main change",
-                                   "action": "Open the demo page.", "url": "javascript:alert(1)", "url_ok": False,
-                                   "who_can_check": "Lena"}]},
-                       {"id": "proven", "collapsed": True, "count": 1,
-                        "steps": [{"n": 2, "id": "b2", "behaviour": "Banned terms test",
-                                   "proof": {"title": "CI test", "link": "https://example.com/t"}}]}]}},
-        "no_triage": ["ekko-api#1300"], "withheld": [],
+            "title": "</script><b>Copy</b>", "label": "Test by hand", "risk": "high",
+            "deploy": {"dev": "live", "staging": "unknown", "prod": "not deployed"}, "on_prod": False,
+            "totals": {"checks": 12, "checks_that_matter": 4, "minutes": 20},
+            "last_change": "New", "changed_on": "2026-10-24", "status": "To test", "notes": "Ask Sam first",
+            "notion_url": "https://app.notion.com/403f93807de4816c93eae1f43acc0150",
+            "pr_url": "https://github.com/ekko-enviroconomy/ekko-checkout/pull/142"}},
     }
 
 
@@ -853,12 +843,12 @@ class TriageTest(unittest.TestCase):
     def test_join_on_repo_and_number(self):
         page = render_brief.join_triage(self.brief(), made_up_triage())
         by_key = {f"{t['repo']}#{t['number']}": t for t in page["testing"]}
-        self.assertEqual(by_key["ekko-checkout#142"]["triage"]["label"], "needs-human")
+        self.assertEqual(by_key["ekko-checkout#142"]["triage"]["label"], "Test by hand")
         self.assertNotIn("triage", by_key["ekko-api#1300"])
         self.assertEqual(by_key["ekko-api#1300"]["triage_note"], "No triage today")
         self.assertEqual(page["triage"]["status"], "ok")
         self.assertEqual(page["triage"]["trial"], {"banner": "TRIAL: keep testing as normal."})
-        self.assertEqual(page["triage"]["group_notes"], {"matter": "Test these.", "proven": "Optional."})
+        self.assertIsNone(page["triage"]["run_id"])
 
     def test_bad_group_notes_are_dropped(self):
         for bad in (None, ["x"], {"matter": 5}):
@@ -897,33 +887,35 @@ class TriageTest(unittest.TestCase):
                            capture_output=True)
             self.assertEqual(md.read_text(), md0.read_text())
             for f in (md, shared):
-                self.assertNotIn("Banned terms test", f.read_text())
+                self.assertNotIn("Ask Sam first", f.read_text())
                 self.assertNotIn("TRIAL", f.read_text())
             page = html.read_text()
-            self.assertIn("Banned terms test", page)
+            self.assertIn("Ask Sam first", page)
+            self.assertIn("app.notion.com", page)
             self.assertNotIn("</script><b>", page)
 
-    def test_real_shape_fixture_joins_triage_and_group_notes(self):
-        brief = render_brief.number_items(json.loads(TRIAGE_BRIEF.read_text()))[0]
-        tri = json.loads(TRIAGE_FILE.read_text())
-        page = render_brief.join_triage(brief, tri)
-        self.assertEqual(page["triage"]["group_notes"], tri["group_notes"])
-        self.assertEqual(page["triage"]["trial"]["banner"], "TRIAL: keep testing as normal.")
-        by_key = {f"{t['repo']}#{t['number']}": t for t in page["testing"]}
-        self.assertEqual(sorted(by_key), ["receipts#7", "shop-web#41", "shop-web#42"])
-        self.assertTrue(all("triage" in t for t in by_key.values()))
-        self.assertEqual(by_key["shop-web#42"]["triage"]["groups"][0]["steps"][0]["id"], "b1")
+    def test_page_carries_the_triage_json_and_no_results_collection(self):
+        page = render_brief.to_html(render_brief.join_triage(self.brief(), made_up_triage()))
+        self.assertIn('"last_change": "New"', page)
+        self.assertIn('"notion_url"', page)
+        self.assertIn("Open checks in Notion", page)
+        self.assertNotIn("triage-results", page)
+        self.assertNotIn("pass / fail", page.lower())
 
-    def test_real_shape_fixture_html_and_markdown(self):
-        with tempfile.TemporaryDirectory() as d:
-            md, html = Path(d) / "a.md", Path(d) / "a.html"
-            r = subprocess.run([sys.executable, str(SCRIPT), str(TRIAGE_BRIEF), "--md", str(md), "--html", str(html),
-                                "--triage", str(TRIAGE_FILE)], capture_output=True, text=True)
-            self.assertEqual(r.returncode, 0, r.stderr)
-            page = html.read_text()
-            self.assertIn("Checks that matter", page)
-            self.assertIn("The main change and anything high risk", page)
-            self.assertNotIn("The main change and anything high risk", md.read_text())
+    def test_template_only_follows_notion_https_links(self):
+        tpl = render_brief.TEMPLATE.read_text()
+        self.assertIn("app.notion.com", tpl)
+        self.assertIn("www.notion.so", tpl)
+        self.assertNotIn("innerHTML", tpl)
+
+    def test_real_shape_fixture_joins_and_renders(self):
+        brief = render_brief.number_items(json.loads(TRIAGE_BRIEF.read_text()))[0]
+        tri = made_up_triage(date=brief["date"])
+        tri["prs"] = {"shop-web#42": tri["prs"]["ekko-checkout#142"]}
+        page = render_brief.join_triage(brief, tri)
+        by_key = {f"{t['repo']}#{t['number']}": t for t in page["testing"]}
+        self.assertEqual(by_key["shop-web#42"]["triage"]["status"], "To test")
+        self.assertEqual(by_key["shop-web#41"]["triage_note"], "No triage today")
 
     def test_missing_triage_file_is_fine(self):
         with tempfile.TemporaryDirectory() as d:
@@ -932,3 +924,7 @@ class TriageTest(unittest.TestCase):
                                 "--triage", str(Path(d) / "nope.json")], capture_output=True, text=True)
             self.assertEqual(r.returncode, 0, r.stderr)
             self.assertIn('"status": "unavailable"', html.read_text())
+
+
+if __name__ == "__main__":
+    unittest.main()
