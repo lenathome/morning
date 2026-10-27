@@ -220,6 +220,8 @@ details.prow .detail { margin: 0 12px 10px; }
 .pill.active { background: var(--good-soft); color: var(--good); }
 .pill.blocked { background: var(--bad-soft); color: var(--bad); }
 .pill.waiting { background: var(--warn-soft); color: var(--warn); }
+a.pill { text-decoration: none; }
+a.pill:hover { text-decoration: underline; }
 .pill.other { background: var(--surface-2); color: var(--muted); }
 .pill.needs-lena { background: var(--warn-soft); color: var(--warn); text-transform: none; }
 .pill.split { background: var(--accent-soft); color: var(--accent); text-transform: none; }
@@ -319,7 +321,7 @@ body.has-bg .goals > h2 {
 
   /* Everything the tabs show comes from these values. derive() sets them from a brief, so the page can be rebuilt
      from the original brief plus the latest overlay without reloading. */
-  var inProgress, urgent, prs, actions, todos, ideas, meetings, projects, partners, yours, product, testing;
+  var inProgress, urgent, prs, actions, todos, ideas, meetings, projects, partners, yours, waiting, testing;
   var urgentItems, overdue, prTotal;
   function derive(d) {
     inProgress = d.in_progress || [];
@@ -332,7 +334,7 @@ body.has-bg .goals > h2 {
     projects = d.projects || [];
     partners = d.partners || [];
     yours = actions.yours || [];
-    product = actions.product || [];
+    waiting = d.waiting || [];
     testing = d.testing || [];
     urgentItems = groupItems(urgent);
     overdue = urgentItems.filter(function (i) { return !i.done && String(i.due || "").indexOf("overdue") === 0; }).length;
@@ -401,8 +403,34 @@ body.has-bg .goals > h2 {
     list.forEach(function (i) { panel.appendChild(i.kind === "fathom" ? actionRow(i) : todoRow(i, true)); });
     return panel;
   }
-  function section(title, count, content) {
-    return el("section", { "class": "group" }, [
+  /* Waiting for others: the same row as Your actions. The title carries the "chase" pill and the link; who follows it.
+     The muted line holds the age, the chase reason (chase items only) and when it was last chased. */
+  function ageText(days) {
+    return days === 0 ? "since today" : "waiting " + days + (days === 1 ? " day" : " days");
+  }
+  function waitingRow(w) {
+    var title = [];
+    if (w.chase) title.push(span("pill waiting", "⚡ chase"), " ");
+    title.push(w.url ? link(safeUrl(w.url), w.text) : w.text);
+    if (w.who) title.push(span("muted", " (" + w.who + ")"));
+    var age = ageText(w.days);
+    var info = [span("", age)];
+    if (w.chase && w.chase_reason && w.chase_reason !== age) info.push(span("", w.chase_reason));
+    /* a moved chase-by date comes from the live overlay as display wording ("due 30 Oct", "overdue since 12 Oct") */
+    if (typeof w.due === "string" && w.due && !shortDate(w.due)) {
+      info.push(w.due.indexOf("due ") === 0 ? span(w.due === "due today" ? "due-today" : "", "chase-by " + w.due.slice(4)) : dueSpan(w.due));
+    }
+    if (w.chased_today) info.push(span("", "chased today"));
+    else if (w.chased_on && shortDate(w.chased_on)) info.push(span("", "chased " + shortDate(w.chased_on)));
+    return numberedRow(w.n, [el("div", {}, title), el("div", { "class": "meta" }, info)], w.done);
+  }
+  function waitingPanel(list) {
+    var panel = el("div", { "class": "panel" });
+    list.forEach(function (w) { panel.appendChild(waitingRow(w)); });
+    return panel;
+  }
+  function section(title, count, content, id) {
+    return el("section", id ? { "class": "group", id: id } : { "class": "group" }, [
       el("h2", {}, [title, count != null ? span("count", String(count)) : null]),
       content
     ]);
@@ -546,16 +574,18 @@ body.has-bg .goals > h2 {
     var meta = [];
     if (p.owner) meta.push(span("", "Owner: " + p.owner));
     if (p.target) meta.push(span("", "Target: " + p.target));
-    var waiting = p.waiting_on || [];
-    if (waiting.length) meta.push(span("pill other", waiting.length + " waiting on others"));
+    var waitingHere = openCount(waiting.filter(function (w) { return w.project === p.name; }));
+    if (waitingHere) {
+      meta.push(el("a", { "class": "pill waiting", href: "#waiting-for-others", onclick: function (e) {
+        /* the link sits inside <summary>: keep the card shut and jump to the section on the To do tab */
+        e.preventDefault();
+        select("todo", false);
+        var target = document.getElementById("waiting-for-others");
+        if (target) target.scrollIntoView({ block: "start" });
+      }, text: waitingHere + " waiting for others" }));
+    }
     var detail = [];
     if (p.summary) detail.push(el("p", { text: p.summary }));
-    if (waiting.length) {
-      detail.push(el("p", { "class": "muted", text: "Waiting on others - " + waiting.length }));
-      detail.push(el("ul", {}, waiting.map(function (w) {
-        return el("li", {}, [w.text, w.who ? span("muted", " [" + w.who + "]") : null]);
-      })));
-    }
     if (p.stale_note) detail.push(el("p", { "class": "muted", text: p.stale_note }));
     if (p.sync_note) detail.push(el("p", {}, [span("muted", "Team sync: "), p.sync_note]));
     var gh = p.github || {};
@@ -614,7 +644,7 @@ body.has-bg .goals > h2 {
     if (urgentItems.length) main.push(section("Urgent today", openCount(urgentItems), todoPanel(urgent)));
     if (countGroups(todos.coming_up)) main.push(section("Coming up", openInGroups(todos.coming_up), todoPanel(todos.coming_up)));
     if (yours.length) main.push(section("Your actions", openCount(yours), actionPanel(yours)));
-    if (product.length) main.push(section("Product actions", openCount(product), actionPanel(product)));
+    if (waiting.length) main.push(section("Waiting for others", openCount(waiting), waitingPanel(waiting), "waiting-for-others"));
     if (meetings.length) {
       main.push(section("External meeting prep", meetings.length,
         el("div", { "class": "cards" }, meetings.map(meetingCard))));
@@ -712,7 +742,7 @@ body.has-bg .goals > h2 {
     return [
       { id: "todo", label: "To do", build: todoTab, empty: "Nothing to do.",
         count: openCount(inProgress) + openCount(urgentItems) + openInGroups(todos.coming_up) + openCount(yours) +
-               openCount(product) + meetings.length },
+               openCount(waiting) + meetings.length },
       { id: "prs", label: "PRs", build: prsTab, count: prTotal, empty: "No pull requests need you." },
       { id: "testing", label: "Testing", build: testingTab, count: openCount(testing),
         empty: "Nothing merged recently that needs a manual test." },
@@ -827,8 +857,9 @@ body.has-bg .goals > h2 {
      done or started, a changed due date, note or tag, and parked PRs. The page only reads it. It is data, never
      followed: each field is type-checked, unknown numbers and fields are ignored, and everything is shown with
      textContent. The overlay is always applied to a fresh copy of the original brief, never to the last result. */
-  var ITEM_HOMES = ["progress", "urgent", "coming", "yours", "product", "testing", "ideas"];
-  var STARTABLE = { urgent: 1, coming: 1, yours: 1, product: 1, ideas: 1 };
+  var ITEM_HOMES = ["progress", "urgent", "coming", "yours", "waiting", "testing", "ideas"];
+  /* waiting items cannot be started: they wait on someone else */
+  var STARTABLE = { urgent: 1, coming: 1, yours: 1, ideas: 1 };
   function cleanTag(t) {
     t = obj(t);
     if (["needs-lena", "split", "handoff"].indexOf(t.verdict) < 0) return null;
@@ -842,7 +873,8 @@ body.has-bg .goals > h2 {
     d.in_progress = arr(d.in_progress);
     d.urgent = arr(d.urgent);
     d.todos = obj(d.todos); d.todos.coming_up = arr(d.todos.coming_up);
-    d.actions = obj(d.actions); d.actions.yours = arr(d.actions.yours); d.actions.product = arr(d.actions.product);
+    d.actions = obj(d.actions); d.actions.yours = arr(d.actions.yours);
+    d.waiting = arr(d.waiting);
     d.testing = arr(d.testing);
     d.ideas = obj(d.ideas); d.ideas.strategic = arr(d.ideas.strategic); d.ideas.other = arr(d.ideas.other);
     d.prs = obj(d.prs);
@@ -854,7 +886,7 @@ body.has-bg .goals > h2 {
       if (home === "urgent") return groupLists(d.urgent);
       if (home === "coming") return groupLists(d.todos.coming_up);
       if (home === "yours") return [d.actions.yours];
-      if (home === "product") return [d.actions.product];
+      if (home === "waiting") return [d.waiting];
       if (home === "testing") return [d.testing];
       return groupLists(d.ideas.strategic).concat(groupLists(d.ideas.other));
     }
@@ -878,6 +910,7 @@ body.has-bg .goals > h2 {
           if (tag) item.tag = tag;
         }
         if (rec.status === "done") item.done = true;
+        else if (rec.status === "chased" && hit.home === "waiting") { item.chase = false; item.chased_today = true; }
         else if (rec.status === "started" && STARTABLE[hit.home]) started.push(hit);
       });
     /* started: out of its section, onto the end of In progress, same number. The row builder follows `kind`. */
@@ -886,7 +919,8 @@ body.has-bg .goals > h2 {
         var at = list.indexOf(hit.item);
         if (at >= 0) list.splice(at, 1);
       });
-      hit.item.kind = hit.home === "yours" || hit.home === "product" ? "fathom" : "notion";
+      if (hit.home === "yours") hit.item.kind = "fathom";
+      else if (hit.home !== "waiting") hit.item.kind = "notion";
       d.in_progress.push(hit.item);
     });
 
