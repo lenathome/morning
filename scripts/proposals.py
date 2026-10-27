@@ -35,7 +35,9 @@ Output: {"added": [ids], "skipped": [{"item_index": i, "reason": "..."}]}
 `accept` for an append inserts "- <text> <!-- src: <source> -->" after the last
 non-blank line of the section; for a frontmatter proposal it replaces the field's
 value. Either way `last_reviewed:` is set to today's date if the field exists.
-Output: {"accepted": [ids], "unknown": [ids]}; `reject` prints {"rejected": ...}.
+Output: {"accepted": [ids], "unknown": [ids], "files": [paths]}; "files" lists the
+project files written, sorted and de-duplicated, relative to the product-os repo root
+(`projects/<slug>.md`); `reject` prints {"rejected": ...}.
 An accept that cannot be applied (file or heading gone) is left pending and
 listed under "failed".
 """
@@ -291,6 +293,7 @@ def cmd_resolve(args, state: Path, log: Path, projects_dir: Path) -> dict:
     by_id = {p["id"]: p for p in pending}
     today = dt.date.fromisoformat(args.today) if args.today else dt.date.today()
     done, unknown, failed = [], [], []
+    files = set()
     resolved = []
     for pid in args.ids:
         prop = by_id.get(pid)
@@ -305,6 +308,7 @@ def cmd_resolve(args, state: Path, log: Path, projects_dir: Path) -> dict:
                 print(f"warning: could not apply {pid}: {e}", file=sys.stderr)
                 failed.append(pid)
                 continue
+            files.add(f"{projects_dir.name}/{prop['slug']}.md")
         resolved.append(
             {
                 **prop,
@@ -317,6 +321,8 @@ def cmd_resolve(args, state: Path, log: Path, projects_dir: Path) -> dict:
         write_json_atomic(log, load_json_array(log) + resolved)
         write_json_atomic(state, [p for p in pending if p["id"] not in set(done)])
     result = {"accepted" if accepting else "rejected": done, "unknown": unknown}
+    if accepting:
+        result["files"] = sorted(files)
     if failed:
         result["failed"] = failed
     return result

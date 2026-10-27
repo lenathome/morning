@@ -155,7 +155,7 @@ class ProposalsTests(unittest.TestCase):
     def test_accept_append_middle_section_leaves_others_untouched(self):
         pid = self.add(item())["added"][0]
         result, _ = self.run_cli("accept", pid)
-        self.assertEqual(result, {"accepted": [pid], "unknown": []})
+        self.assertEqual(result, {"accepted": [pid], "unknown": [], "files": ["projects/ppp.md"]})
         expected = PROJECT.replace(
             "- Second decision\n",
             "- Second decision\n- Round-up deferred <!-- src: ai-log/2026-09-29.md, Fixes -->\n")
@@ -217,7 +217,8 @@ class ProposalsTests(unittest.TestCase):
     def test_unknown_id_warns_and_continues(self):
         pid = self.add(item())["added"][0]
         result, err = self.run_cli("accept", "deadbeef0000", pid)
-        self.assertEqual(result, {"accepted": [pid], "unknown": ["deadbeef0000"]})
+        self.assertEqual(result, {"accepted": [pid], "unknown": ["deadbeef0000"],
+                                  "files": ["projects/ppp.md"]})
         self.assertIn("deadbeef0000", err)
 
     def test_accept_fails_cleanly_when_heading_gone(self):
@@ -227,6 +228,34 @@ class ProposalsTests(unittest.TestCase):
         self.assertEqual(result["accepted"], [])
         self.assertEqual(result["failed"], [pid])
         self.assertEqual(len(self.run_cli("list")[0]), 1)
+
+    def test_accept_lists_changed_files_sorted(self):
+        a = self.add(item())["added"][0]
+        b = self.add(item(slug="empty", section="Where it is", text="Started"))["added"][0]
+        result, _ = self.run_cli("accept", a, b)
+        self.assertEqual(result["files"], ["projects/empty.md", "projects/ppp.md"])
+
+    def test_accept_lists_file_once_for_two_proposals_on_one_project(self):
+        a = self.add(item())["added"][0]
+        b = self.add(item(text="Another decision"))["added"][0]
+        result, _ = self.run_cli("accept", a, b)
+        self.assertEqual(result["accepted"], [a, b])
+        self.assertEqual(result["files"], ["projects/ppp.md"])
+
+    def test_accept_files_exclude_failed_and_unknown(self):
+        a = self.add(item())["added"][0]
+        b = self.add(item(slug="empty", section="Where it is", text="Started"))["added"][0]
+        (self.projects / "empty.md").write_text(EMPTY.replace("## Where it is", "## Renamed"))
+        result, _ = self.run_cli("accept", a, b, "deadbeef0000")
+        self.assertEqual(result["failed"], [b])
+        self.assertEqual(result["unknown"], ["deadbeef0000"])
+        self.assertEqual(result["files"], ["projects/ppp.md"])
+
+    def test_accept_files_empty_when_nothing_applied(self):
+        b = self.add(item())["added"][0]
+        (self.projects / "ppp.md").write_text(PROJECT.replace("## Recent decisions", "## Renamed"))
+        result, _ = self.run_cli("accept", b, "deadbeef0000")
+        self.assertEqual(result["files"], [])
 
     def test_no_temp_files_left(self):
         self.add(item())

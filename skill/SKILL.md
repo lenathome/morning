@@ -63,6 +63,19 @@ This skill, its scripts and the JSON contract all load from the local checkout a
    - It fast-forwarded: the copy of this skill you loaded is now out of date. Read `/Users/lenathome/github/morning/skill/SKILL.md` again with the Read tool and follow the new version from this point on.
 4. If any of these fails (fetch error, not on `main`, or the merge refuses because local `main` has diverged or has uncommitted changes), never reset, stash or force anything. Carry on with the brief, add `Morning repo not on latest main: <first line of the error>` to `unavailable`, and make it the first line of the final chat message, so the user knows the brief may be missing recent changes.
 
+## Sync product-os
+
+The brief reads the project files and `publish_brief.sh` pushes to `paths.product_os` (`~/product-os`, remote `lenathome/product-os`). If that checkout is behind `origin/main`, the brief builds from old files and `publish_brief.sh` cannot push (it exits 3 when behind). So bring it up to date after the morning repo and before Step 0, one command per call, with `<product_os>` as the absolute path of `paths.product_os`:
+
+1. `git -C <product_os> branch --show-current` must print `main`. If it doesn't, don't switch branches: carry on and note it (see 4).
+2. `git -C <product_os> fetch origin`
+3. `git -C <product_os> merge --ff-only origin/main`
+   - `Already up to date.` or a fast-forward: carry on.
+4. If any of these fails (fetch error, not on `main`, or the merge refuses because local `main` has diverged or has uncommitted changes), never reset, stash or force anything. Carry on with the brief, add `product-os not synced: <first line of the error>` to `unavailable`, and print it as a line in the final chat message, directly under the morning repo line if there is one.
+5. Then run `git -C <product_os> status --porcelain`. This lists curated edits made in sessions that nobody has committed. Collect the paths with a modified, added or deleted status. Leave out anything under `briefs/` or `.worktrees/`. Ignore untracked files (`??`) unless they sit under `projects/` or are one of `decisions.md`, `ekko.md`, `milestones.md`, `people.md`, `glossary.md`, `goals.md`, `backlog.md`, `triage-config.md`, `INDEX.md`, `README.md` or `AGENTS.md`. Keep the resulting list of paths for the chat header (Step 6) and for "commit product-os" (Step 7). If the sync in 1 to 3 failed, run this check anyway; if the status command fails, skip it silently.
+
+The only commits the morning tool makes to product-os are the brief copy (Step 6), accepted project updates (Step 0) and "commit product-os" (Step 7). `publish_brief.sh` and `commit_curated.sh` push them straight to `main`. Nothing else is committed.
+
 ## Step 0: Project updates first
 
 Before fetching anything for the brief, deal with the project updates queued by the session-sweep skill.
@@ -76,7 +89,7 @@ N. **<project name>** - <section or field>: <text or value> (from "<session_titl
 
    `<project name>` is the `name` for the proposal's `slug` in the output of `python3 ~/github/morning/scripts/parse_projects.py "<paths.projects_dir from config>"` (if that fails, use the slug). `<section or field>` is `section` for an append and `field` for a frontmatter change; `<text or value>` is `text` or `value` to match. Order by project name, then `created_at`. The blank line after the sentence matters for the same CommonMark reason as in the brief: an ordered list can't interrupt a paragraph.
 5. Then stop and wait for the reply. Map each number to its proposal `id`.
-6. On the reply: run `python3 ~/github/morning/scripts/proposals.py accept <id1> <id2> ...` for the chosen ids (all of them for "all"). If the user explicitly names any to reject, run `python3 ~/github/morning/scripts/proposals.py reject <id1> <id2> ...` for those. Leave the rest pending, so they show again tomorrow. Confirm in one line: `Applied M project update(s).` (skip the line if M is 0). Then continue to Step 1, so the brief is built from the updated project files.
+6. On the reply: run `python3 ~/github/morning/scripts/proposals.py accept <id1> <id2> ...` for the chosen ids (all of them for "all"). If the user explicitly names any to reject, run `python3 ~/github/morning/scripts/proposals.py reject <id1> <id2> ...` for those. Leave the rest pending, so they show again tomorrow. The `accept` command prints `{"accepted": [...], "unknown": [...], "failed": [...], "files": ["projects/<slug>.md", ...]}`; M is the number of ids in `accepted`. If `files` is non-empty, commit and push them: run `<home>/github/morning/scripts/commit_curated.sh <product_os> "projects: apply M update(s) from the <YYYY-MM-DD> brief" <files...>` (absolute script path and repo path, every file exactly as `files` gives it). Read the script's last stdout line, `{"committed": ..., "pushed": ..., "reason": ...}`. Confirm in one line: `Applied and pushed M project update(s).` when `pushed` is true, otherwise `Applied M project update(s); not pushed: <reason>.` Never retry with other git commands, whatever the exit code (1 = bad arguments or git error, 3 = cannot catch up with origin, 4 = fetch or push failed). If `files` is empty, confirm `Applied M project update(s).`. Skip the line if M is 0. Then continue to Step 1, so the brief is built from the updated project files.
 
 These numbers are separate from the brief's running sequence: the brief restarts at 1.
 
@@ -492,10 +505,11 @@ Examples (bad):
 2. Print only this in chat:
    - `**<weekday_label>** - <focus>`
    - one line of counters from the renderer: `Urgent N (M overdue) · PRs: R to review, K ready, A awaiting · Your actions N · Waiting N (C to chase) · Meetings N` (drop any part that is 0, except Urgent; drop Waiting when N is 0)
+   - when the product-os check (see "Sync product-os") found N uncommitted files: `product-os: N uncommitted file(s) - <names>. Reply "commit product-os" to commit and push them.` (`<names>` are the paths, comma-separated; omit the line when N is 0. Unattended runs only list them.)
    - the artifact link
    - `Saved: <briefs_dir>/<date>.md`
 3. If publishing fails for any reason, say so in one line and print the full markdown archive inline instead, verbatim. The user must never end up with neither.
-4. Publish the shared copy to product-os. Run `~/github/morning/scripts/publish_brief.sh <date> <briefs_dir>/<date>.shared.md <paths.product_os>` (expand `~` to the absolute home path first, in the script path and the arguments). Use exactly that script path and run no other git command against product-os: the script does the copy, commit and push itself. Add one line to the final message with the JSON result line it prints last (`{"committed": ..., "pushed": ..., "reason": ...}`). A non-zero exit (2 = unpushed commits outside briefs/, 3 = behind origin/main, 4 = push failed) is reported with the script's message and never retried with other git commands. It never blocks the rest of the brief: Steps 7 and 8 carry on either way. If `paths.product_os` is missing from the config, say so in one line and skip this step.
+4. Publish the shared copy to product-os. Run `~/github/morning/scripts/publish_brief.sh <date> <briefs_dir>/<date>.shared.md <paths.product_os>` (expand `~` to the absolute home path first, in the script path and the arguments). Use exactly that script path and run no other git command against product-os in this step: the script does the copy, commit and push itself, straight to `main`. Accepted project updates (Step 0) and "commit product-os" (Step 7) are the only other commits the morning tool makes to product-os, and `commit_curated.sh` pushes both straight to `main` too. Add one line to the final message with the JSON result line it prints last (`{"committed": ..., "pushed": ..., "reason": ...}`). A non-zero exit (2 = unpushed commits outside briefs/, 3 = behind origin/main, 4 = push failed) is reported with the script's message and never retried with other git commands. It never blocks the rest of the brief: Steps 7 and 8 carry on either way. If `paths.product_os` is missing from the config, say so in one line and skip this step.
 
 ## Step 7: Action item tick-off and start
 
@@ -515,6 +529,8 @@ If the brief has any numbered lines (In progress, To do, Testing or Ideas bank):
 12. Confirm to the user: `Moved N item(s) to In progress.` They show under In progress from the next brief. Then write the live update (Step 7d).
 
 **Chased.** At any point in the session, when the user says "chased <numbers>" (also "nudged" or "chased up"), look each number up in the map. Only waiting items can be chased: a map entry without `waiting: true` is not a waiting item, so that number is ignored, with one line saying so. Run `python3 ~/github/morning/scripts/mark_chased.py <kind:id-or-key> ...` once for all of them, where each argument is `notion:<page id>` or `fathom:<action key>` from the numbers map. Confirm: `Marked N item(s) chased. The ⚡ comes back in 7 days if they're still waiting.` Then write the live update (Step 7d) with status `chased` for each.
+
+**Commit product-os.** At any point in the session, when the user says "commit product-os", run `<home>/github/morning/scripts/commit_curated.sh <product_os> "curated edits from sessions, <YYYY-MM-DD>" <paths...>` with exactly the paths listed in the `product-os: N uncommitted file(s)` header line (absolute script path and repo path, each path as listed). Paths not in that list are never committed, however the user words the request. If there was no such line, say so in one line and run nothing. Read the script's last stdout line and confirm in one line: `Committed and pushed N file(s) to product-os.` when `pushed` is true, `Committed N file(s) to product-os; not pushed: <reason>.` when `committed` is true and `pushed` is false, or `Nothing committed: <reason>.` otherwise. Never retry with other git commands.
 
 If the brief had no numbered lines, skip this step entirely. Both prompts are skipped together.
 
