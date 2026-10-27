@@ -71,8 +71,8 @@ class NumberingTest(unittest.TestCase):
         self.assertEqual(numbers["1"], {"kind": "notion", "id": "p1"})
         self.assertEqual(numbers["3"], {"kind": "notion", "id": "p3"})
         self.assertEqual(numbers["4"], {"kind": "fathom", "key": "k1"})
-        self.assertEqual(numbers["5"], {"kind": "notion", "id": "w1"})
-        self.assertEqual(numbers["6"], {"kind": "fathom", "key": "k2"})
+        self.assertEqual(numbers["5"], {"kind": "notion", "id": "w1", "waiting": True})
+        self.assertEqual(numbers["6"], {"kind": "fathom", "key": "k2", "waiting": True})
         self.assertEqual(numbers["7"], {"kind": "test", "key": "ekko-checkout#142"})
         self.assertEqual(numbers["8"], {"kind": "test", "key": "ekko-api#1300"})
         self.assertEqual(numbers["9"], {"kind": "notion", "id": "p4"})
@@ -140,6 +140,21 @@ class WaitingTest(unittest.TestCase):
         b["waiting"] = [waiting_item(id="a", days=1), waiting_item(id="b", days=30), waiting_item(id="c", days=5)]
         brief, numbers = render_brief.number_items(b)
         self.assertEqual([numbers[str(w["n"])]["id"] for w in brief["waiting"]], ["a", "b", "c"])
+
+    def test_map_entries_are_flagged_waiting(self):
+        b = load()
+        b["waiting"] = [waiting_item(id="a"), waiting_item(kind="fathom", key="k1")]
+        brief, numbers = render_brief.number_items(b)
+        self.assertEqual(numbers[str(brief["waiting"][0]["n"])], {"kind": "notion", "id": "a", "waiting": True})
+        self.assertEqual(numbers[str(brief["waiting"][1]["n"])], {"kind": "fathom", "key": "k1", "waiting": True})
+        flagged = [n for n, ref in numbers.items() if ref.get("waiting")]
+        self.assertEqual(sorted(flagged), sorted(str(w["n"]) for w in brief["waiting"]))
+
+    def test_null_who_url_project_become_empty(self):
+        b = load()
+        b["waiting"] = [waiting_item(who=None, url=None, project=None)]
+        w = render_brief.number_items(b)[0]["waiting"][0]
+        self.assertEqual((w["who"], w["url"], w["project"]), ("", "", ""))
 
     def test_numbered_after_yours_and_before_testing(self):
         brief, _ = render_brief.number_items(load())
@@ -323,10 +338,14 @@ class WaitingTest(unittest.TestCase):
               "console.log(JSON.stringify({chase: w.chase, today: w.chased_today, done: !!w.done,\n"
               "  w2inprog: d.in_progress.length, w2still: d.waiting.length, testing7: !!d.testing[0].chased_today}));\n"
               "const row = x.waitingRow(w);\n"
-              "console.log(JSON.stringify({text: row.textContent, cls: row.className}));\n")
+              "console.log(JSON.stringify({text: row.textContent, cls: row.className}));\n"
+              "const d2 = x.applyOverlay(x.brief, {items: {5: {due: 'due 30 Oct'}}});\n"
+              "console.log(JSON.stringify({text: x.waitingRow(d2.waiting[0]).textContent}));\n")
         r = subprocess.run(["node", "-e", js], capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, r.stderr)
-        first, second = [json.loads(line) for line in r.stdout.strip().splitlines()]
+        first, second, third = [json.loads(line) for line in r.stdout.strip().splitlines()]
+        self.assertIn("chase-by 30 Oct", third["text"])
+        self.assertNotIn("chase-by", second["text"])
         self.assertEqual(first, {"chase": False, "today": True, "done": False, "w2inprog": 0, "w2still": 2, "testing7": False})
         self.assertIn("chased today", second["text"])
         self.assertNotIn("⚡", second["text"])

@@ -2,7 +2,7 @@
 """waiting_age.py - work out how long each "waiting for others" item has been waiting, and whether to chase it.
 
 Usage:
-    python3 waiting_age.py --items items.json --briefs-dir ~/product-os/briefs \\
+    python3 waiting_age.py --items items.json --briefs-dir ~/morning/briefs \\
         --milestones ~/product-os/milestones.md --chased ~/morning/state/chased.json --today 2026-10-27
 
 Input (--items): a JSON list. Each item has `kind` ("notion" or "fathom"), `id` (notion) or `key` (fathom),
@@ -76,16 +76,22 @@ def _scalar(raw: str) -> str:
     return raw
 
 
+def _strip_comment(raw: str) -> str:
+    """Drop a trailing ' # comment' from a scalar (a '#' inside quotes stays)."""
+    m = re.match(r"""("(?:[^"\\]|\\.)*"|'(?:[^']|'')*')\s+#.*$""", raw)
+    return m.group(1) if m else re.sub(r"\s+#.*$", "", raw)
+
+
 def _inline_list(raw: str) -> list:
     inner = raw.strip()[1:-1].strip()
     return [_scalar(p) for p in inner.split(",") if p.strip()] if inner else []
 
 
 def _yaml_block(text: str) -> list:
+    if re.match(r"\A---[ \t]*\r?\n", text):
+        m = re.match(r"\A---[ \t]*\r?\n(.*?)\r?\n---", text, re.DOTALL)
+        return m.group(1).splitlines() if m else []
     m = re.search(r"```ya?ml[ \t]*\n(.*?)\n```", text, re.DOTALL)
-    if m:
-        return m.group(1).splitlines()
-    m = re.match(r"\A---[ \t]*\n(.*?)\n---", text, re.DOTALL)
     return m.group(1).splitlines() if m else []
 
 
@@ -124,7 +130,7 @@ def parse_milestones(text: str) -> list:
             cur[key] = []
             list_key = key
         else:
-            cur[key] = _scalar(val)
+            cur[key] = _scalar(_strip_comment(val))
     return entries
 
 
@@ -139,7 +145,10 @@ def gating_milestone(slug, milestones):
     if not slug:
         return None
     for ms in milestones:
-        if ms.get("status") == "done" or slug not in (ms.get("projects") or []):
+        projects = ms.get("projects") or []
+        if isinstance(projects, str):
+            projects = [projects]
+        if ms.get("status") == "done" or slug not in projects:
             continue
         if ms.get("status") == "at-risk" or ms.get("date"):
             return ms.get("name") or ms.get("id") or "a milestone"

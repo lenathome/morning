@@ -168,15 +168,17 @@ def number_items(raw: dict) -> tuple[dict, dict]:
             if kind == "notion":
                 if not w.get("id"):
                     raise ValueError(f"{label} has no 'id'")
-                ref = {"kind": "notion", "id": w["id"]}
+                ref = {"kind": "notion", "id": w["id"], "waiting": True}
             elif kind == "fathom":
                 if not w.get("key"):
                     raise ValueError(f"{label} has no 'key'")
-                ref = {"kind": "fathom", "key": w["key"]}
+                ref = {"kind": "fathom", "key": w["key"], "waiting": True}
             else:
                 raise ValueError(f"{label} has an unknown kind {kind!r} (use notion or fathom)")
             for k in ("who", "url", "project"):
-                if not isinstance(w.setdefault(k, ""), str):
+                if w.get(k) is None:
+                    w[k] = ""
+                if not isinstance(w[k], str):
                     raise ValueError(f"{label} has a '{k}' that is not a string")
             if not _is_date(w.get("since")):
                 raise ValueError(f"{label} needs 'since' as YYYY-MM-DD")

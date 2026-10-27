@@ -359,6 +359,28 @@ class MilestoneParserTest(unittest.TestCase):
         self.assertEqual(waiting_age.parse_milestones(text),
                          [{"id": "x", "name": "X", "projects": ["a", "b"], "status": "at-risk"}])
 
+    def test_frontmatter_wins_over_body_fence(self):
+        text = ("---\nmilestones:\n  - id: x\n    name: X\n    status: at-risk\n---\n# Doc\n"
+                "```yaml\nmilestones:\n  - id: wrong\n    name: Wrong\n```\n")
+        self.assertEqual([m["id"] for m in waiting_age.parse_milestones(text)], ["x"])
+
+    def test_fence_used_when_no_frontmatter(self):
+        text = "# Doc\n```yaml\nmilestones:\n  - id: f\n    name: F\n```\n"
+        self.assertEqual([m["id"] for m in waiting_age.parse_milestones(text)], ["f"])
+
+    def test_inline_comment_stripped_from_scalars(self):
+        text = ("---\nmilestones:\n  - id: x  # first\n    name: 'A # B'  # keep hash in quotes\n"
+                "    status: done  # shipped\n---\n")
+        ms = waiting_age.parse_milestones(text)
+        self.assertEqual((ms[0]["id"], ms[0]["name"], ms[0]["status"]), ("x", "A # B", "done"))
+
+    def test_scalar_projects_is_one_item_list_exact_match(self):
+        ms = waiting_age.parse_milestones(
+            "---\nmilestones:\n  - id: x\n    name: X\n    projects: client-acme\n    status: at-risk\n---\n")
+        self.assertEqual(waiting_age.gating_milestone("client-acme", ms), "X")
+        self.assertIsNone(waiting_age.gating_milestone("client", ms))
+        self.assertIsNone(waiting_age.gating_milestone("acme", ms))
+
     def test_no_block(self):
         self.assertEqual(waiting_age.parse_milestones("# nothing here"), [])
 

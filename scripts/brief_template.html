@@ -416,6 +416,10 @@ body.has-bg .goals > h2 {
     var age = ageText(w.days);
     var info = [span("", age)];
     if (w.chase && w.chase_reason && w.chase_reason !== age) info.push(span("", w.chase_reason));
+    /* a moved chase-by date comes from the live overlay as display wording ("due 30 Oct", "overdue since 12 Oct") */
+    if (typeof w.due === "string" && w.due && !shortDate(w.due)) {
+      info.push(w.due.indexOf("due ") === 0 ? span(w.due === "due today" ? "due-today" : "", "chase-by " + w.due.slice(4)) : dueSpan(w.due));
+    }
     if (w.chased_today) info.push(span("", "chased today"));
     else if (w.chased_on && shortDate(w.chased_on)) info.push(span("", "chased " + shortDate(w.chased_on)));
     return numberedRow(w.n, [el("div", {}, title), el("div", { "class": "meta" }, info)], w.done);

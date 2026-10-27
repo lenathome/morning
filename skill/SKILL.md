@@ -101,7 +101,7 @@ Make these tool calls in a SINGLE message (parallel tool use):
 6. **Fathom meetings** — Use the Fathom MCP tools:
    - First: `list_meetings` filtered to the last `fathom.lookback_days` days (default 7).
    - Then in parallel: `get_meeting_summary` for each meeting returned.
-   - If the MCP is unavailable, mark the "Yesterday's meetings" and "Your actions" and "Waiting for others" lists as "Fathom unavailable" and continue.
+   - If the MCP is unavailable, mark the "Yesterday's meetings" and "Your actions" lists as "Fathom unavailable" and continue. For "Waiting for others" only the Fathom items found in this run are missing: add "Fathom unavailable" to `unavailable`, and still build the list from the Notion Waiting tasks and the Fathom items carried forward from the last brief (see Waiting for others).
 
 7. **Acknowledged action items** — Read tool: `~/morning/state/acknowledged-actions.json`. If the file is missing, treat it as `[]`. Use Read, not `cat`, so an unattended run needs no Bash approval.
 
@@ -125,8 +125,8 @@ Make these tool calls in a SINGLE message (parallel tool use):
 
 Run this over every Notion task from Step 1.1 and every Fathom action from Step 3a, before anything is bucketed into In progress, To do, Your actions, Waiting for others or the Ideas bank. Drop an item, silently, when any of these says it is done:
 
-1. **Live Notion Status.** `Done` on the page fetched in Step 1.1 (a task with Status `Waiting` is not done: it becomes a waiting item, see Waiting for others). Never carry a task over from an earlier brief's `.json` or `.md`: those files are history, not a source of tasks.
-2. **Earlier tick-offs.** The task's page id is in the acknowledged-tasks list (Step 1.11), or the action's key is in the acknowledged-actions list (Step 1.7). A Fathom action also counts as ticked when its lowercased, whitespace-normalised text equals that of a ticked action in a previous `<briefs_dir>/<date>.json` (look the ticked keys up there): the same action raised again in a later meeting has a new key.
+1. **Live Notion Status.** `Done` on the page fetched in Step 1.1 (a task with Status `Waiting` is not done: it becomes a waiting item, see Waiting for others). Never carry a task over from an earlier brief's `.json` or `.md`: those files are history, not a source of tasks. The one exception is a Fathom waiting item, which has no live status to re-read (see Waiting for others).
+2. **Earlier tick-offs.** The task's page id is in the acknowledged-tasks list (Step 1.11), or the action's key is in the acknowledged-actions list (Step 1.7). A Fathom action also counts as ticked when its lowercased, whitespace-normalised text equals that of a ticked action in a previous `<briefs_dir>/<date>.json` (look the ticked keys up there, in both places a team action can sit in an older brief: `waiting` (items with `kind: "fathom"`) in new briefs, and `actions.product` in briefs before the `waiting` list existed): the same action raised again in a later meeting has a new key.
 3. **ai-log.** The two files from Step 1.12 log the item's work as done, shipped, merged or live (match on the task title, a PR number or the topic). An entry that only mentions the item, or lists it as a follow-up, is not enough.
 
 If only check 3 says done and the Notion page is still open, keep the task and set its `note` to `looks done per ai-log <YYYY-MM-DD>, set Notion to Done?`. A Fathom action has no Notion page: drop it on check 3.
@@ -382,6 +382,7 @@ N+1. [<action text>](<fathom_timestamp_url>) (from "<meeting title>", <date>)
 
 1. Notion tasks with live Status `Waiting`, as described under "To do shows only tasks the user can act on now" above (`kind: "notion"`).
 2. The Fathom team actions from Step 3a (`kind: "fathom"`). Each has `key`, `text`, `url` (the Fathom timestamp URL), `who` (the owner's first name), `meeting`, `date` (as today), `meeting_date` (`YYYY-MM-DD`), and `project` and `project_slug` only when the match is obvious. They keep the Step 1a done-checks and the in-progress rule (an action in the in-progress list still goes to `in_progress`).
+3. Fathom items carried forward. Step 3a only finds actions in meetings from the last `fathom.lookback_days` (7), so a Fathom waiting item would vanish after a week while still open. A waiting item stays until it is done. Read the most recent earlier `<briefs_dir>/<date>.json` (date before today) and take every item in its `waiting` list with `kind: "fathom"` that is not acknowledged done (its `key` is not in `~/morning/state/acknowledged-actions.json`, the file `ack_action.py` writes) and whose `key` was not already found in this run's Fathom fetch. Keep its `key`, `text`, `url`, `who`, `meeting`, `date`, `meeting_date`, `project` and `project_slug` as they were. This is the one exception to "never carry a task over from an earlier brief": a Fathom action has no live status to re-read. Notion items are never carried this way: their live Status decides.
 
 Write all items to a temp `items.json` (Write tool), then run:
 
@@ -503,17 +504,17 @@ If the brief has any numbered lines (In progress, To do, Testing or Ideas bank):
 1. Print exactly: `Already done any? (numbers comma-separated, blank to skip):`
 2. Wait for the user's reply in the same conversation.
 3. Parse the response: split on commas, strip whitespace, drop anything that isn't a positive integer or that exceeds `max_number` from the renderer's counts (also derivable as the largest key in the map).
-4. For each valid number, look it up in `~/morning/state/brief-map-<date>.json` (`numbers[<n>]` gives `{kind: notion, id}`, `{kind: fathom, key}` or `{kind: test, key}`).
+4. For each valid number, look it up in `~/morning/state/brief-map-<date>.json` (`numbers[<n>]` gives `{kind: notion, id}`, `{kind: fathom, key}` or `{kind: test, key}`; a waiting item's entry also has `waiting: true`).
 5. For a Notion to-do (including a Notion waiting item): update that page's `Status` property to `Done` via the Notion MCP, then run `python3 ~/github/morning/scripts/ack_task.py <id1> <id2> ...` (batch all such ids into one call) so the next brief drops it even if the Notion write fails or is reverted.
 6. For a Fathom action (including a Fathom waiting item): run `python3 ~/github/morning/scripts/ack_action.py <key1> <key2> ...` (batch all such keys into one call).
 7. For a Testing item (kind `test`): run `python3 ~/github/morning/scripts/ack_test.py <key1> <key2> ...` (batch all such keys into one call). Then set the matching Notion triage row's `Status` to `Done`: find the row by `Key` = `<repo>#<number>` in today's `~/morning/state/triage-<date>.json` (`prs[key].notion_url`) and update that page's `Status` property with the Notion update-page tool. If there is no row, skip silently. Never edit any other column of that database: `Status` and `Notes` are Lena's, every other column belongs to Etienne's tool.
 8. Confirm to the user: `Marked N item(s) done. They won't appear tomorrow.` Then write the live update (Step 7d).
 9. Then print exactly: `Started any? (numbers comma-separated, blank to skip):` and wait for the reply. Parse it as in step 3 and look the numbers up in the same map. Skip numbers the user just marked done.
 10. For a Notion to-do (kind `notion`): update that page's `Status` property to `In progress` via the Notion MCP.
-11. For a Fathom action (kind `fathom`): run `python3 ~/github/morning/scripts/mark_in_progress.py <key1> <key2> ...` (batch all such keys into one call). Testing items (kind `test`) cannot be started: ignore those numbers. Waiting items cannot be started either: if the user asks, say in one line that the next step is someone else's.
+11. For a Fathom action (kind `fathom`): run `python3 ~/github/morning/scripts/mark_in_progress.py <key1> <key2> ...` (batch all such keys into one call). Testing items (kind `test`) cannot be started: ignore those numbers. Waiting items cannot be started either: tell them apart by `waiting: true` in the map entry (`{kind: fathom, key, waiting: true}`), and if the user asks to start one, say in one line that the next step is someone else's.
 12. Confirm to the user: `Moved N item(s) to In progress.` They show under In progress from the next brief. Then write the live update (Step 7d).
 
-**Chased.** At any point in the session, when the user says "chased <numbers>" (also "nudged" or "chased up"), look each number up in the map. Only waiting items can be chased: a number that is not a waiting item is ignored, with one line saying so. Run `python3 ~/github/morning/scripts/mark_chased.py <kind:id-or-key> ...` once for all of them, where each argument is `notion:<page id>` or `fathom:<action key>` from the numbers map. Confirm: `Marked N item(s) chased. The ⚡ comes back in 7 days if they're still waiting.` Then write the live update (Step 7d) with status `chased` for each.
+**Chased.** At any point in the session, when the user says "chased <numbers>" (also "nudged" or "chased up"), look each number up in the map. Only waiting items can be chased: a map entry without `waiting: true` is not a waiting item, so that number is ignored, with one line saying so. Run `python3 ~/github/morning/scripts/mark_chased.py <kind:id-or-key> ...` once for all of them, where each argument is `notion:<page id>` or `fathom:<action key>` from the numbers map. Confirm: `Marked N item(s) chased. The ⚡ comes back in 7 days if they're still waiting.` Then write the live update (Step 7d) with status `chased` for each.
 
 If the brief had no numbered lines, skip this step entirely. Both prompts are skipped together.
 
@@ -543,8 +544,8 @@ Only in a session with the user, never unattended (Step 7 does not run then eith
 This covers Step 7 and Step 7b, and also any later message in the same session where the user says item N is done, started, chased, moved to a new date or should carry a different tag. Look each number up in `~/morning/state/brief-map-<date>.json` as Step 7 does. For each change, do the state write first and write the record only after it succeeds:
 
 - Done: Notion `Status` to `Done` plus `ack_task.py` (Notion), `ack_action.py` (Fathom) or `ack_test.py` (Testing), as in Step 7. For a Testing item, also set its Notion triage row's `Status` to `Done` as in Step 7 item 7. Record `status: "done"`.
-- Started: Notion `Status` to `In progress`, or `mark_in_progress.py` for Fathom. Testing items and waiting items cannot be started. Record `status: "started"`.
-- Chased: `mark_chased.py` as in Step 7. Record `status: "chased"`.
+- Started: Notion `Status` to `In progress`, or `mark_in_progress.py` for Fathom. Testing items and waiting items (map entries with `waiting: true`) cannot be started. Record `status: "started"`.
+- Chased: `mark_chased.py` as in Step 7, for waiting items only (map entries with `waiting: true`). Record `status: "chased"`.
 - Moved: update the Notion task's `Due` date (on a Notion waiting item this is the chase-by date). Fathom actions and Testing items have no due date: tell the user so in one line and write nothing. Record `due`, in the brief JSON's own wording: `due today`, `due 17 Oct`, `overdue since 12 Oct`.
 - Re-tagged: no external write, the record is the only place it lives. Record `tag` as the user gave it: `verdict` (`needs-lena`, `split` or `handoff`), `who` (a first name, or empty) and `why` (one short sentence). Never re-derive it from the project's owner field or `people.md`: tags come from the user's calls, not project owners.
 

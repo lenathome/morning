@@ -118,7 +118,7 @@ Markdown shows a tag as ` [needs-Lena]`, ` [split: Maria]` or ` [handoff: Kurt]`
 
 Bucket meaning: `urgent` is every to-do due today or overdue. `todos.coming_up` is every to-do due after today, ordered by due date. `ideas` holds every to-do with no due date: `ideas.strategic` when `Category` contains Strategic, `ideas.other` for the rest.
 
-Numbering order, following the page: `in_progress` (in the order given), `urgent` (groups in the order given), `todos.coming_up`, `actions.yours`, `waiting`, `testing`, `ideas.strategic`, `ideas.other`. A testing item's map entry is `{"kind": "test", "key": "<repo>#<number>"}`. The model is responsible for the order within each list (standalone first, then parent groups alphabetically), exactly as the current skill describes.
+Numbering order, following the page: `in_progress` (in the order given), `urgent` (groups in the order given), `todos.coming_up`, `actions.yours`, `waiting`, `testing`, `ideas.strategic`, `ideas.other`. A testing item's map entry is `{"kind": "test", "key": "<repo>#<number>"}`. A waiting item's entry is the usual `{"kind": "notion", "id": ...}` or `{"kind": "fathom", "key": ...}` plus `"waiting": true`; that flag is the only way to tell a waiting item from a to-do or action in the map. The model is responsible for the order within each list (standalone first, then parent groups alphabetically), exactly as the current skill describes.
 
 ---
 
