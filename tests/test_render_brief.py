@@ -24,7 +24,7 @@ class TagNoteTest(unittest.TestCase):
         for g in b["urgent"] + b["todos"]["coming_up"] + b["ideas"]["strategic"] + b["ideas"]["other"]:
             for i in g["items"]:
                 i.pop("tag", None)
-        for a in b["actions"]["yours"] + b["actions"]["product"]:
+        for a in b["actions"]["yours"]:
             a.pop("tag", None)
         return b
 
@@ -60,21 +60,23 @@ class NumberingTest(unittest.TestCase):
         self.assertEqual(brief["urgent"][1]["items"][0]["n"], 2)
         self.assertEqual(brief["todos"]["coming_up"][0]["items"][0]["n"], 3)
         self.assertEqual(brief["actions"]["yours"][0]["n"], 4)
-        self.assertEqual(brief["actions"]["product"][0]["n"], 5)
-        self.assertEqual(brief["testing"][0]["n"], 6)
-        self.assertEqual(brief["testing"][1]["n"], 7)
-        self.assertEqual(brief["ideas"]["strategic"][0]["items"][0]["n"], 8)
-        self.assertEqual(brief["ideas"]["other"][0]["items"][0]["n"], 9)
+        self.assertEqual([w["n"] for w in brief["waiting"]], [5, 6])
+        self.assertEqual(brief["testing"][0]["n"], 7)
+        self.assertEqual(brief["testing"][1]["n"], 8)
+        self.assertEqual(brief["ideas"]["strategic"][0]["items"][0]["n"], 9)
+        self.assertEqual(brief["ideas"]["other"][0]["items"][0]["n"], 10)
 
     def test_number_map(self):
         _, numbers = render_brief.number_items(load())
         self.assertEqual(numbers["1"], {"kind": "notion", "id": "p1"})
         self.assertEqual(numbers["3"], {"kind": "notion", "id": "p3"})
         self.assertEqual(numbers["4"], {"kind": "fathom", "key": "k1"})
-        self.assertEqual(numbers["6"], {"kind": "test", "key": "ekko-checkout#142"})
-        self.assertEqual(numbers["7"], {"kind": "test", "key": "ekko-api#1300"})
-        self.assertEqual(numbers["8"], {"kind": "notion", "id": "p4"})
-        self.assertEqual(len(numbers), 9)
+        self.assertEqual(numbers["5"], {"kind": "notion", "id": "w1"})
+        self.assertEqual(numbers["6"], {"kind": "fathom", "key": "k2"})
+        self.assertEqual(numbers["7"], {"kind": "test", "key": "ekko-checkout#142"})
+        self.assertEqual(numbers["8"], {"kind": "test", "key": "ekko-api#1300"})
+        self.assertEqual(numbers["9"], {"kind": "notion", "id": "p4"})
+        self.assertEqual(len(numbers), 10)
 
     def test_missing_lists_default_to_empty(self):
         brief, numbers = render_brief.number_items({"date": "d", "weekday_label": "w", "focus": "f"})
@@ -111,46 +113,242 @@ class NumberingTest(unittest.TestCase):
             render_brief.number_items(b)
 
 
-class WaitingOnTest(unittest.TestCase):
-    def test_defaults_to_empty(self):
-        b = load()
-        del b["projects"][0]["waiting_on"]
-        brief, _ = render_brief.number_items(b)
-        self.assertEqual(brief["projects"][0]["waiting_on"], [])
+def waiting_item(**over):
+    w = {"kind": "notion", "id": "wx", "text": "Reply", "who": "Simon", "url": "https://example.com/x",
+         "since": "2026-10-20", "days": 7, "chase": False, "chase_reason": None, "chased_on": None}
+    w.update(over)
+    return w
 
-    def test_invalid_entries_name_the_project(self):
-        for bad in ([{"text": "", "who": "A"}], [{"who": "A"}], [{"text": "x", "who": 3}], ["x"], "x"):
+
+def waiting_md(*items):
+    b = load()
+    b["waiting"] = list(items)
+    brief, _ = render_brief.number_items(b)
+    return render_brief.to_markdown(brief)
+
+
+class WaitingTest(unittest.TestCase):
+    def test_defaults_to_empty_and_is_optional(self):
+        b = load()
+        del b["waiting"]
+        brief, numbers = render_brief.number_items(b)
+        self.assertEqual(brief["waiting"], [])
+        self.assertEqual(len(numbers), 8)
+
+    def test_items_keep_the_order_given(self):
+        b = load()
+        b["waiting"] = [waiting_item(id="a", days=1), waiting_item(id="b", days=30), waiting_item(id="c", days=5)]
+        brief, numbers = render_brief.number_items(b)
+        self.assertEqual([numbers[str(w["n"])]["id"] for w in brief["waiting"]], ["a", "b", "c"])
+
+    def test_numbered_after_yours_and_before_testing(self):
+        brief, _ = render_brief.number_items(load())
+        self.assertLess(brief["actions"]["yours"][-1]["n"], brief["waiting"][0]["n"])
+        self.assertLess(brief["waiting"][-1]["n"], brief["testing"][0]["n"])
+
+    def test_defaults_filled_on_optional_fields(self):
+        b = load()
+        b["waiting"] = [{"kind": "fathom", "key": "k", "text": "x", "since": "2026-10-01", "days": 0, "chase": False}]
+        w = render_brief.number_items(b)[0]["waiting"][0]
+        self.assertEqual((w["who"], w["url"], w["project"], w["chase_reason"], w["chased_on"]), ("", "", "", None, None))
+
+    def test_invalid_items_name_the_problem(self):
+        cases = [
+            ("not an object", "x", "not an object"),
+            ("no text", waiting_item(text=""), "no 'text'"),
+            ("notion without id", waiting_item(id=""), "no 'id'"),
+            ("fathom without key", waiting_item(kind="fathom", key=""), "no 'key'"),
+            ("unknown kind", waiting_item(kind="slack"), "unknown kind"),
+            ("missing kind", {k: v for k, v in waiting_item().items() if k != "kind"}, "unknown kind"),
+            ("who not a string", waiting_item(who=3), "'who'"),
+            ("url not a string", waiting_item(url=3), "'url'"),
+            ("bad since", waiting_item(since="27 Oct"), "'since'"),
+            ("impossible since", waiting_item(since="2026-13-40"), "'since'"),
+            ("bad days", waiting_item(days=-1), "'days'"),
+            ("days as text", waiting_item(days="7"), "'days'"),
+            ("days as bool", waiting_item(days=True), "'days'"),
+            ("chase as text", waiting_item(chase="yes"), "'chase'"),
+            ("bad chase_reason", waiting_item(chase_reason=4), "'chase_reason'"),
+            ("bad chased_on", waiting_item(chased_on="yesterday"), "'chased_on'"),
+        ]
+        for label, item, pattern in cases:
             b = load()
-            b["projects"][0]["waiting_on"] = bad
-            with self.assertRaisesRegex(ValueError, "PPP localisation"):
+            b["waiting"] = [item]
+            with self.assertRaisesRegex(ValueError, pattern, msg=label):
+                render_brief.number_items(b)
+        for k in ("since", "days", "chase"):
+            b = load()
+            w = waiting_item()
+            del w[k]
+            b["waiting"] = [w]
+            with self.assertRaisesRegex(ValueError, f"'{k}'"):
                 render_brief.number_items(b)
 
-    def test_who_may_be_empty_or_missing(self):
+    def test_waiting_must_be_a_list(self):
         b = load()
-        b["projects"][0]["waiting_on"] = [{"text": "x", "who": ""}, {"text": "y"}]
-        render_brief.number_items(b)
+        b["waiting"] = {"a": 1}
+        with self.assertRaisesRegex(ValueError, "'waiting' is not a list"):
+            render_brief.number_items(b)
 
-    def test_markdown_lists_entries_after_summary(self):
-        brief, _ = render_brief.number_items(load())
-        md = render_brief.to_markdown(brief)
-        self.assertIn("Bilo is finishing the move.\n\nWaiting on others (2):\n\n"
-                      "- Sign-off on the rounding copy (Simon and Baran)\n- Staging data refresh\n\n", md)
-
-    def test_markdown_omits_when_empty(self):
+    def test_actions_product_moved(self):
         b = load()
+        b["actions"]["product"] = [{"key": "k", "text": "x", "url": "u", "meeting": "m", "date": "d"}]
+        with self.assertRaisesRegex(ValueError, "actions.product moved to 'waiting'"):
+            render_brief.number_items(b)
+        b["actions"]["product"] = []
+        brief, _ = render_brief.number_items(b)
+        self.assertNotIn("product", brief["actions"])
+
+    def test_project_waiting_on_moved_and_names_the_project(self):
+        b = load()
+        b["projects"][0]["waiting_on"] = [{"text": "x", "who": "A"}]
+        with self.assertRaisesRegex(ValueError, "PPP localisation.*moved to 'waiting'"):
+            render_brief.number_items(b)
         b["projects"][0]["waiting_on"] = []
         brief, _ = render_brief.number_items(b)
-        self.assertNotIn("Waiting on others", render_brief.to_markdown(brief))
+        self.assertNotIn("waiting_on", brief["projects"][0])
 
-    def test_numbers_and_counts_unchanged(self):
-        brief, numbers = render_brief.number_items(load())
-        self.assertEqual(len(numbers), 9)
-        self.assertEqual(render_brief.counts(brief)["max_number"], 9)
+    def test_markdown_section_follows_your_actions_with_blank_lines(self):
+        md = waiting_md(waiting_item())
+        self.assertIn("**Your actions**\n\n4. [Email Jamie]", md)
+        self.assertRegex(md, r"\n\n\*\*Waiting for others\*\*\n\n5\. \[Reply\]\(https://example\.com/x\) \(Simon\) - waiting 7 days\n\n## ")
+        order = [md.index(h) for h in ("**Your actions**", "**Waiting for others**", "## External meeting prep")]
+        self.assertEqual(order, sorted(order))
+        self.assertNotIn("**Product actions**", md)
 
-    def test_template_renders_waiting_on(self):
+    def test_markdown_line_variants(self):
+        cases = [
+            (waiting_item(days=0), "5. [Reply](https://example.com/x) (Simon) - since today\n"),
+            (waiting_item(days=1), "5. [Reply](https://example.com/x) (Simon) - waiting 1 day\n"),
+            (waiting_item(days=12), "5. [Reply](https://example.com/x) (Simon) - waiting 12 days\n"),
+            (waiting_item(chase=True, chase_reason="Moka go-live is 9 Oct"),
+             "5. ⚡ [Reply](https://example.com/x) (Simon) - waiting 7 days; Moka go-live is 9 Oct\n"),
+            (waiting_item(chase=True, chase_reason=None), "5. ⚡ [Reply](https://example.com/x) (Simon) - waiting 7 days\n"),
+            (waiting_item(chase=True, chase_reason="waiting 7 days"),
+             "5. ⚡ [Reply](https://example.com/x) (Simon) - waiting 7 days\n"),
+            (waiting_item(chase=False, chase_reason="stale reason"),
+             "5. [Reply](https://example.com/x) (Simon) - waiting 7 days\n"),
+            (waiting_item(chased_on="2026-10-27"), "5. [Reply](https://example.com/x) (Simon) - waiting 7 days; chased 27 Oct\n"),
+            (waiting_item(chased_on="2026-10-03"), "5. [Reply](https://example.com/x) (Simon) - waiting 7 days; chased 3 Oct\n"),
+            (waiting_item(chase=True, chase_reason="Launch", chased_on="2026-09-27"),
+             "5. ⚡ [Reply](https://example.com/x) (Simon) - waiting 7 days; Launch; chased 27 Sep\n"),
+            (waiting_item(url=""), "5. Reply (Simon) - waiting 7 days\n"),
+            (waiting_item(who=""), "5. [Reply](https://example.com/x) - waiting 7 days\n"),
+            (waiting_item(url="", who="", chase=True), "5. ⚡ Reply - waiting 7 days\n"),
+        ]
+        for item, line in cases:
+            self.assertIn(line, waiting_md(item), msg=line)
+
+    def test_markdown_omits_the_section_when_empty(self):
+        self.assertNotIn("Waiting for others", waiting_md())
+
+    def test_markdown_project_block_has_the_count_line_only_when_n_above_0(self):
+        brief, _ = render_brief.number_items(load())
+        for shared in (False, True):
+            md = render_brief.to_markdown(brief, shared=shared)
+            self.assertIn("Bilo is finishing the move.\n\nWaiting for others: 1 (in To do)\n\n", md)
+            self.assertNotIn("Waiting on others", md)
+        b = load()
+        b["waiting"][0]["project"] = ""
+        brief, _ = render_brief.number_items(b)
+        self.assertNotIn("(in To do)", render_brief.to_markdown(brief))
+
+    def test_project_count_matches_the_project_name_only(self):
+        b = load()
+        b["waiting"] = [waiting_item(project="PPP localisation"), waiting_item(project="PPP localisation"),
+                        waiting_item(project="Other project")]
+        brief, _ = render_brief.number_items(b)
+        self.assertIn("Waiting for others: 2 (in To do)", render_brief.to_markdown(brief))
+
+    def test_counts(self):
+        brief, _ = render_brief.number_items(load())
+        c = render_brief.counts(brief)
+        self.assertEqual((c["waiting"], c["waiting_chase"], c["actions"]), (2, 1, 1))
+        self.assertEqual(c["max_number"], 10)
+
+    def test_counts_without_waiting(self):
+        b = load()
+        b["waiting"] = []
+        c = render_brief.counts(render_brief.number_items(b)[0])
+        self.assertEqual((c["waiting"], c["waiting_chase"]), (0, 0))
+
+    def test_html_has_the_section_the_project_pill_and_no_product_actions(self):
         html = (ROOT / "scripts" / "brief_template.html").read_text()
-        self.assertIn("Waiting on others", html)
-        self.assertIn("waiting on others", html)
+        self.assertIn('section("Waiting for others", openCount(waiting), waitingPanel(waiting), "waiting-for-others")', html)
+        self.assertIn('href: "#waiting-for-others"', html)
+        self.assertIn('waitingHere + " waiting for others"', html)
+        self.assertIn('span("pill waiting", "⚡ chase")', html)
+        self.assertNotIn("Product actions", html)
+        self.assertNotIn("waiting_on", html)
+        self.assertNotIn("waiting on others", html.lower())
+        # the section sits after Your actions in the To do tab
+        self.assertLess(html.index('section("Your actions"'), html.index('section("Waiting for others"'))
+        brief, _ = render_brief.number_items(load())
+        page = render_brief.to_html(brief)
+        self.assertIn('"text": "Sign-off on the rounding copy"', page)
+        self.assertIn('"project": "PPP localisation"', page)
+
+    def test_overlay_homes_use_waiting_and_it_is_not_startable(self):
+        t = (ROOT / "scripts" / "brief_template.html").read_text()
+        self.assertIn('"yours", "waiting", "testing", "ideas"]', t)
+        startable = re.search(r"var STARTABLE = \{([^}]*)\}", t).group(1)
+        self.assertNotIn("waiting", startable)
+        self.assertNotIn('"product"', t)
+        self.assertNotIn("product:", t)
+
+    def test_overlay_chased_status_clears_the_marker_without_striking_through(self):
+        t = (ROOT / "scripts" / "brief_template.html").read_text()
+        self.assertIn('rec.status === "chased" && hit.home === "waiting"', t)
+        self.assertIn("item.chase = false; item.chased_today = true;", t)
+        self.assertIn('span("", "chased today")', t)
+        # only `done` sets the struck-through state
+        self.assertEqual(t.count("item.done = true"), 1)
+
+    @unittest.skipUnless(__import__("shutil").which("node"), "node not installed")
+    def test_overlay_runs_in_node(self):
+        """Run applyOverlay and waitingRow from the real template against a stub DOM."""
+        t = (ROOT / "scripts" / "brief_template.html").read_text()
+        brief, _ = render_brief.number_items(load())
+        page = render_brief.to_html(brief)
+        script = re.search(r"<script>\n\(function \(\) \{(.*)\}\)\(\);\n</script>", page, re.S).group(1)
+        # skip the first render, and stop once the overlay functions are defined
+        self.assertEqual(script.count("  renderTabs();\n"), 1)
+        script = script.replace("  renderTabs();\n", "")
+        self.assertEqual(script.count("  var shown = brief;"), 1)
+        script = script.replace("  var shown = brief;", "  globalThis.__x = { applyOverlay: applyOverlay, waitingRow: waitingRow, brief: brief };\n  return;\n  var shown = brief;")
+        js = ("const BRIEF = " + json.dumps(json.dumps(brief)) + ";\n" + STUB_DOM + "(function () {" + script + "})();\n"
+              "const x = globalThis.__x;\n"
+              "const d = x.applyOverlay(x.brief, {items: {5: {status: 'chased'}, 6: {status: 'started'}, 7: {status: 'chased'}}});\n"
+              "const w = d.waiting[0];\n"
+              "console.log(JSON.stringify({chase: w.chase, today: w.chased_today, done: !!w.done,\n"
+              "  w2inprog: d.in_progress.length, w2still: d.waiting.length, testing7: !!d.testing[0].chased_today}));\n"
+              "const row = x.waitingRow(w);\n"
+              "console.log(JSON.stringify({text: row.textContent, cls: row.className}));\n")
+        r = subprocess.run(["node", "-e", js], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        first, second = [json.loads(line) for line in r.stdout.strip().splitlines()]
+        self.assertEqual(first, {"chase": False, "today": True, "done": False, "w2inprog": 0, "w2still": 2, "testing7": False})
+        self.assertIn("chased today", second["text"])
+        self.assertNotIn("⚡", second["text"])
+        self.assertNotIn("done", second["cls"])
+
+
+STUB_DOM = """
+function mk(tag) {
+  const n = { tag, children: [], attrs: {}, style: {}, className: "", _text: "", parentNode: null,
+    classList: { add() {} }, addEventListener() {}, setAttribute(k, v) { this.attrs[k] = v; },
+    appendChild(c) { this.children.push(c); c.parentNode = this; return c; },
+    set textContent(v) { this._text = String(v); this.children = []; },
+    get textContent() { return this._text + this.children.map(c => c.textContent).join(""); } };
+  return n;
+}
+globalThis.window = { claude: undefined, scrollY: 0 };
+globalThis.localStorage = { getItem() { return null; }, setItem() {} };
+globalThis.document = { body: mk("body"), activeElement: null, visibilityState: "hidden",
+  createElement: mk, createTextNode: (t) => ({ textContent: String(t), children: [] }),
+  getElementById(id) { return id === "brief-data" ? { textContent: BRIEF } : (id === "bg-data" ? { textContent: "null" } : mk("div")); },
+  addEventListener() {} };
+"""
 
 
 class MarkdownTest(unittest.TestCase):
@@ -176,7 +374,7 @@ class MarkdownTest(unittest.TestCase):
         self.assertNotIn("—", self.md)
 
     def test_section_order(self):
-        order = ["## To do", "**Urgent today**", "**Coming up** - 1", "**Your actions**", "**Product actions**",
+        order = ["## To do", "**Urgent today**", "**Coming up** - 1", "**Your actions**", "**Waiting for others**",
                  "## External meeting prep", "## PRs needing you", "## Testing", "## Ideas bank",
                  "**Strategic** - 1", "**Operational** - 1", "## Engineering progress"]
         pos = [self.md.index(h) for h in order]
@@ -188,7 +386,7 @@ class MarkdownTest(unittest.TestCase):
         self.assertIn("**Coming up** - 1\n\n3. Revisit round-up (due 2 Oct)  [Operational]\n", self.md)
 
     def test_ideas_parent_group(self):
-        self.assertIn("**Operational** - 1\n\n*Public documentation:*\n\n9. Link to methodology PDFs\n", self.md)
+        self.assertIn("**Operational** - 1\n\n*Public documentation:*\n\n10. Link to methodology PDFs\n", self.md)
 
     def test_ideas_items_have_no_category_tags_and_section_is_operational(self):
         ideas_md = self.md.split("## Ideas bank")[1].split("## Engineering progress")[0]
@@ -201,12 +399,12 @@ class MarkdownTest(unittest.TestCase):
         self.assertNotIn('["Other"', template)
 
     def test_testing_section(self):
-        self.assertIn("## Testing\n\n6. [#142](https://github.com/ekko-enviroconomy/ekko-checkout/pull/142) "
+        self.assertIn("## Testing\n\n7. [#142](https://github.com/ekko-enviroconomy/ekko-checkout/pull/142) "
                       "feat(sdk): translated checkout strings (ekko-checkout, Checkout translation pipeline)"
                       " - merged 1 Oct, live: dev, staging, prod\n"
                       "   - Open the staging checkout in tr-TR\n"
                       "   - Check the contribution line reads in Turkish\n"
-                      "7. [#1300](", self.md)
+                      "8. [#1300](", self.md)
         self.assertIn("   - Request a quote for 12.34 EUR on dev\n   - (steps inferred from the diff)\n", self.md)
         self.assertEqual(self.md.count("(steps inferred from the diff)"), 1)
 
@@ -230,14 +428,14 @@ class MarkdownTest(unittest.TestCase):
         self.assertIn("**Operational** - 1", md)
         self.assertNotIn("**Strategic**", md)
 
-    def test_empty_urgent_and_product_omitted(self):
+    def test_empty_urgent_and_waiting_omitted(self):
         b = load()
         b["urgent"] = []
-        b["actions"]["product"] = []
+        b["waiting"] = []
         brief, _ = render_brief.number_items(b)
         md = render_brief.to_markdown(brief)
         self.assertNotIn("**Urgent today**", md)
-        self.assertNotIn("**Product actions**", md)
+        self.assertNotIn("**Waiting for others**", md)
 
     def test_empty_your_actions_says_clean_slate(self):
         b = load()
@@ -260,13 +458,14 @@ class TagTest(unittest.TestCase):
                       ' [handoff: Kurt]\n   *A plain follow-up email.*\n', self.md())
 
     def test_ideas_tag_shows_although_categories_do_not(self):
-        self.assertIn("8. Travel calculator [split: Maria]\n   *Maria mocks it up, you decide.*\n", self.md())
+        self.assertIn("9. Travel calculator [split: Maria]\n   *Maria mocks it up, you decide.*\n", self.md())
 
     def test_untagged_items_render_as_before(self):
         md = self.md()
         self.assertIn("\n*Moka launch actions (you):*\n\n2. Chase Simon (overdue since 17 Sep)  [Operational]\n\n**Coming up**", md)
-        self.assertIn("5. [Schedule officers' call](https://fathom.video/calls/3?timestamp=4) "
-                      "(from \"P&E team sync\", 30 Sep)\n", md)
+        self.assertIn("4. [Email Jamie](https://fathom.video/calls/1?timestamp=2) "
+                      "(from \"P&E team sync\", 25 Sep) [handoff: Kurt]\n", md)
+        self.assertIn("6. [Schedule officers' call](https://fathom.video/calls/3?timestamp=4) - waiting 1 day\n", md)
 
     def test_tag_without_why_adds_no_line(self):
         b = load()
@@ -313,8 +512,8 @@ class TagTest(unittest.TestCase):
     def test_non_object_tag_and_non_string_fields_are_rejected(self):
         for bad in ("needs-lena", ["split"], {"verdict": "split", "who": 3}, {"verdict": "needs-lena", "why": 4}):
             b = load()
-            b["actions"]["product"][0]["tag"] = bad
-            with self.assertRaisesRegex(ValueError, "Schedule officers' call"):
+            b["actions"]["yours"][0]["tag"] = bad
+            with self.assertRaisesRegex(ValueError, "Email Jamie"):
                 render_brief.number_items(b)
 
     def test_ideas_item_with_bad_tag_is_rejected(self):
@@ -351,7 +550,7 @@ class SharedMdTest(unittest.TestCase):
         brief, _ = render_brief.number_items(load())
         shared = render_brief.to_markdown(brief, shared=True)
         self.assertIn("1. Standalone urgent", shared)
-        self.assertIn("9. Link to methodology PDFs", shared)
+        self.assertIn("10. Link to methodology PDFs", shared)
 
     def test_cli_writes_shared_md(self):
         with tempfile.TemporaryDirectory() as d:
@@ -370,7 +569,7 @@ class CountsTest(unittest.TestCase):
         self.assertEqual(c["coming_up"], 1)
         self.assertEqual(c["ideas"], 2)
         self.assertEqual(c["testing"], 2)
-        self.assertEqual(c["max_number"], 9)
+        self.assertEqual(c["max_number"], 10)
         self.assertEqual(c["urgent"], 2)
 
 
@@ -527,7 +726,7 @@ class CliTest(unittest.TestCase):
             self.assertIn("brief-data", (d / "b.html").read_text())
             m = json.loads((d / "m.json").read_text())
             self.assertEqual(m["date"], "2026-10-01")
-            self.assertEqual(m["numbers"]["9"], {"kind": "notion", "id": "p5"})
+            self.assertEqual(m["numbers"]["10"], {"kind": "notion", "id": "p5"})
             self.assertIn('"urgent": 2', r.stdout)
 
     def test_bad_input_exits_1(self):
@@ -562,14 +761,14 @@ class InProgressTest(unittest.TestCase):
         brief, numbers = render_brief.number_items(with_in_progress(IN_PROGRESS))
         self.assertEqual([i["n"] for i in brief["in_progress"]], [1, 2])
         self.assertEqual(brief["urgent"][0]["items"][0]["n"], 3)
-        self.assertEqual(brief["ideas"]["other"][0]["items"][0]["n"], 11)
+        self.assertEqual(brief["ideas"]["other"][0]["items"][0]["n"], 12)
         self.assertEqual(numbers["1"], {"kind": "notion", "id": "ip1"})
         self.assertEqual(numbers["2"], {"kind": "fathom", "key": "ipk1"})
         self.assertEqual(numbers["3"], {"kind": "notion", "id": "p1"})
-        self.assertEqual(len(numbers), 11)
+        self.assertEqual(len(numbers), 12)
         c = render_brief.counts(brief)
         self.assertEqual(c["in_progress"], 2)
-        self.assertEqual(c["max_number"], 11)
+        self.assertEqual(c["max_number"], 12)
 
     def test_markdown_section_sits_before_urgent_with_matching_lines(self):
         brief, _ = render_brief.number_items(with_in_progress(IN_PROGRESS))

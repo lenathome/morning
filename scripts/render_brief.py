@@ -35,7 +35,9 @@ import argparse
 import base64
 import copy
 import json
+import re
 import sys
+from datetime import datetime
 from pathlib import Path
 
 TEMPLATE = Path(__file__).resolve().parent / "brief_template.html"
@@ -44,6 +46,7 @@ TAG_VERDICTS = ("needs-lena", "split", "handoff")
 TAG_LABELS = {"needs-lena": "needs-Lena", "split": "split", "handoff": "handoff"}
 BG_EXTS = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".png": "image/png"}
 BG_WARN_BYTES = 600 * 1024
+MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
 
 def check_tag(item: dict, label: str) -> None:
@@ -107,10 +110,17 @@ def number_items(raw: dict) -> tuple[dict, dict]:
         prs.setdefault(k, [])
     actions = brief.setdefault("actions", {})
     actions.setdefault("yours", [])
-    actions.setdefault("product", [])
+    if actions.get("product"):
+        raise ValueError("actions.product moved to 'waiting'")
+    actions.pop("product", None)
     todos = brief.setdefault("todos", {})
     todos.setdefault("coming_up", [])
     brief.setdefault("testing", [])
+    waiting = brief.get("waiting")
+    if waiting is None:
+        waiting = brief["waiting"] = []
+    if not isinstance(waiting, list):
+        raise ValueError("'waiting' is not a list")
     ideas = brief.setdefault("ideas", {})
     for k, _ in IDEA_BUCKETS:
         ideas.setdefault(k, [])
@@ -118,15 +128,9 @@ def number_items(raw: dict) -> tuple[dict, dict]:
         brief.setdefault(k, [])
     brief.setdefault("team_sync_notes", "")
     for p in brief["projects"]:
-        waiting = p.setdefault("waiting_on", [])
-        name = p.get("name", "?")
-        if not isinstance(waiting, list):
-            raise ValueError(f"project '{name}' needs 'waiting_on' as a list")
-        for w in waiting:
-            if not isinstance(w, dict) or not isinstance(w.get("text"), str) or not w["text"].strip():
-                raise ValueError(f"project '{name}' has a waiting_on entry without 'text'")
-            if not isinstance(w.get("who", ""), str):
-                raise ValueError(f"project '{name}' has a waiting_on entry whose 'who' is not a string")
+        if p.get("waiting_on"):
+            raise ValueError(f"project '{p.get('name', '?')}' has 'waiting_on', which moved to 'waiting'")
+        p.pop("waiting_on", None)
 
     numbers: dict[str, dict] = {}
     n = 0
@@ -151,6 +155,43 @@ def number_items(raw: dict) -> tuple[dict, dict]:
             n += 1
             a["n"] = n
             numbers[str(n)] = {"kind": "fathom", "key": a["key"]}
+
+    def waiting_list(items: list) -> None:
+        nonlocal n
+        for i, w in enumerate(items, 1):
+            if not isinstance(w, dict):
+                raise ValueError(f"waiting item {i} is not an object")
+            label = f"waiting item '{w.get('text', '?')}'"
+            if not isinstance(w.get("text"), str) or not w["text"].strip():
+                raise ValueError(f"waiting item {i} has no 'text'")
+            kind = w.get("kind")
+            if kind == "notion":
+                if not w.get("id"):
+                    raise ValueError(f"{label} has no 'id'")
+                ref = {"kind": "notion", "id": w["id"]}
+            elif kind == "fathom":
+                if not w.get("key"):
+                    raise ValueError(f"{label} has no 'key'")
+                ref = {"kind": "fathom", "key": w["key"]}
+            else:
+                raise ValueError(f"{label} has an unknown kind {kind!r} (use notion or fathom)")
+            for k in ("who", "url", "project"):
+                if not isinstance(w.setdefault(k, ""), str):
+                    raise ValueError(f"{label} has a '{k}' that is not a string")
+            if not _is_date(w.get("since")):
+                raise ValueError(f"{label} needs 'since' as YYYY-MM-DD")
+            days = w.get("days")
+            if isinstance(days, bool) or not isinstance(days, int) or days < 0:
+                raise ValueError(f"{label} needs 'days' as an integer of 0 or more")
+            if not isinstance(w.get("chase"), bool):
+                raise ValueError(f"{label} needs 'chase' as true or false")
+            if w.setdefault("chase_reason", None) is not None and not isinstance(w["chase_reason"], str):
+                raise ValueError(f"{label} has a 'chase_reason' that is not a string or null")
+            if w.setdefault("chased_on", None) is not None and not _is_date(w["chased_on"]):
+                raise ValueError(f"{label} needs 'chased_on' as YYYY-MM-DD or null")
+            n += 1
+            w["n"] = n
+            numbers[str(n)] = ref
 
     def testing_list(items: list) -> None:
         nonlocal n
@@ -193,11 +234,51 @@ def number_items(raw: dict) -> tuple[dict, dict]:
     todo_groups(brief["urgent"])
     todo_groups(todos["coming_up"])
     action_list(actions["yours"])
-    action_list(actions["product"])
+    waiting_list(brief["waiting"])
     testing_list(brief["testing"])
     for k, _ in IDEA_BUCKETS:
         todo_groups(ideas[k])
     return brief, numbers
+
+
+def _is_date(value) -> bool:
+    """True for a YYYY-MM-DD string that is a real date."""
+    if not isinstance(value, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        return False
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+    except ValueError:
+        return False
+    return True
+
+
+def _short_date(value: str) -> str:
+    """'2026-10-27' -> '27 Oct' (no leading zero on the day)."""
+    y, m, d = value.split("-")
+    return f"{int(d)} {MONTHS[int(m) - 1]}"
+
+
+def _age_text(days: int) -> str:
+    if days == 0:
+        return "since today"
+    return "waiting 1 day" if days == 1 else f"waiting {days} days"
+
+
+def _waiting_for(brief: dict, project_name: str) -> list[dict]:
+    return [w for w in brief["waiting"] if w.get("project") == project_name]
+
+
+def _waiting_line(w: dict) -> str:
+    chase = w["chase"]
+    text = f"[{w['text']}]({w['url']})" if w.get("url") else w["text"]
+    who = f" ({w['who']})" if w.get("who") else ""
+    age = _age_text(w["days"])
+    out = f"{w['n']}. {'⚡ ' if chase else ''}{text}{who} - {age}"
+    if chase and w.get("chase_reason") and w["chase_reason"] != age:
+        out += f"; {w['chase_reason']}"
+    if w.get("chased_on"):
+        out += f"; chased {_short_date(w['chased_on'])}"
+    return out
 
 
 def _tag_suffix(item: dict) -> str:
@@ -305,8 +386,8 @@ def to_markdown(brief: dict, shared: bool = False) -> str:
         L += [x for a in acts["yours"] for x in _action_line(a)] + [""]
     else:
         L += ["Nothing carrying over on your own actions. Clean slate.", ""]
-    if acts["product"]:
-        L += ["**Product actions**", ""] + [x for a in acts["product"] for x in _action_line(a)] + [""]
+    if brief["waiting"]:
+        L += ["**Waiting for others**", ""] + [_waiting_line(w) for w in brief["waiting"]] + [""]
 
     if brief["meetings"] and not shared:
         L += ["## External meeting prep", ""]
@@ -350,10 +431,9 @@ def to_markdown(brief: dict, shared: bool = False) -> str:
         if p.get("target"):
             head += f", target {p['target']}"
         L += [head, "", p.get("summary", ""), ""]
-        waiting = p.get("waiting_on", [])
+        waiting = _waiting_for(brief, p["name"])
         if waiting:
-            L += [f"Waiting on others ({len(waiting)}):", ""]
-            L += [f"- {w['text']} ({w['who']})" if w.get("who") else f"- {w['text']}" for w in waiting] + [""]
+            L += [f"Waiting for others: {len(waiting)} (in To do)", ""]
         if p.get("stale_note"):
             L += [p["stale_note"], ""]
         if p.get("sync_note"):
@@ -474,12 +554,15 @@ def counts(brief: dict) -> dict:
         "prs_awaiting": len(brief["prs"]["awaiting"]),
         "coming_up": _count(brief["todos"]["coming_up"]),
         "actions": len(brief["actions"]["yours"]),
+        "waiting": len(brief["waiting"]),
+        "waiting_chase": sum(1 for w in brief["waiting"] if w["chase"]),
         "testing": len(brief["testing"]),
         "ideas": sum(_count(brief["ideas"][k]) for k, _ in IDEA_BUCKETS),
         "meetings": len(brief["meetings"]),
         "max_number": max([0] + [i["n"] for i in brief["in_progress"]]
                           + [i["n"] for g in brief["urgent"] for i in g.get("items", [])]
-                          + [a["n"] for a in brief["actions"]["yours"] + brief["actions"]["product"]]
+                          + [a["n"] for a in brief["actions"]["yours"]]
+                          + [w["n"] for w in brief["waiting"]]
                           + [i["n"] for g in brief["todos"]["coming_up"] for i in g.get("items", [])]
                           + [t["n"] for t in brief["testing"]]
                           + [i["n"] for k, _ in IDEA_BUCKETS for g in brief["ideas"][k] for i in g.get("items", [])]),

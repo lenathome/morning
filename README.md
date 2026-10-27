@@ -10,7 +10,7 @@ This is my own tool, not an ekko team tool. You are welcome to copy it, but it i
 
 - **Project updates.** Edits proposed by `/session-sweep` from the previous day's Claude Code sessions. They come first, so the rest of the brief is built from updated project files.
 - **Today's focus.** One sentence.
-- **To do.** Urgent today, coming up, your Fathom actions and product colleagues' actions and merged PRs to test by hand. Parent tasks in Notion group their subtasks.
+- **To do.** Urgent today, coming up, your Fathom actions, what you are waiting on others for and merged PRs to test by hand. Parent tasks in Notion group their subtasks.
 - **External meeting prep.** A company summary and each attendee's likely role, for meetings with people outside the ekko domain. Personal recurring events are skipped.
 - **PRs needing you.** Review requests and mentions, plus your own open PRs split into ready to merge and awaiting review, with a flag when one has gone stale.
 - **Ideas bank.** To-dos with no due date, split into strategic and operational.
