@@ -289,7 +289,8 @@ class WaitingTest(unittest.TestCase):
 
     def test_html_has_the_section_the_project_pill_and_no_product_actions(self):
         html = (ROOT / "scripts" / "brief_template.html").read_text()
-        self.assertIn('section("Waiting for others", openCount(waiting), waitingPanel(waiting), "waiting-for-others")', html)
+        self.assertIn('id: "waiting-for-others"', html)
+        self.assertIn('el("details", { "class": "group", id: "waiting-for-others"', html)
         self.assertIn('href: "#waiting-for-others"', html)
         self.assertIn('waitingHere + " waiting for others"', html)
         self.assertIn('span("pill waiting", "⚡ chase")', html)
@@ -297,11 +298,23 @@ class WaitingTest(unittest.TestCase):
         self.assertNotIn("waiting_on", html)
         self.assertNotIn("waiting on others", html.lower())
         # the section sits after Your actions in the To do tab
-        self.assertLess(html.index('section("Your actions"'), html.index('section("Waiting for others"'))
+        self.assertLess(html.index('section("Your actions"'), html.index('main.push(waitingSection())'))
         brief, _ = render_brief.number_items(load())
         page = render_brief.to_html(brief)
         self.assertIn('"text": "Sign-off on the rounding copy"', page)
         self.assertIn('"project": "PPP localisation"', page)
+
+    def test_waiting_is_a_folded_details_and_not_in_the_todo_count(self):
+        t = (ROOT / "scripts" / "brief_template.html").read_text()
+        self.assertNotIn('section("Waiting for others"', t)
+        self.assertIn("var waitingOpen = false;", t)
+        self.assertIn("if (waitingOpen) node.open = true;", t)
+        self.assertIn("waitingOpen = true;", t)          # the project pill opens it
+        count = re.search(r'id: "todo", label: "To do".*?count: (.*?)\},', t, re.S).group(1)
+        self.assertNotIn("waiting", count)
+        brief, _ = render_brief.number_items(load())
+        page = render_brief.to_html(brief)
+        self.assertIn('id: "waiting-for-others"', page)
 
     def test_overlay_homes_use_waiting_and_it_is_not_startable(self):
         t = (ROOT / "scripts" / "brief_template.html").read_text()
