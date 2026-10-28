@@ -212,6 +212,15 @@ details.prow[open] .pnext { display: block; -webkit-line-clamp: unset; line-clam
 details.prow[open] .chev::before { transform: rotate(45deg); top: 3px; }
 details.prow > summary:hover .chev::before { border-color: var(--accent); }
 details.prow > summary:focus-visible { outline-offset: -2px; border-radius: 8px; }
+/* Waiting for others: folded by default, one line when shut */
+details.group > summary { cursor: pointer; list-style: none; display: flex; gap: 8px; align-items: center; min-width: 0; }
+details.group > summary::-webkit-details-marker { display: none; }
+details.group > summary h2 { flex-wrap: wrap; min-width: 0; }
+details.group > summary:hover .chev::before { border-color: var(--accent); }
+details.group > summary:focus-visible { outline-offset: 2px; border-radius: 6px; }
+details.group[open] .chev::before { transform: rotate(45deg); top: 3px; }
+details.group > .panel { margin-top: 8px; }
+.group-sum .tochase { text-transform: none; letter-spacing: 0; font-weight: 400; }
 .prows { overflow: hidden; }
 details.prow .detail { margin: 0 12px 10px; }
 .phead { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
@@ -429,6 +438,25 @@ body.has-bg .goals > h2 {
     list.forEach(function (w) { panel.appendChild(waitingRow(w)); });
     return panel;
   }
+  /* Waiting for others is folded: the summary keeps the count and how many need a chase. The open state lives in
+     waitingOpen so the 30-second re-render does not shut it again. */
+  var waitingOpen = false;
+  function waitingSection() {
+    var open = waiting.filter(function (w) { return !w.done; });
+    var chase = open.filter(function (w) { return w.chase && !w.chased_today; }).length;
+    var node = el("details", { "class": "group", id: "waiting-for-others", ontoggle: function () { waitingOpen = node.open; } }, [
+      el("summary", { "class": "group-sum" }, [
+        el("h2", {}, [
+          "Waiting for others", span("count", String(open.length)),
+          chase ? span("count tochase", "\u00b7 " + chase + " to chase") : null
+        ]),
+        span("chev", "")
+      ]),
+      waitingPanel(waiting)
+    ]);
+    if (waitingOpen) node.open = true;
+    return node;
+  }
   function section(title, count, content, id) {
     return el("section", id ? { "class": "group", id: id } : { "class": "group" }, [
       el("h2", {}, [title, count != null ? span("count", String(count)) : null]),
@@ -580,7 +608,9 @@ body.has-bg .goals > h2 {
         /* the link sits inside <summary>: keep the card shut and jump to the section on the To do tab */
         e.preventDefault();
         select("todo", false);
+        waitingOpen = true;
         var target = document.getElementById("waiting-for-others");
+        if (target) target.open = true;
         if (target) target.scrollIntoView({ block: "start" });
       }, text: waitingHere + " waiting for others" }));
     }
@@ -644,7 +674,7 @@ body.has-bg .goals > h2 {
     if (urgentItems.length) main.push(section("Urgent today", openCount(urgentItems), todoPanel(urgent)));
     if (countGroups(todos.coming_up)) main.push(section("Coming up", openInGroups(todos.coming_up), todoPanel(todos.coming_up)));
     if (yours.length) main.push(section("Your actions", openCount(yours), actionPanel(yours)));
-    if (waiting.length) main.push(section("Waiting for others", openCount(waiting), waitingPanel(waiting), "waiting-for-others"));
+    if (waiting.length) main.push(waitingSection());
     if (meetings.length) {
       main.push(section("External meeting prep", meetings.length,
         el("div", { "class": "cards" }, meetings.map(meetingCard))));
@@ -736,13 +766,13 @@ body.has-bg .goals > h2 {
     return [section("Partners - next actions", partners.length, el("div", { "class": "panel tablewrap" }, [table]))];
   }
 
-  /* The To do pill counts everything still open on its tab, In progress included, at every width. Built on each
-     render, because the counts change with the overlay. */
+  /* The To do pill counts what is still open on its tab, In progress included, at every width. Waiting items are
+     not counted: they wait on someone else. Built on each render, because the counts change with the overlay. */
   function tabs() {
     return [
       { id: "todo", label: "To do", build: todoTab, empty: "Nothing to do.",
         count: openCount(inProgress) + openCount(urgentItems) + openInGroups(todos.coming_up) + openCount(yours) +
-               openCount(waiting) + meetings.length },
+               meetings.length },
       { id: "prs", label: "PRs", build: prsTab, count: prTotal, empty: "No pull requests need you." },
       { id: "testing", label: "Testing", build: testingTab, count: openCount(testing),
         empty: "Nothing merged recently that needs a manual test." },
