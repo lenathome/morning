@@ -1,0 +1,82 @@
+{
+  "date": "2026-10-28",
+  "numbers": {
+    "1": {
+      "kind": "notion",
+      "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "2": {
+      "kind": "fathom",
+      "key": "f00dbabe1234",
+      "waiting": true
+    },
+    "3": {
+      "kind": "test",
+      "key": "ekko-checkout#213"
+    },
+    "4": {
+      "kind": "test",
+      "key": "ekko-api#1425"
+    },
+    "5": {
+      "kind": "test",
+      "key": "ekko-web-mono#77"
+    },
+    "6": {
+      "kind": "notion",
+      "id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "7": {
+      "kind": "notion",
+      "id": "cccccccccccccccccccccccccccccccc"
+    },
+    "8": {
+      "kind": "notion",
+      "id": "dddddddddddddddddddddddddddddddd"
+    },
+    "9": {
+      "kind": "notion",
+      "id": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    "11": {
+      "kind": "notion",
+      "id": "not-a-notion-id"
+    },
+    "12": {
+      "kind": "fathom",
+      "key": "bad key!"
+    },
+    "13": {
+      "kind": "test",
+      "key": "Ekko API#x"
+    },
+    "14": {
+      "kind": "slack",
+      "id": "x"
+    },
+    "17": {
+      "kind": "notion",
+      "id": "ffffffffffffffffffffffffffffffff"
+    },
+    "18": {
+      "kind": "notion",
+      "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "20": {
+      "kind": "notion",
+      "id": "11111111111111111111111111111111"
+    },
+    "15": {
+      "kind": "notion",
+      "id": "22222222222222222222222222222222"
+    },
+    "16": {
+      "kind": "notion",
+      "id": "33333333333333333333333333333333"
+    },
+    "19": {
+      "kind": "notion",
+      "id": "44444444444444444444444444444444"
+    }
+  }
+}
