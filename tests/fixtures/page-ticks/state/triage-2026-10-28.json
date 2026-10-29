@@ -1,0 +1,11 @@
+{
+  "status": "ok",
+  "prs": {
+    "ekko-checkout#213": {
+      "notion_url": "https://app.notion.com/p/77777777777777777777777777777777"
+    },
+    "ekko-api#1425": {
+      "notion_url": "http://evil.example.com/66666666666666666666666666666666"
+    }
+  }
+}
