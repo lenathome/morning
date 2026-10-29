@@ -364,6 +364,142 @@ class WaitingTest(unittest.TestCase):
         self.assertNotIn("⚡", second["text"])
         self.assertNotIn("done", second["cls"])
 
+    def _page_script(self):
+        brief, _ = render_brief.number_items(load())
+        page = render_brief.to_html(brief)
+        script = re.search(r"<script>\n\(function \(\) \{(.*)\}\)\(\);\n</script>", page, re.S).group(1)
+        return brief, script
+
+    def _run_node(self, brief, body):
+        r = subprocess.run(["node", "-e", "const BRIEF = " + json.dumps(json.dumps(brief)) + ";\n" + STUB_DOM + body],
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return [json.loads(line) for line in r.stdout.strip().splitlines()]
+
+    @unittest.skipUnless(__import__("shutil").which("node"), "node not installed")
+    def test_overlay_page_ticks_are_done_and_undoable_only_until_synced(self):
+        brief, script = self._page_script()
+        script = script.replace("  renderTabs();\n", "")
+        script = script.replace("  var shown = brief;", "  globalThis.__x = { applyOverlay: applyOverlay, brief: brief };\n  return;\n  var shown = brief;")
+        js = ("(function () {" + script + "})();\n"
+              "const x = globalThis.__x;\n"
+              "function find(o, n) { if (!o || typeof o !== 'object') return null;\n"
+              "  if (o.n === n && !Array.isArray(o)) return o;\n"
+              "  for (const k of Object.keys(o)) { const r = find(o[k], n); if (r) return r; } return null; }\n"
+              "function probe(rec, n) { const it = find(x.applyOverlay(x.brief, {items: {[n]: rec}}), n);\n"
+              "  return {done: !!it.done, undo: !!it.tick_undo}; }\n"
+              "const at = '2026-10-01T09:00:00Z';\n"
+              "for (const n of [2, 5, 7]) {\n"
+              "  console.log(JSON.stringify([probe({status: 'done', by: 'page', at}, n),\n"
+              "    probe({status: 'done', by: 'page', at, synced_at: at}, n),\n"
+              "    probe({status: 'open', by: 'page', at}, n),\n"
+              "    probe({status: 'done', at}, n),\n"
+              "    probe({status: 'done', by: 'claude', at}, n)]));\n"
+              "}\n"
+              "const base = find(x.brief, 2); console.log(JSON.stringify({baseDone: !!base.done, baseUndo: !!base.tick_undo}));\n")
+        *rows, base = self._run_node(brief, js)
+        for row in rows:
+            self.assertEqual(row, [
+                {"done": True, "undo": True},       # a page tick: done, and it can still be undone
+                {"done": True, "undo": False},      # synced by Claude: done, locked
+                {"done": False, "undo": False},     # status open: not done
+                {"done": True, "undo": False},      # done via Claude (no `by`): locked
+                {"done": True, "undo": False},      # any other author: locked
+            ])
+        self.assertEqual(base, {"baseDone": False, "baseUndo": False})
+
+    @unittest.skipUnless(__import__("shutil").which("node"), "node not installed")
+    def test_tick_write_path_in_node(self):
+        """Boxes appear only with a db; a tick writes set or update with the exact record; a failure reverts."""
+        brief, script = self._page_script()
+        script += "\n  globalThis.__y = { tickItem: tickItem, app: app, saveEl: saveEl, updatedEl: updatedEl };\n"
+        js = ("""
+function decorate(n) {
+  n.querySelectorAll = () => []; n.removeChild = function (c) { this.children = this.children.filter(x => x !== c); c.parentNode = null; };
+  n.getBoundingClientRect = () => ({ top: 0 }); n.scrollIntoView = () => {}; n.focus = () => {};
+  n.getAttribute = function (k) { return this.attrs[k] === undefined ? null : this.attrs[k]; };
+  return n;
+}
+const baseCreate = document.createElement, baseGet = document.getElementById;
+document.createElement = (t) => decorate(baseCreate(t));
+document.getElementById = (id) => { const n = baseGet.call(document, id); return n.tag ? decorate(n) : n; };
+document.querySelector = () => null;
+globalThis.setInterval = () => 0;
+window.scrollTo = () => {};
+const state = { exists: false, data: null, fail: false, calls: [] };
+const ref = {
+  get() { state.calls.push(["get"]); return Promise.resolve({ exists: state.exists, data: () => state.data }); },
+  set(d) { state.calls.push(["set", d]); if (state.fail) return Promise.reject(new Error("no")); state.exists = true; state.data = JSON.parse(JSON.stringify(d)); return Promise.resolve(); },
+  update(d) { state.calls.push(["update", d]); if (state.fail) return Promise.reject(new Error("no"));
+    for (const k of Object.keys(d.items)) state.data.items[k] = Object.assign({}, state.data.items[k], d.items[k]); return Promise.resolve(); },
+};
+const mode = process.argv[1];
+window.claude = { use: () => Promise.resolve(mode === "db" ? { doc: (p) => { state.calls.push(["doc", p]); return ref; } } : null) };
+const flush = () => new Promise(r => setTimeout(r, 30));
+function ticks(node) { const out = []; (function w(n) { if (n.className === "tick") out.push(n); (n.children || []).forEach(w); })(node); return out; }
+function writes() { return state.calls.filter(c => c[0] === "set" || c[0] === "update"); }
+(async () => {
+  (function () {""" + script + """})();
+  const y = globalThis.__y;
+  await flush();
+  const out = { boxes: ticks(y.app).length };
+  if (mode === "db") {
+    out.doc = state.calls.filter(c => c[0] === "doc")[0][1];
+    out.labels = ticks(y.app).slice(0, 2).map(b => b.attrs["aria-label"]);
+    // doc absent: set
+    y.tickItem(2, true, false); y.tickItem(3, true, false);   // two rapid clicks: two ordered writes
+    await flush();
+    out.w = writes().map(c => [c[0], Object.keys(c[1].items), c[1].date, c[1].prs]);
+    out.rec = writes()[0][1].items[2];
+    out.rec2 = writes()[1][1].items[3];
+    const cbs = ticks(y.app).filter(b => b.attrs["aria-label"] === "Mark 2 done");
+    out.box2 = cbs.length ? [cbs[0].checked, !!cbs[0].disabled] : null;
+    // untick a page tick: status open, via update
+    y.tickItem(2, false, false);
+    await flush();
+    out.untick = writes()[2];
+    // failure: reverts, note shown, no retry
+    state.fail = true;
+    const before = writes().length;
+    y.tickItem(4, true, false);
+    await flush();
+    out.failWrites = writes().length - before;
+    out.note = y.saveEl.textContent;
+    out.noteShown = !y.saveEl.hidden;
+    out.box4 = ticks(y.app).filter(b => b.attrs["aria-label"] === "Mark 4 done").map(b => b.checked);
+    state.fail = false;
+    y.tickItem(4, true, false);
+    await flush();
+    out.noteAfter = y.saveEl.textContent;
+    out.noteHidden = y.saveEl.hidden;
+  }
+  console.log(JSON.stringify(out));
+})();
+""")
+        def run(mode):
+            r = subprocess.run(["node", "-e", "const BRIEF = " + json.dumps(json.dumps(brief)) + ";\n" + STUB_DOM + js, mode],
+                               capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            return json.loads(r.stdout.strip().splitlines()[-1])
+        self.assertEqual(run("nodb"), {"boxes": 0})
+        out = run("db")
+        self.assertGreater(out["boxes"], 5)
+        self.assertEqual(out["doc"], "brief-updates/2026-10-01")
+        self.assertEqual(out["labels"][0][:5], "Mark ")
+        self.assertEqual(out["w"], [["set", ["2"], "2026-10-01", {}], ["update", ["3"], None, None]])
+        self.assertEqual(set(out["rec"]), {"status", "by", "at"})
+        self.assertEqual((out["rec"]["status"], out["rec"]["by"]), ("done", "page"))
+        self.assertRegex(out["rec"]["at"], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d")
+        self.assertEqual((out["rec2"]["status"], out["rec2"]["by"]), ("done", "page"))
+        self.assertEqual(out["box2"], [True, False])      # ticked and still undoable
+        self.assertEqual(out["untick"][0], "update")
+        self.assertEqual((out["untick"][1]["items"]["2"]["status"], out["untick"][1]["items"]["2"]["by"]), ("open", "page"))
+        self.assertEqual(out["failWrites"], 1)             # one attempt, no retry loop
+        self.assertEqual(out["note"], "Couldn't save the tick on 4")
+        self.assertTrue(out["noteShown"])
+        self.assertEqual(out["box4"], [False])             # reverted
+        self.assertEqual((out["noteAfter"], out["noteHidden"]), ("", True))
+
 
 STUB_DOM = """
 function mk(tag) {
@@ -926,11 +1062,17 @@ class LiveOverlayTest(unittest.TestCase):
     def template(self):
         return (ROOT / "scripts" / "brief_template.html").read_text()
 
-    def test_template_reads_the_overlay_doc_and_never_writes_it(self):
+    def test_template_reads_the_overlay_doc_and_writes_only_page_ticks(self):
         t = self.template()
         self.assertIn('db.doc("brief-updates/" + String(brief.date).replace(/[^0-9-]/g, ""))', t)
         self.assertIn("overlayDoc.get()", t)
-        self.assertNotIn("overlayDoc.set", t)
+        # the only writes are the tick record, from the click handler's queue, never from render code or a poll
+        self.assertEqual(t.count("overlayDoc.set("), 1)
+        self.assertEqual(t.count("overlayDoc.update("), 1)
+        self.assertIn('by: "page"', t)
+        self.assertIn('"aria-label": "Mark " + n + " done"', t)
+        self.assertIn("writeChain = writeChain.then(", t)
+        self.assertIn("if (!ticking) return num;", t)    # no db: no boxes
         # the overlay is untrusted: it is applied to a fresh copy of the original brief and shown as text only
         self.assertIn("JSON.parse(JSON.stringify(base))", t)
         self.assertNotIn("innerHTML", t)

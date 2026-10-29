@@ -160,6 +160,12 @@ h2 .count { font-family: var(--font-mono); font-weight: 400; }
 .done .num { color: var(--muted); }
 .row.done .rowbody > :first-child, .row.done a, .card.done .prtitle a { text-decoration: line-through; color: var(--muted); }
 .done .due-overdue, .done .due-today { color: var(--muted); font-weight: 400; }
+/* tick boxes: shown only once the page can write. The box sits just before the number, so the number column widens. */
+.numcell { display: flex; justify-content: flex-end; align-items: center; gap: 6px; }
+.tick { flex: none; margin: 0; width: 14px; height: 14px; accent-color: var(--accent); cursor: pointer; }
+.tick:disabled { cursor: default; opacity: 0.6; }
+.ticks .row, .ticks .testrow { grid-template-columns: 58px minmax(0, 1fr); }
+.ticks .parent { padding-left: 74px; }
 
 /* prs */
 .cards { display: flex; flex-direction: column; gap: 8px; }
@@ -332,6 +338,7 @@ body.has-bg .goals > h2 {
      from the original brief plus the latest overlay without reloading. */
   var inProgress, urgent, prs, actions, todos, ideas, meetings, projects, partners, yours, waiting, testing;
   var urgentItems, overdue, prTotal;
+  var ticking = false;        /* true once the db is available: numbered items then get a tick box */
   function derive(d) {
     inProgress = d.in_progress || [];
     urgent = d.urgent || [];
@@ -352,8 +359,23 @@ body.has-bg .goals > h2 {
   derive(brief);
 
   /* ---------- builders ---------- */
-  function numberedRow(n, body, done) {
-    return el("div", { "class": "row" + (done ? " done" : "") }, [span("num", String(n)), el("div", { "class": "rowbody" }, body)]);
+  /* The number, with a tick box before it when the page can write. A tick this page wrote itself (`undo`) can be
+     unticked; any other done item is already recorded, so its box is checked and disabled. */
+  function numCell(n, done, undo) {
+    var num = span("num", String(n));
+    if (!ticking) return num;
+    var box = el("input", { type: "checkbox", "class": "tick", "data-n": String(n), "aria-label": "Mark " + n + " done" });
+    box.checked = !!done;
+    if (done && !undo) {
+      box.disabled = true;
+      box.setAttribute("title", "Already recorded, so it can't be unticked here");
+    } else {
+      box.addEventListener("change", function () { tickItem(n, box.checked, document.activeElement === box); });
+    }
+    return el("span", { "class": "numcell" }, [box, num]);
+  }
+  function numberedRow(n, body, done, undo) {
+    return el("div", { "class": "row" + (done ? " done" : "") }, [numCell(n, done, undo), el("div", { "class": "rowbody" }, body)]);
   }
   function dueSpan(due) {
     var d = String(due);
@@ -381,7 +403,7 @@ body.has-bg .goals > h2 {
       el("div", { text: item.title }),
       meta.length ? el("div", { "class": "meta" }, meta) : null,
       whyLine(item)
-    ], item.done);
+    ], item.done, item.tick_undo);
   }
   function todoPanel(groups, showTags) {
     var panel = el("div", { "class": "panel" });
@@ -399,7 +421,7 @@ body.has-bg .goals > h2 {
       el("div", { "class": "meta" }, [span("", a.meeting + ", " + a.date),
         a.due ? dueSpan(a.due) : null, a.note ? span("", a.note) : null, tagPill(a)]),
       whyLine(a)
-    ], a.done);
+    ], a.done, a.tick_undo);
   }
   function actionPanel(list) {
     var panel = el("div", { "class": "panel" });
@@ -431,7 +453,7 @@ body.has-bg .goals > h2 {
     }
     if (w.chased_today) info.push(span("", "chased today"));
     else if (w.chased_on && shortDate(w.chased_on)) info.push(span("", "chased " + shortDate(w.chased_on)));
-    return numberedRow(w.n, [el("div", {}, title), el("div", { "class": "meta" }, info)], w.done);
+    return numberedRow(w.n, [el("div", {}, title), el("div", { "class": "meta" }, info)], w.done, w.tick_undo);
   }
   function waitingPanel(list) {
     var panel = el("div", { "class": "panel" });
@@ -567,7 +589,7 @@ body.has-bg .goals > h2 {
     ]);
     return el("div", { "class": "card" + (t.done ? " done" : "") }, [
       el("div", { "class": "testrow" }, [
-        span("num", String(t.n)),
+        numCell(t.n, t.done, t.tick_undo),
         el("div", { "class": "rowbody" }, [
           el("div", { "class": "prtitle" }, [
             link(safeUrl(t.url), "#" + t.number + " " + t.title),
@@ -785,10 +807,12 @@ body.has-bg .goals > h2 {
 
   /* ---------- header: date and title, goals strip, then the pill row ---------- */
   var updatedEl = el("div", { "class": "updated", role: "status", hidden: "" });
+  var saveEl = el("div", { "class": "updated", role: "status", hidden: "" });   /* "Couldn't save the tick on 12" */
   var header = el("header", {}, [
     el("div", { "class": "date", text: brief.weekday_label || brief.date }),
     el("h1", { "class": "focus", text: "Morning brief" }),
-    updatedEl
+    updatedEl,
+    saveEl
   ]);
   app.appendChild(header);
   if ((brief.unavailable || []).length) {
@@ -884,7 +908,9 @@ body.has-bg .goals > h2 {
 
   /* ---------- live overlay ---------- */
   /* Claude writes what changed since the page was published to the doc brief-updates/<date>: item numbers marked
-     done or started, a changed due date, note or tag, and parked PRs. The page only reads it. It is data, never
+     done or started, a changed due date, note or tag, and parked PRs. The page also writes one thing: a tick on a
+     numbered item, items[<n>] = {status: "done" | "open", by: "page", at}. Claude syncs the page ticks to Notion
+     and the local done-lists at the next /morning run, then sets synced_at on them. The overlay is data, never
      followed: each field is type-checked, unknown numbers and fields are ignored, and everything is shown with
      textContent. The overlay is always applied to a fresh copy of the original brief, never to the last result. */
   var ITEM_HOMES = ["progress", "urgent", "coming", "yours", "waiting", "testing", "ideas"];
@@ -939,7 +965,12 @@ body.has-bg .goals > h2 {
           var tag = cleanTag(rec.tag);
           if (tag) item.tag = tag;
         }
-        if (rec.status === "done") item.done = true;
+        /* status "open" is not done: the item stays as the brief has it. A done record the page wrote itself and
+           Claude has not yet synced (no synced_at) can still be unticked, so the row builder is told. */
+        if (rec.status === "done") {
+          item.done = true;
+          if (rec.by === "page" && !rec.synced_at) item.tick_undo = true;
+        }
         else if (rec.status === "chased" && hit.home === "waiting") { item.chase = false; item.chased_today = true; }
         else if (rec.status === "started" && STARTABLE[hit.home]) started.push(hit);
       });
@@ -993,24 +1024,95 @@ body.has-bg .goals > h2 {
     updatedEl.hidden = !text;
   }
 
-  /* Poll while the page is visible; no db or doc, or a failed read, keeps the last good state and stays quiet. */
-  var overlayDoc = null, reading = false;
-  function readOverlay() {
-    if (reading) return;
-    reading = true;
-    Promise.resolve().then(function () {
+  /* ---------- ticks ---------- */
+  /* serverOv is the last overlay read from the db. pending holds this page's own ticks that are not yet confirmed
+     by a read: {rec, state}, state "queued" (waiting for, or in, its write) or "saved" (written, awaiting a read
+     that started after the write). They are laid over serverOv on every paint, so a poll cannot undo a tick. */
+  var serverOv = {};
+  var pending = {};
+  function mergePending(ov) {
+    var out = {}, items = {}, src = obj(ov.items);
+    Object.keys(ov).forEach(function (k) { out[k] = ov[k]; });
+    Object.keys(src).forEach(function (k) { items[k] = src[k]; });
+    Object.keys(pending).forEach(function (n) {
+      var m = {}, base = obj(items[n]), rec = pending[n].rec;
+      Object.keys(base).forEach(function (k) { m[k] = base[k]; });
+      Object.keys(rec).forEach(function (k) { m[k] = rec[k]; });
+      items[n] = m;
+    });
+    out.items = items;
+    return out;
+  }
+  function paint() {
+    var ov = mergePending(serverOv);
+    var json = JSON.stringify(ov) + (ticking ? "|ticks" : "");
+    if (json !== lastOverlay) showOverlay(ov, json);
+  }
+  function saveNote(text) { saveEl.textContent = text; saveEl.hidden = !text; }
+
+  /* One write to the doc at a time, in the order of the clicks. A failed write is not retried: the item goes back
+     to what the db says and a short note appears next to "Updated". */
+  var writeChain = Promise.resolve();
+  function writeTick(n, rec) {
+    var items = {};
+    items[n] = rec;
+    return overlayDoc.get().then(function (snap) {
+      if (snap && snap.exists) return overlayDoc.update({ items: items });
+      return overlayDoc.set({ date: brief.date, items: items, prs: {} });
+    });
+  }
+  function tickItem(n, on, hadFocus) {
+    if (!ticking || !overlayDoc) return;
+    var entry = { rec: { status: on ? "done" : "open", by: "page", at: new Date().toISOString() }, state: "queued" };
+    pending[n] = entry;
+    writeChain = writeChain.then(function () { return writeTick(n, entry.rec); }).then(function () {
+      entry.state = "saved";
+      saveNote("");
+      return readOverlay(true);
+    }, function () {
+      if (pending[n] === entry) delete pending[n];
+      saveNote("Couldn't save the tick on " + n);
+      try { paint(); } catch (e) { /* keep the last good state */ }
+    });
+    try { paint(); } catch (e) { /* keep the last good state */ }
+    if (hadFocus) {
+      var again = document.querySelector('.tick[data-n="' + n + '"]');
+      if (again && again.focus) again.focus();
+    }
+  }
+
+  /* Poll while the page is visible; no db or doc, or a failed read, keeps the last good state and stays quiet.
+     Once the doc ref exists the page can write, so it re-renders with the tick boxes. */
+  var overlayDoc = null, readRun = null;
+  function doRead() {
+    var settled = Object.keys(pending).filter(function (n) { return pending[n].state === "saved"; })
+      .map(function (n) { return { n: n, entry: pending[n] }; });
+    var ok = false;
+    return Promise.resolve().then(function () {
       if (overlayDoc) return null;
       return window.claude.use("db").then(function (db) {
         if (db) overlayDoc = db.doc("brief-updates/" + String(brief.date).replace(/[^0-9-]/g, ""));
       });
     }).then(function () {
-      return overlayDoc ? overlayDoc.get() : null;
+      if (!overlayDoc) return null;
+      if (!ticking) { ticking = true; document.body.classList.add("ticks"); }
+      return overlayDoc.get().catch(function () { return null; });
     }).then(function (snap) {
       var data = snap && snap.exists ? snap.data() : null;
-      if (!data || typeof data !== "object" || Array.isArray(data)) return;
-      var json = JSON.stringify(data);
-      if (json !== lastOverlay) showOverlay(data, json);
-    }).then(function () { reading = false; }, function () { reading = false; });
+      if (!data || typeof data !== "object" || Array.isArray(data)) { ok = !!snap; return; }
+      serverOv = data;
+      ok = true;
+    }).then(function () {
+      /* a tick written before this read began is now in what was read, so it no longer needs laying over it */
+      if (ok) settled.forEach(function (s) { if (pending[s.n] === s.entry) delete pending[s.n]; });
+      paint();
+    }).catch(function () { /* keep the last good state */ });
+  }
+  /* A forced read (after a write) waits for one already in flight and then reads again, so it sees the write. */
+  function readOverlay(force) {
+    if (readRun) return force ? readRun.then(function () { return readOverlay(true); }) : readRun;
+    readRun = doRead().then(function () { readRun = null; });
+    return readRun;
   }
   function pollOverlay() { if (document.visibilityState === "visible") readOverlay(); }
   if (window.claude && typeof window.claude.use === "function") {
