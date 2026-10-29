@@ -1,0 +1,14 @@
+<html><body><h2>Options</h2>
+<pre><code>interface InitOptions {
+  features?: {
+    roundUp?: boolean            // default: true
+    legacyToggle?: boolean
+  }
+}
+</code></pre>
+<ul><li><p><code>features</code>. Flags</p><ul><li><code>roundUp</code>: boolean</li><li><code>legacyToggle</code>: boolean</li></ul></li></ul>
+<pre><code>type ToggleState = {
+  roundUp: { amounts: ToggleAmounts }
+  key: &#x27;carbonCredits&#x27; | &#x27;roundUp&#x27;
+}</code></pre>
+</body></html>

@@ -104,3 +104,25 @@ paths:
   # external meeting prep) to briefs/<date>.md and briefs/latest.md in it and
   # pushes to origin/main, so it can be read by others.
   product_os: "~/product-os"
+
+docs_drift:
+  # How many days of merged PRs to scan for SDK option changes.
+  lookback_days: 30
+  # GitHub repo that holds the guide sources.
+  docs_repo: ekko-enviroconomy/ekko-edge-api
+  # Local checkout of that repo, read for the guide source.
+  docs_checkout: ~/github/ekko-edge-api
+  # Base URL of the live docs, used to compare the published page.
+  live_base: https://docs.ekko.earth/v3/docs/
+  # Code files to watch, each tied to the guide that documents them.
+  watch:
+    # Repo whose merged PRs are scanned.
+    - repo: ekko-checkout
+      # File in that repo that declares the public options.
+      file: app/types/init.types.ts
+      # Guide source in docs_repo that must mention each option.
+      guide: docs/api-guides/checkout-sdk.md
+      # Interface name in the file mapped to its option path prefix.
+      interfaces:
+        Features: features
+        Appearance: appearance

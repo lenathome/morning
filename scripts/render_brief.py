@@ -46,6 +46,8 @@ TAG_VERDICTS = ("needs-lena", "split", "handoff")
 TAG_LABELS = {"needs-lena": "needs-Lena", "split": "split", "handoff": "handoff"}
 BG_EXTS = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".png": "image/png"}
 BG_WARN_BYTES = 600 * 1024
+DRIFT_CHANGES = ("removed", "added")
+DRIFT_STATUSES = ("stale", "upload_pending")
 MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
 
@@ -116,6 +118,8 @@ def number_items(raw: dict) -> tuple[dict, dict]:
     todos = brief.setdefault("todos", {})
     todos.setdefault("coming_up", [])
     brief.setdefault("testing", [])
+    if brief.get("docs_drift") is None:
+        brief["docs_drift"] = []
     waiting = brief.get("waiting")
     if waiting is None:
         waiting = brief["waiting"] = []
@@ -232,12 +236,58 @@ def number_items(raw: dict) -> tuple[dict, dict]:
             item["n"] = n
             numbers[str(n)] = ref
 
+    def docs_drift_list(items) -> None:
+        """Validate only: drift items are never numbered and never enter the number map."""
+        if not isinstance(items, list):
+            raise ValueError("'docs_drift' is not a list")
+        for i, d in enumerate(items, 1):
+            if not isinstance(d, dict):
+                raise ValueError(f"docs_drift item {i} is not an object")
+            label = f"docs_drift item '{d.get('path', '?')}'"
+            for k in ("path", "change", "pr", "doc", "live_url", "status", "live_checked", "first_seen", "age_days"):
+                if k not in d:
+                    raise ValueError(f"{label} has no '{k}'")
+            if not isinstance(d["path"], str) or not d["path"].strip():
+                raise ValueError(f"{label} has an empty 'path'")
+            if d["change"] not in DRIFT_CHANGES:
+                raise ValueError(f"{label} has an unknown change {d['change']!r} (use removed or added)")
+            if d["status"] not in DRIFT_STATUSES:
+                raise ValueError(f"{label} has an unknown status {d['status']!r} (use stale or upload_pending)")
+            if not isinstance(d["live_checked"], bool):
+                raise ValueError(f"{label} needs 'live_checked' as true or false")
+            for obj, keys in (("pr", ("repo", "number", "url", "merged")), ("doc", ("file", "line", "url"))):
+                if not isinstance(d[obj], dict):
+                    raise ValueError(f"{label} needs '{obj}' as an object")
+                for k in keys:
+                    if k not in d[obj]:
+                        raise ValueError(f"{label} has no '{obj}.{k}'")
+            for k in ("repo", "url"):
+                if not d["pr"][k]:
+                    raise ValueError(f"{label} has an empty 'pr.{k}'")
+            if not d["pr"]["number"]:
+                raise ValueError(f"{label} has an empty 'pr.number'")
+            if not _is_date(d["pr"]["merged"]):
+                raise ValueError(f"{label} needs 'pr.merged' as YYYY-MM-DD")
+            for k in ("file", "url"):
+                if not d["doc"][k]:
+                    raise ValueError(f"{label} has an empty 'doc.{k}'")
+            line = d["doc"]["line"]
+            if line is not None and (isinstance(line, bool) or not isinstance(line, int) or line < 1):
+                raise ValueError(f"{label} needs 'doc.line' as a positive integer or null")
+            if d["live_checked"] and not d["live_url"]:
+                raise ValueError(f"{label} has no 'live_url'")
+            if not _is_date(d["first_seen"]):
+                raise ValueError(f"{label} needs 'first_seen' as YYYY-MM-DD")
+            if isinstance(d["age_days"], bool) or not isinstance(d["age_days"], int) or d["age_days"] < 0:
+                raise ValueError(f"{label} needs 'age_days' as an integer, 0 or more")
+
     in_progress_list(brief["in_progress"])
     todo_groups(brief["urgent"])
     todo_groups(todos["coming_up"])
     action_list(actions["yours"])
     waiting_list(brief["waiting"])
     testing_list(brief["testing"])
+    docs_drift_list(brief["docs_drift"])
     for k, _ in IDEA_BUCKETS:
         todo_groups(ideas[k])
     return brief, numbers
@@ -264,6 +314,37 @@ def _age_text(days: int) -> str:
     if days == 0:
         return "since today"
     return "waiting 1 day" if days == 1 else f"waiting {days} days"
+
+
+def _drift_age(days: int) -> str:
+    if days == 0:
+        return "today"
+    return "1 day" if days == 1 else f"{days} days"
+
+
+def _drift_line(d: dict) -> str:
+    pr, doc = d["pr"], d["doc"]
+    base = doc["file"].rsplit("/", 1)[-1]
+    pr_link = f"[{pr['repo']}#{pr['number']}]({pr['url']})"
+    when = _short_date(pr["merged"])
+    live = d["live_checked"]
+    plain = f"[{base}]({doc['url']})"
+    located = f"[{base}:{doc['line']}]({doc['url']})" if doc.get("line") else plain
+    live_link = f"[live page]({d['live_url']})"
+    head = f"- `{d['path']}` was {d['change']} in {pr_link} ({when})"
+    if d["change"] == "removed" and d["status"] == "stale":
+        text = head + (f" but {located} and the {live_link} still show it." if live
+                       else f" but {located} still shows it.")
+    elif d["change"] == "removed":
+        text = head + f". Fixed in {plain}, upload to ReadMe pending"
+        text += f": the {live_link} still shows it." if live else "."
+    elif d["status"] == "stale":
+        text = head + f" and isn't in {plain} yet."
+    else:
+        text = head + f". It's in {plain}, upload to ReadMe pending."
+    age = _drift_age(d["age_days"])
+    text += f" {age.capitalize()}." if age == "today" else f" {age}."
+    return text if live else text + " (live page not checked)"
 
 
 def _waiting_for(brief: dict, project_name: str) -> list[dict]:
@@ -418,6 +499,10 @@ def to_markdown(brief: dict, shared: bool = False) -> str:
             L += _testing_md(t)
         L += [""]
 
+    if brief["docs_drift"]:
+        L += ["## Docs behind code", ""] + [_drift_line(d) for d in brief["docs_drift"]]
+        L += ["", "Fix with /ekko-api-docs, then upload to ReadMe.", ""]
+
     if any(_count(brief["ideas"][k]) for k, _ in IDEA_BUCKETS):
         L += ["## Ideas bank", ""]
         for key, label in IDEA_BUCKETS:
@@ -559,6 +644,7 @@ def counts(brief: dict) -> dict:
         "waiting": len(brief["waiting"]),
         "waiting_chase": sum(1 for w in brief["waiting"] if w["chase"]),
         "testing": len(brief["testing"]),
+        "docs_drift": len(brief["docs_drift"]),
         "ideas": sum(_count(brief["ideas"][k]) for k, _ in IDEA_BUCKETS),
         "meetings": len(brief["meetings"]),
         "max_number": max([0] + [i["n"] for i in brief["in_progress"]]
