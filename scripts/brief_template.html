@@ -336,7 +336,7 @@ body.has-bg .goals > h2 {
 
   /* Everything the tabs show comes from these values. derive() sets them from a brief, so the page can be rebuilt
      from the original brief plus the latest overlay without reloading. */
-  var inProgress, urgent, prs, actions, todos, ideas, meetings, projects, partners, yours, waiting, testing;
+  var inProgress, urgent, prs, actions, todos, ideas, meetings, projects, partners, yours, waiting, testing, docsDrift;
   var urgentItems, overdue, prTotal;
   var ticking = false;        /* true once the db is available: numbered items then get a tick box */
   function derive(d) {
@@ -352,6 +352,7 @@ body.has-bg .goals > h2 {
     yours = actions.yours || [];
     waiting = d.waiting || [];
     testing = d.testing || [];
+    docsDrift = d.docs_drift || [];
     urgentItems = groupItems(urgent);
     overdue = urgentItems.filter(function (i) { return !i.done && String(i.due || "").indexOf("overdue") === 0; }).length;
     prTotal = openCount(prs.review_requested) + openCount(prs.ready) + openCount(prs.awaiting);
@@ -602,6 +603,39 @@ body.has-bg .goals > h2 {
       ])
     ]);
   }
+  /* docs behind code: one sentence per item, the same wording as the markdown. Item strings go in as text nodes. */
+  var DRIFT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  function driftDate(v) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str(v));
+    return m ? Number(m[3]) + " " + DRIFT_MONTHS[Number(m[2]) - 1] : str(v);
+  }
+  function driftRow(d) {
+    var pr = obj(d.pr), doc = obj(d.doc);
+    var base = str(doc.file).split("/").pop();
+    var live = d.live_checked !== false;
+    var removed = d.change === "removed", pending = d.status === "upload_pending";
+    var plain = link(safeUrl(doc.url), base);
+    var located = link(safeUrl(doc.url), doc.line ? base + ":" + doc.line : base);
+    var liveLink = link(safeUrl(d.live_url), "live page");
+    var days = Number(d.age_days) || 0;
+    var age = days === 0 ? "Today" : days === 1 ? "1 day" : days + " days";
+    var parts = [el("code", { text: str(d.path) }), " was " + str(d.change) + " in ",
+      link(safeUrl(pr.url), str(pr.repo) + "#" + str(pr.number)), " (" + driftDate(pr.merged) + ")"];
+    if (removed && !pending) {
+      parts = parts.concat([" but ", located, live ? " and the " : " still shows it.", live ? liveLink : null,
+        live ? " still show it." : null]);
+    } else if (removed) {
+      parts = parts.concat([". Fixed in ", plain, ", upload to ReadMe pending", live ? ": the " : ".",
+        live ? liveLink : null, live ? " still shows it." : null]);
+    } else if (!pending) {
+      parts = parts.concat([" and isn't in ", plain, " yet."]);
+    } else {
+      parts = parts.concat([". It's in ", plain, ", upload to ReadMe pending."]);
+    }
+    parts.push(" " + age + ".");
+    if (!live) parts.push(" (live page not checked)");
+    return el("div", { "class": "card" }, [el("div", {}, parts)]);
+  }
   function meetingCard(m) {
     var parts = (m.participants || []).map(function (p) {
       return el("li", {}, [p.name, p.role ? span("muted", " - " + p.role) : null]);
@@ -720,19 +754,26 @@ body.has-bg .goals > h2 {
     return out;
   }
   function testingTab() {
-    if (!testing.length) return [];
-    var top = [];
-    if (triage && triage.status === "ok") {
-      var tr = obj(triage.trial);
-      top.push(el("div", { "class": "trialbanner", role: "note", text: str(tr.banner) || str(tr.text) || "TRIAL: keep testing as normal." }));
-      if (str(tr.detail)) top.push(el("div", { "class": "meta", text: str(tr.detail) }));
-      if (str(tr.feedback))
-        top.push(el("details", { "class": "tgroup" }, [el("summary", { text: "How to give feedback" }),
-          el("div", { "class": "meta", text: str(tr.feedback) })]));
-    } else if (triage) {
-      top.push(el("div", { "class": "meta", text: "No triage today (" + str(triage.status) + ")" }));
+    var out = [];
+    if (testing.length) {
+      var top = [];
+      if (triage && triage.status === "ok") {
+        var tr = obj(triage.trial);
+        top.push(el("div", { "class": "trialbanner", role: "note", text: str(tr.banner) || str(tr.text) || "TRIAL: keep testing as normal." }));
+        if (str(tr.detail)) top.push(el("div", { "class": "meta", text: str(tr.detail) }));
+        if (str(tr.feedback))
+          top.push(el("details", { "class": "tgroup" }, [el("summary", { text: "How to give feedback" }),
+            el("div", { "class": "meta", text: str(tr.feedback) })]));
+      } else if (triage) {
+        top.push(el("div", { "class": "meta", text: "No triage today (" + str(triage.status) + ")" }));
+      }
+      out = top.concat([section("Recently merged", openCount(testing), el("div", { "class": "cards" }, testing.map(testCard)))]);
     }
-    return top.concat([section("Recently merged", openCount(testing), el("div", { "class": "cards" }, testing.map(testCard)))]);
+    if (docsDrift.length) {
+      out.push(section("Docs behind code", docsDrift.length, el("div", { "class": "cards" },
+        docsDrift.map(driftRow).concat([el("div", { "class": "meta", text: "Fix with /ekko-api-docs, then upload to ReadMe." })]))));
+    }
+    return out;
   }
   function ideasTab() {
     var out = [];
@@ -796,7 +837,7 @@ body.has-bg .goals > h2 {
         count: openCount(inProgress) + openCount(urgentItems) + openInGroups(todos.coming_up) + openCount(yours) +
                meetings.length },
       { id: "prs", label: "PRs", build: prsTab, count: prTotal, empty: "No pull requests need you." },
-      { id: "testing", label: "Testing", build: testingTab, count: openCount(testing),
+      { id: "testing", label: "Testing", build: testingTab, count: openCount(testing) + docsDrift.length,
         empty: "Nothing merged recently that needs a manual test." },
       { id: "ideas", label: "Ideas bank", build: ideasTab,
         count: openInGroups(ideas.strategic) + openInGroups(ideas.other), empty: "No ideas parked." },
@@ -932,6 +973,7 @@ body.has-bg .goals > h2 {
     d.actions = obj(d.actions); d.actions.yours = arr(d.actions.yours);
     d.waiting = arr(d.waiting);
     d.testing = arr(d.testing);
+    d.docs_drift = arr(d.docs_drift);
     d.ideas = obj(d.ideas); d.ideas.strategic = arr(d.ideas.strategic); d.ideas.other = arr(d.ideas.other);
     d.prs = obj(d.prs);
 

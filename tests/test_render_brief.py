@@ -730,6 +730,153 @@ class SharedMdTest(unittest.TestCase):
             self.assertNotIn("External meeting prep", (d / "b.shared.md").read_text())
 
 
+PR_191 = "[ekko-checkout#191](https://github.com/ekko-enviroconomy/ekko-checkout/pull/191) (21 Oct)"
+DOC_URL = "https://github.com/ekko-enviroconomy/ekko-edge-api/blob/main/docs/api-guides/checkout-sdk.md"
+LIVE = "https://docs.ekko.earth/v3/docs/checkout-sdk"
+
+
+def drift_item(**over):
+    d = {"path": "features.roundUp", "change": "removed",
+         "pr": {"repo": "ekko-checkout", "number": 191,
+                "url": "https://github.com/ekko-enviroconomy/ekko-checkout/pull/191", "merged": "2026-10-21"},
+         "doc": {"file": "docs/api-guides/checkout-sdk.md", "line": 256, "url": DOC_URL + "#L256"},
+         "live_url": LIVE, "status": "stale", "live_checked": True, "first_seen": "2026-10-21", "age_days": 8}
+    d.update(over)
+    return d
+
+
+def drift_md(*items):
+    b = load()
+    b["docs_drift"] = list(items)
+    brief, _ = render_brief.number_items(b)
+    return render_brief.to_markdown(brief)
+
+
+class DocsDriftTest(unittest.TestCase):
+    def line(self, **over):
+        md = drift_md(drift_item(**over))
+        return md.split("## Docs behind code\n\n")[1].split("\n")[0]
+
+    def test_removed_stale(self):
+        self.assertEqual(
+            self.line(),
+            f"- `features.roundUp` was removed in {PR_191} but [checkout-sdk.md:256]({DOC_URL}#L256) and the "
+            f"[live page]({LIVE}) still show it. 8 days.")
+
+    def test_removed_stale_without_line(self):
+        self.assertIn(f"but [checkout-sdk.md]({DOC_URL}) and the", self.line(doc={
+            "file": "docs/api-guides/checkout-sdk.md", "line": None, "url": DOC_URL}))
+
+    def test_removed_upload_pending(self):
+        self.assertEqual(
+            self.line(status="upload_pending", age_days=1),
+            f"- `features.roundUp` was removed in {PR_191}. Fixed in [checkout-sdk.md]({DOC_URL}#L256), "
+            f"upload to ReadMe pending: the [live page]({LIVE}) still shows it. 1 day.")
+
+    def test_added_stale(self):
+        self.assertEqual(
+            self.line(change="added", age_days=3),
+            f"- `features.roundUp` was added in {PR_191} and isn't in [checkout-sdk.md]({DOC_URL}#L256) yet. 3 days.")
+
+    def test_added_upload_pending(self):
+        self.assertEqual(
+            self.line(change="added", status="upload_pending", age_days=0),
+            f"- `features.roundUp` was added in {PR_191}. It's in [checkout-sdk.md]({DOC_URL}#L256), "
+            "upload to ReadMe pending. Today.")
+
+    def test_live_not_checked_drops_live_clause(self):
+        self.assertEqual(
+            self.line(live_checked=False),
+            f"- `features.roundUp` was removed in {PR_191} but [checkout-sdk.md:256]({DOC_URL}#L256) "
+            "still shows it. 8 days. (live page not checked)")
+        self.assertEqual(
+            self.line(live_checked=False, status="upload_pending", live_url=""),
+            f"- `features.roundUp` was removed in {PR_191}. Fixed in [checkout-sdk.md]({DOC_URL}#L256), "
+            "upload to ReadMe pending. 8 days. (live page not checked)")
+        self.assertTrue(self.line(change="added", live_checked=False).endswith("8 days. (live page not checked)"))
+
+    def test_order_closing_line_and_position_after_testing(self):
+        md = drift_md(drift_item(path="a.first"), drift_item(path="b.second"))
+        sec = md.split("## Docs behind code\n\n")[1].split("## Ideas bank")[0]
+        self.assertLess(sec.index("a.first"), sec.index("b.second"))
+        self.assertTrue(sec.rstrip().endswith("\nFix with /ekko-api-docs, then upload to ReadMe."))
+        self.assertLess(md.index("## Testing"), md.index("## Docs behind code"))
+
+    def test_shared_markdown_includes_section(self):
+        b = load()
+        brief, _ = render_brief.number_items(b)
+        self.assertIn("## Docs behind code", render_brief.to_markdown(brief, shared=True))
+
+    def test_empty_or_missing_section_omitted(self):
+        for b in (dict(load(), docs_drift=[]), {k: v for k, v in load().items() if k != "docs_drift"}):
+            brief, _ = render_brief.number_items(b)
+            self.assertEqual(brief["docs_drift"], [])
+            self.assertNotIn("Docs behind code", render_brief.to_markdown(brief))
+
+    def test_validation_errors_name_the_item(self):
+        cases = [
+            ({"change": "moved"}, "docs_drift item 'features.roundUp'.*change"),
+            ({"status": "fixed"}, "docs_drift item 'features.roundUp'.*status"),
+            ({"live_checked": "yes"}, "live_checked"),
+            ({"age_days": -1}, "age_days"),
+            ({"age_days": "8"}, "age_days"),
+            ({"first_seen": "21 Oct"}, "first_seen"),
+            ({"doc": {"file": "f.md", "line": 0, "url": "u"}}, "doc.line"),
+            ({"pr": {"repo": "r", "number": 1, "url": "u", "merged": "soon"}}, "pr.merged"),
+            ({"live_url": ""}, "live_url"),
+        ]
+        for over, rx in cases:
+            b = load()
+            b["docs_drift"] = [drift_item(**over)]
+            with self.assertRaisesRegex(ValueError, rx):
+                render_brief.number_items(b)
+        for k in ("path", "change", "pr", "doc", "live_url", "status", "live_checked", "first_seen", "age_days"):
+            b = load()
+            d = drift_item()
+            del d[k]
+            b["docs_drift"] = [d]
+            with self.assertRaisesRegex(ValueError, f"docs_drift item .*has no '{k}'"):
+                render_brief.number_items(b)
+        for k in ("repo", "number", "url", "merged"):
+            b = load()
+            d = drift_item()
+            del d["pr"][k]
+            b["docs_drift"] = [d]
+            with self.assertRaisesRegex(ValueError, f"pr.{k}"):
+                render_brief.number_items(b)
+        b = load()
+        b["docs_drift"] = {"not": "a list"}
+        with self.assertRaisesRegex(ValueError, "'docs_drift' is not a list"):
+            render_brief.number_items(b)
+
+    def test_counts_and_numbering_unaffected(self):
+        plain = load()
+        plain["docs_drift"] = []
+        with_drift = load()
+        with_drift["docs_drift"] = [drift_item(), drift_item(path="x")]
+        p, p_map = render_brief.number_items(plain)
+        w, w_map = render_brief.number_items(with_drift)
+        self.assertEqual(p_map, w_map)
+        self.assertTrue(all("n" not in d for d in w["docs_drift"]))
+        cp, cw = render_brief.counts(p), render_brief.counts(w)
+        self.assertEqual(cw["docs_drift"], 2)
+        self.assertEqual(cp["docs_drift"], 0)
+        self.assertEqual(cw["max_number"], cp["max_number"])
+
+    def test_html_has_section_and_escapes_item_text(self):
+        d = drift_item(path="<img src=x onerror=1>")
+        b = load()
+        b["docs_drift"] = [d]
+        brief, _ = render_brief.number_items(b)
+        html = render_brief.to_html(brief)
+        self.assertIn('"docs_drift"', html)
+        self.assertIn('section("Docs behind code"', html)
+        self.assertIn("Fix with /ekko-api-docs, then upload to ReadMe.", html)
+        self.assertNotIn("<img src=x", html)
+        self.assertIn("d.docs_drift = arr(d.docs_drift)", html)
+        self.assertIn("openCount(testing) + docsDrift.length", html)
+
+
 class CountsTest(unittest.TestCase):
     def test_counts(self):
         brief, _ = render_brief.number_items(load())
