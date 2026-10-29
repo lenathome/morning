@@ -22,7 +22,8 @@ What it does
 Rules
 1. Only rows with "On the Testing list" set to __YES__ are kept.
 2. A key must match ^[a-z0-9-]+#[0-9]+$. A row with any other key is skipped and named in the status line.
-3. `notion_url` is kept only for https links on app.notion.com, www.notion.so or notion.so. `pr_url` is kept only
+3. `notion_url` is kept only for https links on app.notion.com, www.notion.so or notion.so; a bare
+   app.notion.com/<id> link gets /p/ added, because without it the page is a 404. `pr_url` is kept only
    for https://github.com/ekko-enviroconomy/... links. Anything else becomes "".
 4. Every string is data from someone else's tool: control characters are removed, it is cut to 500 characters and
    it is never evaluated. In the file, `<`, `>` and `&` are written as \\u escapes so it can sit in a <script> block.
@@ -36,6 +37,7 @@ DATE_RE = re.compile(r'^[0-9]{4}-[0-9]{2}-[0-9]{2}\Z')
 CONTROL_RE = re.compile(r'[\x00-\x1f\x7f-\x9f  ]')
 MAX_LEN = 500
 NOTION_HOSTS = {'app.notion.com', 'www.notion.so', 'notion.so'}
+BARE_NOTION_PAGE_RE = re.compile(r'^(https://app\.notion\.com)/([0-9a-fA-F]{32})(\?[^#]*)?\Z')
 PR_URL_PREFIX = 'https://github.com/ekko-enviroconomy/'
 
 TRIAL = {
@@ -78,7 +80,8 @@ def safe_url(url, ok):
 
 
 def notion_url(x):
-    return safe_url(x, lambda host, url: host in NOTION_HOSTS)
+    url = safe_url(x, lambda host, url: host in NOTION_HOSTS)
+    return BARE_NOTION_PAGE_RE.sub(r'\1/p/\2\3', url)
 
 
 def pr_url(x):

@@ -64,7 +64,7 @@ class HappyPathTest(unittest.TestCase):
         self.assertEqual(pr["changed_on"], "2026-10-24")
         self.assertEqual(pr["status"], "To test")
         self.assertEqual(pr["notes"], "")
-        self.assertEqual(pr["notion_url"], "https://app.notion.com/403f93807de481d9bbebd8055f8e23ed")
+        self.assertEqual(pr["notion_url"], "https://app.notion.com/p/403f93807de481d9bbebd8055f8e23ed")
         self.assertEqual(pr["pr_url"], "https://github.com/ekko-enviroconomy/ekko-api/pull/1425")
         self.assertIs(out["prs"]["ekko-checkout#213"]["on_prod"], False)
 
@@ -141,6 +141,22 @@ class SafetyTest(unittest.TestCase):
             data["results"][0]["url"] = u
             out, _ = convert(data)
             self.assertEqual(out["prs"]["ekko-checkout#213"]["notion_url"], u)
+
+    def test_bare_app_notion_page_gets_p_segment(self):
+        page_id = "403f93807de481d9bbebd8055f8e23ed"
+        cases = {
+            f"https://app.notion.com/{page_id}": f"https://app.notion.com/p/{page_id}",
+            f"https://app.notion.com/{page_id}?pvs=4": f"https://app.notion.com/p/{page_id}?pvs=4",
+            f"https://app.notion.com/p/{page_id}": f"https://app.notion.com/p/{page_id}",
+            f"https://www.notion.so/{page_id}": f"https://www.notion.so/{page_id}",
+            f"https://notion.so/{page_id}": f"https://notion.so/{page_id}",
+            f"https://evil.example/{page_id}": "",
+        }
+        for u, want in cases.items():
+            data = sample()
+            data["results"][0]["url"] = u
+            out, _ = convert(data)
+            self.assertEqual(out["prs"]["ekko-checkout#213"]["notion_url"], want, u)
 
     def test_strings_cleaned_and_capped(self):
         data = sample()
