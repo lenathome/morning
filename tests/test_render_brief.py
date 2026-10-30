@@ -290,28 +290,34 @@ class WaitingTest(unittest.TestCase):
     def test_html_has_the_section_the_project_pill_and_no_product_actions(self):
         html = (ROOT / "scripts" / "brief_template.html").read_text()
         self.assertIn('id: "waiting-for-others"', html)
-        self.assertIn('el("details", { "class": "group", id: "waiting-for-others"', html)
+        self.assertIn('el("section", { "class": "group", id: "waiting-for-others" }', html)
         self.assertIn('href: "#waiting-for-others"', html)
         self.assertIn('waitingHere + " waiting for others"', html)
         self.assertIn('span("pill waiting", "⚡ chase")', html)
         self.assertNotIn("Product actions", html)
         self.assertNotIn("p.waiting_on", html)  # the old project key; doc drafts have their own waiting_on
         self.assertNotIn("waiting on others", html.lower())
-        # the section sits in the right column of the To do tab, after Docs behind code
-        self.assertLess(html.index('side.push(section("Docs behind code"'), html.index('side.push(waitingSection())'))
+        # the section is the Waiting tab's content, no longer on the Today tab
+        today = html.split("function todoTab()")[1].split("function waitingTab()")[0]
+        self.assertNotIn("waitingPanel", today)
+        self.assertNotIn("Waiting for others", today)
         brief, _ = render_brief.number_items(load())
         page = render_brief.to_html(brief)
         self.assertIn('"text": "Sign-off on the rounding copy"', page)
         self.assertIn('"project": "PPP localisation"', page)
 
-    def test_waiting_is_a_folded_details_and_not_in_the_todo_count(self):
+    def test_waiting_is_its_own_unfolded_tab_and_not_in_the_today_count(self):
         t = (ROOT / "scripts" / "brief_template.html").read_text()
-        self.assertNotIn('section("Waiting for others"', t)
-        self.assertIn("var waitingOpen = false;", t)
-        self.assertIn("if (waitingOpen) node.open = true;", t)
-        self.assertIn("waitingOpen = true;", t)          # the project pill opens it
-        count = re.search(r'id: "todo", label: "To do".*?count: (.*?)\},', t, re.S).group(1)
+        self.assertNotIn("waitingOpen", t)
+        self.assertNotIn("waitingSection", t)
+        self.assertNotIn('"class": "group", id: "waiting-for-others", ontoggle', t)
+        self.assertIn('select("waiting", false);', t)          # the project pill jumps to the tab
+        count = re.search(r'id: "todo", label: "Today".*?count: (.*?)\},', t, re.S).group(1)
         self.assertNotIn("waiting", count)
+        # the tab's count: open items still to chase, warning colour; else the open total, muted
+        self.assertIn('count: chase || openCount(waiting),', t)
+        self.assertIn('tone: chase ? "warn" : "muted", empty: "Nobody owes you anything."', t)
+        self.assertIn("w.chase && !w.done", t)
         brief, _ = render_brief.number_items(load())
         page = render_brief.to_html(brief)
         self.assertIn('id: "waiting-for-others"', page)
@@ -367,7 +373,8 @@ class WaitingTest(unittest.TestCase):
     def test_done_items_collapse_and_sink_below_the_open_ones(self):
         t = (ROOT / "scripts" / "brief_template.html").read_text()
         # the CSS hides everything but the title in a done row or card, and styles the label
-        self.assertIn(".row.done .rowbody > :not(:first-child), .card.done .rowbody > :not(:first-child), .card.done > .meta,", t)
+        self.assertIn(".card.done .rowbody > :not(:first-child), .card.done > .meta,", t)
+        self.assertIn(".row.done .rowtitle, .row.done a,", t)
         self.assertIn(".card.done .prtitle > :not(a) { display: none; }", t)
         self.assertIn(".donehead {", t)
         # every section builder goes through the grouping, so every re-render regroups
@@ -547,6 +554,22 @@ globalThis.document = { body: mk("body"), activeElement: null, visibilityState: 
   getElementById(id) { return id === "brief-data" ? { textContent: BRIEF } : (id === "bg-data" ? { textContent: "null" } : mk("div")); },
   addEventListener() {} };
 """
+
+
+
+def page_script(brief):
+    """The page's inline script for a numbered brief, with the first render skipped and a hook at the overlay."""
+    page = render_brief.to_html(brief)
+    script = re.search(r"<script>\n\(function \(\) \{(.*)\}\)\(\);\n</script>", page, re.S).group(1)
+    return script.replace("  renderTabs();\n", "")
+
+
+def node_lines(brief, body):
+    """Run `body` under node with the stub DOM; one JSON value per output line."""
+    r = subprocess.run(["node", "-e", "const BRIEF = " + json.dumps(json.dumps(brief)) + ";\n" + STUB_DOM + body],
+                       capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    return [json.loads(line) for line in r.stdout.strip().splitlines()]
 
 
 class MarkdownTest(unittest.TestCase):
@@ -972,10 +995,12 @@ class DocsDriftTest(unittest.TestCase):
         html = render_brief.to_html(brief)
         self.assertIn('"docs_drift"', html)
         self.assertIn('section("Docs behind code"', html)
-        self.assertIn("side.push(section(\"Docs behind code\"", html)
-        todo = html.split("function todoTab()")[1].split("function prsTab()")[0]
+        todo = html.split("function todoTab()")[1].split("function waitingTab()")[0]
+        drift = html.split("function driftTab()")[1].split("function prsTab()")[0]
         testing = html.split("function testingTab()")[1].split("function ideasTab()")[0]
-        self.assertIn("Docs behind code", todo)
+        self.assertIn("Docs behind code", drift)
+        self.assertNotIn("Docs behind code", todo)
+        self.assertNotIn("docsDrift", todo)
         self.assertNotIn("Docs behind code", testing)
         self.assertNotIn("docsDrift", testing)
         self.assertIn("Fix with /ekko-api-docs, then upload to ReadMe.", html)
@@ -983,7 +1008,7 @@ class DocsDriftTest(unittest.TestCase):
         self.assertIn("d.docs_drift = arr(d.docs_drift)", html)
         self.assertIn("count: openCount(testing),", html)
         self.assertNotIn("openCount(testing) + docsDrift.length", html)
-        todo_count = html.split('{ id: "todo"')[1].split('{ id: "prs"')[0]
+        todo_count = html.split('{ id: "todo"')[1].split('{ id: "waiting"')[0]
         self.assertNotIn("docsDrift", todo_count)
 
 
@@ -1018,17 +1043,31 @@ class HtmlTest(unittest.TestCase):
         self.assertNotIn('label: "To test"', html)
         self.assertIn("Nothing merged recently that needs a manual test.", html)
 
-    def test_tabs_are_todo_prs_testing_ideas_projects_clients(self):
+    def test_tabs_are_today_waiting_drift_testing_prs_ideas_projects_clients(self):
         html = (ROOT / "scripts" / "brief_template.html").read_text()
         ids = re.findall(r'\{ id: "(\w+)", label: "([^"]+)"', html)
-        self.assertEqual(ids, [("todo", "To do"), ("prs", "PRs"), ("testing", "Testing"),
-                               ("ideas", "Ideas bank"), ("projects", "Projects"), ("clients", "Clients")])
+        self.assertEqual(ids, [("todo", "Today"), ("waiting", "Waiting"), ("drift", "Docs drift"),
+                               ("testing", "Testing"), ("prs", "PRs"), ("ideas", "Ideas"),
+                               ("projects", "Projects"), ("clients", "Clients")])
         self.assertNotIn('tab: "today"', html)
+        self.assertNotIn('label: "To do"', html)
+        self.assertNotIn('label: "Ideas bank"', html)
+        # the drift tab: warning colour when there are items, and its own empty text
+        self.assertIn('tone: docsDrift.length ? "warn" : "muted", empty: "Docs match the code."', html)
 
-    def test_pills_are_the_only_tab_bar(self):
+    def test_nav_is_the_only_tab_bar(self):
         html = (ROOT / "scripts" / "brief_template.html").read_text()
-        self.assertIn('el("div", { "class": "chips", role: "tablist"', html)
-        self.assertIn('el("button", { "class": "chip", role: "tab"', html)
+        self.assertIn('el("div", { "class": "sidenav", role: "tablist"', html)
+        self.assertIn('el("button", { "class": "navtab", role: "tab"', html)
+        self.assertNotIn('"class": "chips"', html)
+        self.assertNotIn('"class": "chip"', html)
+        # vertical column from 900px, one non-wrapping scrolling row below it
+        self.assertIn("(min-width: 900px)", html)
+        self.assertIn("grid-template-columns: 170px minmax(0, 1fr)", html)
+        self.assertIn("flex-wrap: nowrap; gap: 4px; overflow-x: auto", html)
+        # arrow keys move between tabs in both orientations
+        for key in ("ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"):
+            self.assertIn(f'e.key === "{key}"', html)
         self.assertNotIn('"class": "tab",', html)
         self.assertNotIn(".tabs {", html)
         for old in ('label: "Urgent"', 'label: "PRs needing you"', 'label: "Your actions"', 'label: "Meetings"'):
@@ -1038,9 +1077,11 @@ class HtmlTest(unittest.TestCase):
 class HtmlLayoutTest(unittest.TestCase):
     def test_wide_layout_breakpoint_and_project_details(self):
         html = (ROOT / "scripts" / "brief_template.html").read_text()
-        self.assertIn("(min-width: 1100px)", html)
+        self.assertIn("(min-width: 900px)", html)
         self.assertIn('el("details", { "class": "prow" }', html)
-        self.assertIn('el("aside", { "class": "todo-side"', html)
+        self.assertNotIn("todo-side", html)
+        self.assertNotIn("has-side", html)
+        self.assertNotIn("(min-width: 1100px)", html)
 
 
 PNG_1X1 = (b"\x89PNG\r\n\x1a\n"
@@ -1271,30 +1312,43 @@ class InProgressTest(unittest.TestCase):
         self.assertIn('i.kind === "fathom" ? actionRow(i) : todoRow(i, true)', t)
         self.assertNotIn("innerHTML", t)
 
-    def test_template_two_columns_on_todo_only_with_in_progress(self):
+    def test_today_is_one_column_with_focus_line_then_sections_in_order(self):
         t = self.template()
-        # the grid applies to the To do container only when it has both columns, from 1100px
-        self.assertIn(".todo-cols.has-side { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);", t)
-        self.assertIn(".todo-cols.has-side .todo-side { grid-column: 2; grid-row: 1; position: sticky;", t)
-        self.assertIn('" has-side" : ""', t)
-        self.assertIn("side.length && main.length", t)
-        self.assertIn("(min-width: 1100px)", t)
-        # the left column comes first in the markup, so it leads on narrow screens; desktop placement is explicit
-        self.assertLess(t.index('cols.push(el("div", { "class": "todo-main"'),
-                        t.index('cols.push(el("aside", { "class": "todo-side"'))
-        self.assertIn(".todo-cols.has-side .todo-main { grid-column: 1; grid-row: 1; }", t)
-        # right column order: In progress, Docs behind code, Waiting for others
-        todo = t.split("function todoTab()")[1].split("function prsTab()")[0]
-        self.assertLess(todo.index('side.push(section("In progress"'), todo.index('side.push(section("Docs behind code"'))
-        self.assertLess(todo.index('side.push(section("Docs behind code"'), todo.index("side.push(waitingSection())"))
-        # left column order: Urgent today, Coming up, Your actions, External meeting prep
-        for a, b in [("Urgent today", "Coming up"), ("Coming up", "Your actions"), ("Your actions", "External meeting prep")]:
-            self.assertLess(todo.index(f'main.push(section("{a}"'), todo.index(f'main.push(section("{b}"'))
-        # no side column outside the To do tab, and no width-dependent JS
-        self.assertNotIn(".wrap.has-side", t)
-        self.assertNotIn("wideQuery", t)
+        self.assertNotIn("todo-cols", t)
+        self.assertNotIn("todo-main", t)
+        self.assertNotIn("aside", t)
+        todo = t.split("function todoTab()")[1].split("function waitingTab()")[0]
+        order = ['out.push(section("In progress"', 'out.push(section("Urgent today"', 'out.push(section("Coming up"',
+                 'out.push(section("Your actions"', 'out.push(section("External meeting prep"']
+        idx = [todo.index(o) for o in order]
+        self.assertEqual(idx, sorted(idx))
+        # Waiting and Docs behind code live on their own tabs
+        self.assertNotIn("Waiting for others", todo)
+        self.assertNotIn("Docs behind code", todo)
+        # the focus line comes first, only when a focus is set
+        self.assertIn('out.unshift(el("p", { "class": "focusline muted", text: "Focus: " + brief.focus }))', todo)
+        self.assertIn("brief.focus", todo)
         self.assertNotIn("matchMedia", t)
-        self.assertNotIn('app.appendChild(side)', t)
+        self.assertNotIn("wideQuery", t)
+
+    @unittest.skipUnless(__import__("shutil").which("node"), "node not installed")
+    def test_today_focus_line_and_empty_in_node(self):
+        brief = with_in_progress(IN_PROGRESS)
+        brief["focus"] = "Ship the nav"
+        brief, _ = render_brief.number_items(brief)
+        page = render_brief.to_html(brief)
+        script = re.search(r"<script>\n\(function \(\) \{(.*)\}\)\(\);\n</script>", page, re.S).group(1)
+        script = script.replace("  renderTabs();\n", "")
+        script = script.replace("  var shown = brief;", "  globalThis.__x = { todoTab: todoTab, derive: derive };\n  return;\n  var shown = brief;")
+        body = ("(function () {" + script + "})();\n"
+                "const x = globalThis.__x;\n"
+                "console.log(JSON.stringify(x.todoTab().map(c => c.className + '|' + c.textContent.slice(0, 30))));\n"
+                "x.derive({});\n"
+                "console.log(JSON.stringify(x.todoTab().length));\n")
+        full, empty = node_lines(brief, body)
+        self.assertEqual(full[0], "focusline muted|Focus: Ship the nav")
+        self.assertTrue(full[1].startswith("group|In progress"), full)
+        self.assertEqual(empty, 0)
 
     def test_projects_only_in_its_tab_and_clients_has_its_own(self):
         t = self.template()
@@ -1312,7 +1366,7 @@ class InProgressTest(unittest.TestCase):
         self.assertIn("max-width: 1240px; margin-inline: auto", t)
         a = t.index("app.appendChild(header)")
         b = t.index("header.appendChild(goalsNode)")
-        c = t.index("app.appendChild(tablist)")
+        c = t.index("layout.appendChild(tablist)")
         self.assertTrue(a < b < c)
 
     def test_todo_pill_counts_in_progress_at_every_width(self):
@@ -1363,6 +1417,89 @@ class LiveOverlayTest(unittest.TestCase):
         self.assertIn('<script id="brief-data" type="application/json">{"date": "2026-10-01"', html)
         self.assertIn('"n": 1', html)
         self.assertNotIn("/*__BRIEF_JSON__*/", html)
+
+
+class CompactRowTest(unittest.TestCase):
+    TREE = ("function tags(n, out) { out.push(n.tag); (n.children || []).forEach(c => tags(c, out)); return out; }\n"
+            "function tags2(n, cls) { return (n.className === cls ? 1 : 0) + (n.children || []).reduce((a, c) => a + tags2(c, cls), 0); }\n")
+
+    @unittest.skipUnless(__import__("shutil").which("node"), "node not installed")
+    def test_row_is_one_line_with_a_detail_toggle_and_done_rows_have_none(self):
+        brief, _ = render_brief.number_items(load())
+        script = page_script(brief).replace("  var shown = brief;",
+                                            "  globalThis.__x = { todoPanel: todoPanel, waitingRow: waitingRow };\n  return;\n  var shown = brief;")
+        groups = [{"parent": None, "items": [
+            {"n": 1, "title": "open", "due": "overdue 2d", "note": "the note", "categories": ["cat"],
+             "tag": {"verdict": "needs-lena", "who": "", "why": "the why"}},
+            {"n": 2, "title": "plain"},
+            {"n": 3, "title": "finished", "done": True, "note": "x", "due": "due today"}]}]
+        body = (self.TREE + "(function () {" + script + "})();\n"
+                "const x = globalThis.__x;\n"
+                "const rows = x.todoPanel(" + json.dumps(groups) + ").children.filter(c => /^row/.test(c.className));\n"
+                "const info = rows.map(r => { const body = r.children[r.children.length - 1];\n"
+                "  const det = body.tag === 'details';\n"
+                "  return { tags: tags(r, []).filter(t => t === 'details' || t === 'summary'), text: r.textContent,\n"
+                "    side: tags2(r, 'rowside'),\n"
+                "    sum: det ? body.children[0].children.map(c => c.className) : null,\n"
+                "    more: det ? body.children[1].textContent : null,\n"
+                "    sideText: det ? body.children[0].children[1].textContent : null }; });\n"
+                "console.log(JSON.stringify(info));\n")
+        (info,) = node_lines(brief, body)
+        open_row, plain, done = info
+        self.assertEqual(open_row["tags"], ["details", "summary"])
+        self.assertEqual(open_row["sum"], ["rowtitle", "rowside", "chev"])
+        self.assertIn("needs-Lena", open_row["sideText"])
+        self.assertIn("overdue 2d", open_row["sideText"])
+        for text in ("the note", "the why", "cat"):
+            self.assertIn(text, open_row["more"])
+            self.assertNotIn(text, open_row["sideText"])
+        self.assertEqual(plain["tags"], [])                 # nothing more to show: no toggle
+        self.assertEqual(done["tags"], [])                  # a done row has no detail toggle
+        self.assertEqual(done["text"], "3finished")         # number and title only
+        self.assertEqual(done["side"], 0)
+
+    def test_open_details_are_reopened_by_key_after_a_re_render(self):
+        t = (ROOT / "scripts" / "brief_template.html").read_text()
+        self.assertIn('"data-n": String(n)', t)
+        self.assertIn('return n ? "n" + n : "i" + i;', t)
+        self.assertIn("(opened[id] = opened[id] || {})[detailKey(d, i)] = true;", t)
+        self.assertIn("if (opened[id][detailKey(d, i)]) d.open = true;", t)
+
+    def test_links_in_the_title_stay_inside_the_toggle_line(self):
+        t = (ROOT / "scripts" / "brief_template.html").read_text()
+        self.assertIn("return numberedRow(a.n, [link(safeUrl(a.url), a.text)], side, more, a.done, a.tick_undo);", t)
+        self.assertIn('el("summary", { "class": "rowline" }', t)
+        # numbers, ticks and the title line: the tick box sits outside the summary
+        self.assertLess(t.index("numCell(n, done, undo), body"), t.index("function dueSpan"))
+
+
+class GoalCardsTest(unittest.TestCase):
+    def test_goals_are_a_card_grid_that_stacks_on_a_phone(self):
+        t = (ROOT / "scripts" / "brief_template.html").read_text()
+        self.assertIn(".goalcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));", t)
+        self.assertIn('el("div", { "class": "goalcards" }, goals.goals.map(goalRow))', t)
+        self.assertIn('el("details", { "class": "goalcard" }', t)
+        self.assertIn('span("pill draft", "Draft")', t)
+
+    @unittest.skipUnless(__import__("shutil").which("node"), "node not installed")
+    def test_each_goal_is_a_details_card_with_why_and_done_when(self):
+        brief, _ = render_brief.number_items(with_goals(GOALS))
+        script = page_script(brief).replace("  var shown = brief;",
+                                            "  globalThis.__x = { goalsBlock: goalsBlock };\n  return;\n  var shown = brief;")
+        body = ("(function () {" + script + "})();\n"
+                "const g = globalThis.__x.goalsBlock(BRIEF_OBJ.goals);\n"
+                "const cards = g.children[1];\n"
+                "console.log(JSON.stringify({ cls: cards.className, n: cards.children.length,\n"
+                "  tags: cards.children.map(c => c.tag + '|' + c.className),\n"
+                "  head: g.children[0].textContent, first: cards.children[0].children[0].textContent,\n"
+                "  detail: cards.children[0].children[1].textContent }));\n")
+        (out,) = node_lines(brief, "const BRIEF_OBJ = JSON.parse(BRIEF);\n" + body)
+        self.assertEqual(out["cls"], "goalcards")
+        self.assertEqual(out["tags"], ["details|goalcard", "details|goalcard"])
+        self.assertEqual(out["head"], "Q4 2026 goalsDraft")
+        self.assertEqual(out["first"], "Harden the API")
+        for text in ("Partners build on it.", "Done when", "Header is live.", "Re-quote ships."):
+            self.assertIn(text, out["detail"])
 
 
 GOALS = {
