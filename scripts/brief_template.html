@@ -154,13 +154,21 @@ h2 .count { font-family: var(--font-mono); font-weight: 400; }
 .due-today { color: var(--warn); font-weight: 600; }
 .tag { font-family: var(--font-mono); font-size: 11.5px; background: var(--surface-2); color: var(--muted); border-radius: 4px; padding: 1px 6px; }
 
-/* live overlay: a row or card marked done (or a parked PR) stays in place, muted, with its title struck through.
-   Colours come from the tokens, so it reads in light and dark. */
+/* live overlay: a row or card marked done (or a parked PR) collapses to its tick box, number and a struck-through,
+   muted title. Everything else in it is hidden, and the script moves it below the open items of its section under a
+   "Done (N)" label. Colours come from the tokens, so it reads in light and dark. */
 .updated { font-size: 12.5px; color: var(--muted); }
 .row.done, .card.done { color: var(--muted); }
 .done .num { color: var(--muted); }
 .row.done .rowbody > :first-child, .row.done a, .card.done .prtitle a { text-decoration: line-through; color: var(--muted); }
 .done .due-overdue, .done .due-today { color: var(--muted); font-weight: 400; }
+.row.done .rowbody > :not(:first-child), .card.done .rowbody > :not(:first-child), .card.done > .meta,
+.card.done .prtitle > :not(a) { display: none; }
+.donehead { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); padding: 10px 12px 2px 56px; border-top: 1px solid var(--line); }
+.donehead + .row { border-top: 0; }
+.panel > .donehead:first-child { border-top: 0; }
+.cards > .donehead { border-top: 0; padding: 6px 2px 0; }
+.ticks .panel .donehead { padding-left: 74px; }
 /* tick boxes: shown only once the page can write. The box sits just before the number, so the number column widens. */
 .numcell { display: flex; justify-content: flex-end; align-items: center; gap: 6px; }
 .tick { flex: none; margin: 0; width: 14px; height: 14px; accent-color: var(--accent); cursor: pointer; }
@@ -334,6 +342,20 @@ body.has-bg .goals > h2 {
   /* The live overlay marks items and PRs `done`; section and pill counts only count what is still open. */
   function openCount(list) { return (list || []).filter(function (x) { return !x.done; }).length; }
   function openInGroups(groups) { return openCount(groupItems(groups)); }
+  /* Done items collapse to one line and sit after the open ones, under a small "Done (N)" label. The builders call
+     these on every render, so a tick, an untick and the 30-second refresh all regroup. Numbers are never touched. */
+  function doneHead(count) { return el("div", { "class": "donehead", text: "Done (" + count + ")" }); }
+  function splitDone(list) {
+    return { open: (list || []).filter(function (x) { return !x.done; }), done: (list || []).filter(function (x) { return x.done; }) };
+  }
+  /* `into` is a panel or a card list: open items in their order, then the label and the done items. */
+  function appendWithDone(into, list, build) {
+    var s = splitDone(list);
+    s.open.forEach(function (x) { into.appendChild(build(x)); });
+    if (s.done.length) into.appendChild(doneHead(s.done.length));
+    s.done.forEach(function (x) { into.appendChild(build(x)); });
+    return into;
+  }
 
   /* Everything the tabs show comes from these values. derive() sets them from a brief, so the page can be rebuilt
      from the original brief plus the latest overlay without reloading. */
@@ -409,12 +431,16 @@ body.has-bg .goals > h2 {
   }
   function todoPanel(groups, showTags) {
     var panel = el("div", { "class": "panel" });
+    /* open subtasks stay under their parent heading (no heading when all are done); done ones go to the Done group */
     (groups || []).forEach(function (g) {
-      var items = g.items || [];
-      if (!items.length) return;
+      var open = splitDone(g.items).open;
+      if (!open.length) return;
       if (g.parent) panel.appendChild(el("div", { "class": "parent", text: g.parent }));
-      items.forEach(function (i) { panel.appendChild(todoRow(i, showTags !== false)); });
+      open.forEach(function (i) { panel.appendChild(todoRow(i, showTags !== false)); });
     });
+    var done = splitDone(groupItems(groups)).done;
+    if (done.length) panel.appendChild(doneHead(done.length));
+    done.forEach(function (i) { panel.appendChild(todoRow(i, showTags !== false)); });
     return panel;
   }
   function actionRow(a) {
@@ -427,14 +453,12 @@ body.has-bg .goals > h2 {
   }
   function actionPanel(list) {
     var panel = el("div", { "class": "panel" });
-    list.forEach(function (a) { panel.appendChild(actionRow(a)); });
-    return panel;
+    return appendWithDone(panel, list, actionRow);
   }
   /* In progress mixes Notion to-dos and Fathom actions, so each row is picked by its kind. */
   function inProgressPanel(list) {
     var panel = el("div", { "class": "panel" });
-    list.forEach(function (i) { panel.appendChild(i.kind === "fathom" ? actionRow(i) : todoRow(i, true)); });
-    return panel;
+    return appendWithDone(panel, list, function (i) { return i.kind === "fathom" ? actionRow(i) : todoRow(i, true); });
   }
   /* Waiting for others: the same row as Your actions. The title carries the "chase" pill and the link; who follows it.
      The muted line holds the age, the chase reason (chase items only) and when it was last chased. */
@@ -459,8 +483,7 @@ body.has-bg .goals > h2 {
   }
   function waitingPanel(list) {
     var panel = el("div", { "class": "panel" });
-    list.forEach(function (w) { panel.appendChild(waitingRow(w)); });
-    return panel;
+    return appendWithDone(panel, list, waitingRow);
   }
   /* Waiting for others is folded: the summary keeps the count and how many need a chase. The open state lives in
      waitingOpen so the 30-second re-render does not shut it again. */
@@ -481,6 +504,8 @@ body.has-bg .goals > h2 {
     if (waitingOpen) node.open = true;
     return node;
   }
+  /* PR and test cards: open cards first, then the Done label and the collapsed ones. */
+  function cardList(list, build) { return appendWithDone(el("div", { "class": "cards" }), list, build); }
   function section(title, count, content, id) {
     return el("section", id ? { "class": "group", id: id } : { "class": "group" }, [
       el("h2", {}, [title, count != null ? span("count", String(count)) : null]),
@@ -753,7 +778,7 @@ body.has-bg .goals > h2 {
     [["Review requested", prs.review_requested], ["Ready to merge", prs.ready], ["Awaiting review", prs.awaiting]]
       .forEach(function (s) {
         var list = s[1] || [];
-        if (list.length) out.push(section(s[0], openCount(list), el("div", { "class": "cards" }, list.map(prCard))));
+        if (list.length) out.push(section(s[0], openCount(list), cardList(list, prCard)));
       });
     return out;
   }
@@ -771,7 +796,7 @@ body.has-bg .goals > h2 {
       } else if (triage) {
         top.push(el("div", { "class": "meta", text: "No triage today (" + str(triage.status) + ")" }));
       }
-      out = top.concat([section("Recently merged", openCount(testing), el("div", { "class": "cards" }, testing.map(testCard)))]);
+      out = top.concat([section("Recently merged", openCount(testing), cardList(testing, testCard))]);
     }
     return out;
   }
