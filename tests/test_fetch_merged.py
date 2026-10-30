@@ -20,6 +20,10 @@ if args[:2] == ["pr", "list"]:
         "number": 154, "title": "t", "url": "u", "body": "",
         "mergedAt": "2026-10-13T12:50:05Z", "author": {"login": "x"},
         "mergeCommit": {"oid": "abc"}, "files": [{"path": "a.go"}],
+        "comments": [
+            {"author": {"login": "lenathome"}, "body": "Tested after merge, all fine", "createdAt": "2026-10-14T09:00:00Z"},
+            {"author": None, "body": None},
+        ],
     }]))
 elif args[:2] == ["run", "list"]:
     runs = [{"workflowName": "Warden PR review", "status": "completed",
@@ -58,6 +62,19 @@ class FetchMergedTest(unittest.TestCase):
             "workflow": "Deploy Checkout App", "status": "completed", "conclusion": "success",
             "jobs": [{"name": "deploy-dev", "conclusion": "success"}],
         }])
+
+    def test_comments_carry_author_login_and_body(self):
+        r = subprocess.run(["bash", str(SCRIPT), "ekko-checkout", "3"],
+                           capture_output=True, text=True, env=self.env)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        prs = json.loads(r.stdout)
+        self.assertEqual(prs[0]["comments"], [
+            {"author": "lenathome", "body": "Tested after merge, all fine"},
+            {"author": "", "body": ""},
+        ])
+        # existing fields are unchanged
+        self.assertEqual(prs[0]["files"], ["a.go"])
+        self.assertEqual(prs[0]["author"], "x")
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@
 #
 # Output (stdout): one JSON array, one element per merged PR:
 #   [{repo, number, title, url, body, mergedAt, author, files (paths only),
+#     comments: [{author (login), body}],
 #     deploys: [{workflow, status, conclusion, jobs: [{name, conclusion}]}]}]
 # Deploys are the workflow runs on the merge commit whose name matches deploy|release|publish.
 # A repo that fails prints one warning line to stderr and is skipped.
@@ -33,7 +34,7 @@ for r in "${repo_arr[@]}"; do
   [[ "$r" == */* ]] || full="ekko-enviroconomy/$r"
 
   if ! prs=$(gh pr list -R "$full" --state merged --search "merged:>=$since" --limit 30 \
-      --json number,title,url,body,mergedAt,author,mergeCommit,files 2>/dev/null); then
+      --json number,title,url,body,mergedAt,author,mergeCommit,files,comments 2>/dev/null); then
     echo "warning: could not list merged PRs for $full, skipped" >&2
     continue
   fi
@@ -57,6 +58,7 @@ for r in "${repo_arr[@]}"; do
       repo: $repo, number, title, url, body, mergedAt,
       author: (.author.login // ""),
       files: [(.files // [])[] | .path],
+      comments: [(.comments // [])[] | {author: (.author.login // ""), body: (.body // "")}],
       deploys: $deploys
     }' <<< "$pr")")
   done < <(echo "$prs" | jq -c '.[]')

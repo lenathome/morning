@@ -135,11 +135,11 @@ Make these tool calls in a SINGLE message (parallel tool use):
 
 9. **Your own open PRs** — Bash: `~/github/morning/scripts/fetch_github.sh authored`. Returns non-draft PRs you authored, enriched with `review_decision`, `reviewers_requested`, `latest_approvals`, `mergeable`. Used by "Yours to chase" in the PRs needing you section.
 
-10. **Recently merged PRs** — Bash: `~/github/morning/scripts/fetch_merged.sh "<repos comma-joined>" 3`, where the repos are the union of every non-done project's `repos` and config `github.ekko_repos`. Returns merged PRs from the last 3 days, each with `repo, number, title, url, body, mergedAt, author, files` and `deploys` (the deploy, release and publish runs on the merge commit, with their jobs). Used by the Testing section. Also read `~/morning/state/acknowledged-tests.json` with the Read tool; if the file is missing, treat it as `[]`.
+10. **Recently merged PRs** — Bash: `~/github/morning/scripts/fetch_merged.sh "<repos comma-joined>" 3`, where the repos are the union of every non-done project's `repos` and config `github.ekko_repos`. Returns merged PRs from the last 3 days, each with `repo, number, title, url, body, mergedAt, author, files`, `comments` (each `{author, body}`, the author being the GitHub login) and `deploys` (the deploy, release and publish runs on the merge commit, with their jobs). Used by the Testing section. Also read `~/morning/state/acknowledged-tests.json` with the Read tool; if the file is missing, treat it as `[]`.
 
 11. **Acknowledged tasks** — Read tool: `~/morning/state/acknowledged-tasks.json` (Notion page ids ticked off in earlier briefs). If the file is missing, treat it as `[]`.
 
-12. **Recent ai-log** — Bash: `ls -1 ~/ai-log`, then Read the last two files listed (the two most recent days, so a weekend gap does not hide Friday's work). If the directory is missing, skip.
+12. **Recent ai-log** — Bash: `ls -1 ~/ai-log`, then Read the last two files listed (the two most recent days, so a weekend gap does not hide Friday's work). If the directory is missing, skip. Do not turn ai-log follow-ups into items or steps. Where one bears on an item, use only the `Needs Lena` sub-list under `### Follow-ups identified` and ignore `Optional`.
 
 13. **In-progress actions** — Read tool: `~/morning/state/in-progress.json` (Fathom action keys marked as started in earlier briefs). If the file is missing, treat it as `[]`.
 
@@ -155,7 +155,7 @@ Run this over every Notion task from Step 1.1 and every Fathom action from Step 
 
 1. **Live Notion Status.** `Done` on the page fetched in Step 1.1 (a task with Status `Waiting` is not done: it becomes a waiting item, see Waiting for others). Never carry a task over from an earlier brief's `.json` or `.md`: those files are history, not a source of tasks. The one exception is a Fathom waiting item, which has no live status to re-read (see Waiting for others).
 2. **Earlier tick-offs.** The task's page id is in the acknowledged-tasks list (Step 1.11), or the action's key is in the acknowledged-actions list (Step 1.7). A Fathom action also counts as ticked when its lowercased, whitespace-normalised text equals that of a ticked action in a previous `<briefs_dir>/<date>.json` (look the ticked keys up there, in both places a team action can sit in an older brief: `waiting` (items with `kind: "fathom"`) in new briefs, and `actions.product` in briefs before the `waiting` list existed): the same action raised again in a later meeting has a new key.
-3. **ai-log.** The two files from Step 1.12 log the item's work as done, shipped, merged or live (match on the task title, a PR number or the topic). An entry that only mentions the item, or lists it as a follow-up, is not enough.
+3. **ai-log.** The two files from Step 1.12 log the item's work as done, shipped, merged or live (match on the task title, a PR number or the topic). An entry that only mentions the item, or lists it as a follow-up (under `Needs Lena` or `Optional`), is not enough.
 
 If only check 3 says done and the Notion page is still open, keep the task and set its `note` to `looks done per ai-log <YYYY-MM-DD>, set Notion to Done?`. A Fathom action has no Notion page: drop it on check 3.
 
@@ -437,8 +437,9 @@ Waiting items are numbered and tick-off-able like any other line. If there are n
 Merged PRs the user can try by hand. Write them into the `testing` key of the brief JSON, newest merge first.
 
 - Keep only PRs from Step 1.10 whose key `<repo>#<number>` is not in the acknowledged-tests list and that change something visible or clickable. Drop CI, infra, refactor, test-only and docs PRs.
+- Leave out a PR that already has a verdict, so finished work does not wait for a manual tick. It has one when EITHER (a) its row in the Testing triage database (Step 1.15, matched on `Key` = `<repo>#<number>`, read as `prs[key].status` in `~/morning/state/triage-<date>.json`) has `Status` `Done`, `Skipped` or `Bug found`; OR (b) one of its `comments` from Step 1.10 is by the GitHub login `lenathome` and either contains a `claude.ai/artifact/` link (a test-results report) or starts with `Tested after merge`, `Tested by hand` or `Checked after merge`. A comment by anyone else never counts. In the same step, run `python3 ~/github/morning/scripts/ack_test.py <key1> <key2> ...` once for the keys you left out, so they stay gone from later briefs. List them in one line in the Step 6 chat output: `Dropped from Testing (already tested): <key1>, <key2>`. Omit the line when nothing was dropped.
 - `live` comes from the `deploys` the fetch returns for the merge commit, never from the merge itself. Name the environments whose deploy jobs succeeded (for example `dev, staging, prod`). If no deploy run succeeded, write `not deployed yet`; if a run is still going, say so.
-- `steps` come from the PR body's test plan when it has one (`inferred: false`). Otherwise write them from the diff and the `files` list (`inferred: true`). Give 2 to 4 steps, each with the environment URL and any test data needed.
+- `steps` come from the PR body's test plan when it has one (`inferred: false`). Otherwise write them from the diff and the `files` list (`inferred: true`). Give 2 to 4 steps, each with the environment URL and any test data needed. Steps describe how to test: do not add admin chores such as "attach screenshots" or "tick it off" as steps.
 - Say plainly when something cannot be tested by hand, for example a change that only runs behind a feature flag or a backend job. Do not invent steps.
 - `project` is the name of the project the PR belongs to (match on repo and keywords), or an empty string.
 - If there are none, leave `testing` as `[]` and the section is omitted.
@@ -529,6 +530,7 @@ Examples (bad):
    - `**<weekday_label>** - <focus>`
    - one line of counters from the renderer: `Urgent N (M overdue) · PRs: R to review, K ready, A awaiting · Your actions N · Waiting N (C to chase) · Meetings N` (drop any part that is 0, except Urgent; drop Waiting when N is 0)
    - when the product-os check (see "Sync product-os") found N uncommitted files: `product-os: N uncommitted file(s) - <names>. Reply "commit product-os" to commit and push them.` (`<names>` are the paths, comma-separated; omit the line when N is 0. Unattended runs only list them.)
+   - when Testing items were left out as already tested (see Testing): `Dropped from Testing (already tested): <repo>#<number>, ...` (omit the line when none)
    - the artifact link
    - `Saved: <briefs_dir>/<date>.md`
 3. If publishing fails for any reason, say so in one line and print the full markdown archive inline instead, verbatim. The user must never end up with neither.
@@ -544,7 +546,7 @@ If the brief has any numbered lines (In progress, To do, Testing or Ideas bank):
 4. For each valid number, look it up in `~/morning/state/brief-map-<date>.json` (`numbers[<n>]` gives `{kind: notion, id}`, `{kind: fathom, key}` or `{kind: test, key}`; a waiting item's entry also has `waiting: true`).
 5. For a Notion to-do (including a Notion waiting item): update that page's `Status` property to `Done` via the Notion MCP, then run `python3 ~/github/morning/scripts/ack_task.py <id1> <id2> ...` (batch all such ids into one call) so the next brief drops it even if the Notion write fails or is reverted.
 6. For a Fathom action (including a Fathom waiting item): run `python3 ~/github/morning/scripts/ack_action.py <key1> <key2> ...` (batch all such keys into one call).
-7. For a Testing item (kind `test`): run `python3 ~/github/morning/scripts/ack_test.py <key1> <key2> ...` (batch all such keys into one call). Then set the matching Notion triage row's `Status` to `Done`: find the row by `Key` = `<repo>#<number>` in today's `~/morning/state/triage-<date>.json` (`prs[key].notion_url`) and update that page's `Status` property with the Notion update-page tool. If there is no row, skip silently. Never edit any other column of that database: `Status` and `Notes` are Lena's, every other column belongs to Etienne's tool.
+7. For a Testing item (kind `test`): run `python3 ~/github/morning/scripts/ack_test.py <key1> <key2> ...` (batch all such keys into one call). Then set the matching Notion triage row's `Status` to `Done`: find the row by `Key` = `<repo>#<number>` in today's `~/morning/state/triage-<date>.json` (`prs[key].notion_url`) and update that page's `Status` property with the Notion update-page tool. If there is no row, skip silently. Never edit any other column of that database: `Status`, `Notes`, `Feedback` and `Which checks` are Lena's, every other column belongs to Etienne's tool. `Feedback` is a multi-select (`All right`, `Label wrong`, `Proven check failed`, `Step missing`, `Step wrong`, `Wrong group`, `I could do it myself`) and `Which checks` holds that row's own check numbers, for example `2, 5`.
 8. Confirm to the user: `Marked N item(s) done. They won't appear tomorrow.` Then write the live update (Step 7d).
 9. Then print exactly: `Started any? (numbers comma-separated, blank to skip):` and wait for the reply. Parse it as in step 3 and look the numbers up in the same map. Skip numbers the user just marked done.
 10. For a Notion to-do (kind `notion`): update that page's `Status` property to `In progress` via the Notion MCP.
@@ -574,7 +576,7 @@ If no PRs surfaced, skip this step entirely.
 
 ## Step 7c: Triage feedback
 
-Only in a session with the user, never unattended. When Lena says a Testing item found a bug, set that triage row's `Status` to `Bug found` and put her own words in `Notes`, verbatim with nothing added. When she says she skipped one, set `Status` to `Skipped`. Find the row as in Step 7 item 7 (`Key` = `<repo>#<number>`, then `prs[key].notion_url` in today's `~/morning/state/triage-<date>.json`) and use the Notion update-page tool. If there is no row, skip silently. Never edit any other column: `Status` and `Notes` are Lena's, every other column belongs to Etienne's tool.
+Only in a session with the user, never unattended. When Lena says a Testing item found a bug, set that triage row's `Status` to `Bug found` and put her own words in `Notes`, verbatim with nothing added. When she says she skipped one, set `Status` to `Skipped`. Find the row as in Step 7 item 7 (`Key` = `<repo>#<number>`, then `prs[key].notion_url` in today's `~/morning/state/triage-<date>.json`) and use the Notion update-page tool. If there is no row, skip silently. Never edit any other column: `Status`, `Notes`, `Feedback` and `Which checks` are Lena's (see Step 7 item 7), every other column belongs to Etienne's tool.
 
 ## Step 7d: Live page updates
 

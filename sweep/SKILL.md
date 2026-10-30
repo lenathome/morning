@@ -69,10 +69,14 @@ Section format:
 - <decision>: <why>
 
 ### Follow-ups identified
+#### Needs Lena
+- ...
+
+#### Optional
 - ...
 ```
 
-Times are local, from `started_at` and `ended_at`. Write `- None` under any empty subsection. Keep the structure.
+Times are local, from `started_at` and `ended_at`. Write `- None` under any empty subsection, and under each empty sub-list of `Follow-ups identified`. Keep the structure. `Needs Lena` is what she must do or decide, or work that cannot move without her. `Optional` is nice-to-haves, tidy-ups and evidence that already exists elsewhere. When unsure, ask whether work stalls without it: yes is `Needs Lena`, no is `Optional`. The morning brief only acts on `Needs Lena`.
 
 For a session that already has a section (see Step 3), add this at the end of that section instead of a new one, and use the same three subsections beneath it with only the new material:
 
