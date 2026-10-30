@@ -472,6 +472,10 @@ def to_markdown(brief: dict, shared: bool = False) -> str:
     if brief["waiting"]:
         L += ["**Waiting for others**", ""] + [_waiting_line(w) for w in brief["waiting"]] + [""]
 
+    if brief["docs_drift"]:
+        L += ["## Docs behind code", ""] + [_drift_line(d) for d in brief["docs_drift"]]
+        L += ["", "Fix with /ekko-api-docs, then upload to ReadMe.", ""]
+
     if brief["meetings"] and not shared:
         L += ["## External meeting prep", ""]
         for m in brief["meetings"]:
@@ -498,10 +502,6 @@ def to_markdown(brief: dict, shared: bool = False) -> str:
         for t in brief["testing"]:
             L += _testing_md(t)
         L += [""]
-
-    if brief["docs_drift"]:
-        L += ["## Docs behind code", ""] + [_drift_line(d) for d in brief["docs_drift"]]
-        L += ["", "Fix with /ekko-api-docs, then upload to ReadMe.", ""]
 
     if any(_count(brief["ideas"][k]) for k, _ in IDEA_BUCKETS):
         L += ["## Ideas bank", ""]

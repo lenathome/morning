@@ -297,8 +297,8 @@ class WaitingTest(unittest.TestCase):
         self.assertNotIn("Product actions", html)
         self.assertNotIn("waiting_on", html)
         self.assertNotIn("waiting on others", html.lower())
-        # the section sits after Your actions in the To do tab
-        self.assertLess(html.index('section("Your actions"'), html.index('main.push(waitingSection())'))
+        # the section sits in the right column of the To do tab, after Docs behind code
+        self.assertLess(html.index('side.push(section("Docs behind code"'), html.index('side.push(waitingSection())'))
         brief, _ = render_brief.number_items(load())
         page = render_brief.to_html(brief)
         self.assertIn('"text": "Sign-off on the rounding copy"', page)
@@ -825,17 +825,22 @@ class DocsDriftTest(unittest.TestCase):
             "upload to ReadMe pending. 8 days. (live page not checked)")
         self.assertTrue(self.line(change="added", live_checked=False).endswith("8 days. (live page not checked)"))
 
-    def test_order_closing_line_and_position_after_testing(self):
+    def test_order_closing_line_and_position_after_todo(self):
         md = drift_md(drift_item(path="a.first"), drift_item(path="b.second"))
-        sec = md.split("## Docs behind code\n\n")[1].split("## Ideas bank")[0]
+        sec = md.split("## Docs behind code\n\n")[1].split("## External meeting prep")[0].split("## PRs needing you")[0]
         self.assertLess(sec.index("a.first"), sec.index("b.second"))
         self.assertTrue(sec.rstrip().endswith("\nFix with /ekko-api-docs, then upload to ReadMe."))
-        self.assertLess(md.index("## Testing"), md.index("## Docs behind code"))
+        self.assertLess(md.index("## To do"), md.index("## Docs behind code"))
+        self.assertLess(md.index("## Docs behind code"), md.index("## PRs needing you"))
+        self.assertLess(md.index("## Docs behind code"), md.index("## Testing"))
 
     def test_shared_markdown_includes_section(self):
         b = load()
         brief, _ = render_brief.number_items(b)
-        self.assertIn("## Docs behind code", render_brief.to_markdown(brief, shared=True))
+        shared = render_brief.to_markdown(brief, shared=True)
+        self.assertIn("## Docs behind code", shared)
+        self.assertLess(shared.index("## To do"), shared.index("## Docs behind code"))
+        self.assertLess(shared.index("## Docs behind code"), shared.index("## PRs needing you"))
 
     def test_empty_or_missing_section_omitted(self):
         for b in (dict(load(), docs_drift=[]), {k: v for k, v in load().items() if k != "docs_drift"}):
@@ -901,10 +906,19 @@ class DocsDriftTest(unittest.TestCase):
         html = render_brief.to_html(brief)
         self.assertIn('"docs_drift"', html)
         self.assertIn('section("Docs behind code"', html)
+        self.assertIn("side.push(section(\"Docs behind code\"", html)
+        todo = html.split("function todoTab()")[1].split("function prsTab()")[0]
+        testing = html.split("function testingTab()")[1].split("function ideasTab()")[0]
+        self.assertIn("Docs behind code", todo)
+        self.assertNotIn("Docs behind code", testing)
+        self.assertNotIn("docsDrift", testing)
         self.assertIn("Fix with /ekko-api-docs, then upload to ReadMe.", html)
         self.assertNotIn("<img src=x", html)
         self.assertIn("d.docs_drift = arr(d.docs_drift)", html)
-        self.assertIn("openCount(testing) + docsDrift.length", html)
+        self.assertIn("count: openCount(testing),", html)
+        self.assertNotIn("openCount(testing) + docsDrift.length", html)
+        todo_count = html.split('{ id: "todo"')[1].split('{ id: "prs"')[0]
+        self.assertNotIn("docsDrift", todo_count)
 
 
 class CountsTest(unittest.TestCase):
@@ -1197,11 +1211,19 @@ class InProgressTest(unittest.TestCase):
         self.assertIn(".todo-cols.has-side { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);", t)
         self.assertIn(".todo-cols.has-side .todo-side { grid-column: 2; grid-row: 1; position: sticky;", t)
         self.assertIn('" has-side" : ""', t)
-        self.assertIn("inProgress.length && main.length", t)
+        self.assertIn("side.length && main.length", t)
         self.assertIn("(min-width: 1100px)", t)
-        # In progress comes first in the markup, so it leads on narrow screens
-        self.assertLess(t.index('cols.push(el("aside", { "class": "todo-side"'),
-                        t.index('cols.push(el("div", { "class": "todo-main"'))
+        # the left column comes first in the markup, so it leads on narrow screens; desktop placement is explicit
+        self.assertLess(t.index('cols.push(el("div", { "class": "todo-main"'),
+                        t.index('cols.push(el("aside", { "class": "todo-side"'))
+        self.assertIn(".todo-cols.has-side .todo-main { grid-column: 1; grid-row: 1; }", t)
+        # right column order: In progress, Docs behind code, Waiting for others
+        todo = t.split("function todoTab()")[1].split("function prsTab()")[0]
+        self.assertLess(todo.index('side.push(section("In progress"'), todo.index('side.push(section("Docs behind code"'))
+        self.assertLess(todo.index('side.push(section("Docs behind code"'), todo.index("side.push(waitingSection())"))
+        # left column order: Urgent today, Coming up, Your actions, External meeting prep
+        for a, b in [("Urgent today", "Coming up"), ("Coming up", "Your actions"), ("Your actions", "External meeting prep")]:
+            self.assertLess(todo.index(f'main.push(section("{a}"'), todo.index(f'main.push(section("{b}"'))
         # no side column outside the To do tab, and no width-dependent JS
         self.assertNotIn(".wrap.has-side", t)
         self.assertNotIn("wideQuery", t)
