@@ -47,7 +47,7 @@ TAG_LABELS = {"needs-lena": "needs-Lena", "split": "split", "handoff": "handoff"
 BG_EXTS = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".png": "image/png"}
 BG_WARN_BYTES = 600 * 1024
 DRIFT_CHANGES = ("removed", "added")
-DRIFT_STATUSES = ("stale", "upload_pending")
+DRIFT_STATUSES = ("stale", "upload_pending", "draft")
 MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
 
@@ -236,6 +236,22 @@ def number_items(raw: dict) -> tuple[dict, dict]:
             item["n"] = n
             numbers[str(n)] = ref
 
+    def draft_item(d: dict) -> None:
+        """A hand-listed doc draft: no path, change or pr. Needs title, branch, doc.url, first_seen and age_days."""
+        label = f"docs_drift draft '{d.get('title', '?')}'"
+        for k in ("title", "branch"):
+            if not isinstance(d.get(k), str) or not d[k].strip():
+                raise ValueError(f"{label} needs a non-empty '{k}'")
+        if not isinstance(d.get("doc"), dict) or not d["doc"].get("url"):
+            raise ValueError(f"{label} needs 'doc.url'")
+        if d.get("waiting_on") is not None and not isinstance(d["waiting_on"], str):
+            raise ValueError(f"{label} needs 'waiting_on' as a string or null")
+        if not _is_date(d.get("first_seen")):
+            raise ValueError(f"{label} needs 'first_seen' as YYYY-MM-DD")
+        age = d.get("age_days")
+        if isinstance(age, bool) or not isinstance(age, int) or age < 0:
+            raise ValueError(f"{label} needs 'age_days' as an integer, 0 or more")
+
     def docs_drift_list(items) -> None:
         """Validate only: drift items are never numbered and never enter the number map."""
         if not isinstance(items, list):
@@ -243,6 +259,9 @@ def number_items(raw: dict) -> tuple[dict, dict]:
         for i, d in enumerate(items, 1):
             if not isinstance(d, dict):
                 raise ValueError(f"docs_drift item {i} is not an object")
+            if d.get("status") == "draft":
+                draft_item(d)
+                continue
             label = f"docs_drift item '{d.get('path', '?')}'"
             for k in ("path", "change", "pr", "doc", "live_url", "status", "live_checked", "first_seen", "age_days"):
                 if k not in d:
@@ -252,7 +271,7 @@ def number_items(raw: dict) -> tuple[dict, dict]:
             if d["change"] not in DRIFT_CHANGES:
                 raise ValueError(f"{label} has an unknown change {d['change']!r} (use removed or added)")
             if d["status"] not in DRIFT_STATUSES:
-                raise ValueError(f"{label} has an unknown status {d['status']!r} (use stale or upload_pending)")
+                raise ValueError(f"{label} has an unknown status {d['status']!r} (use stale, upload_pending or draft)")
             if not isinstance(d["live_checked"], bool):
                 raise ValueError(f"{label} needs 'live_checked' as true or false")
             for obj, keys in (("pr", ("repo", "number", "url", "merged")), ("doc", ("file", "line", "url"))):
@@ -323,6 +342,9 @@ def _drift_age(days: int) -> str:
 
 
 def _drift_line(d: dict) -> str:
+    if d["status"] == "draft":
+        waiting = f", waiting on {d['waiting_on']}" if d.get("waiting_on") else ""
+        return f"- Draft ready: [{d['title']}]({d['doc']['url']}) on `{d['branch']}`{waiting} ({_drift_age(d['age_days'])})"
     pr, doc = d["pr"], d["doc"]
     base = doc["file"].rsplit("/", 1)[-1]
     pr_link = f"[{pr['repo']}#{pr['number']}]({pr['url']})"

@@ -638,6 +638,12 @@ body.has-bg .goals > h2 {
   function driftRow(d) {
     var pr = obj(d.pr), doc = obj(d.doc);
     var base = str(doc.file).split("/").pop();
+    if (d.status === "draft") {
+      var n = Number(d.age_days) || 0;
+      return el("div", { "class": "card" }, [el("div", {}, ["Draft ready: ", link(safeUrl(doc.url), str(d.title)), " on ",
+        el("code", { text: str(d.branch) }), d.waiting_on ? ", waiting on " + str(d.waiting_on) : "",
+        " (" + (n === 0 ? "today" : n === 1 ? "1 day" : n + " days") + ")"])]);
+    }
     var live = d.live_checked !== false;
     var removed = d.change === "removed", pending = d.status === "upload_pending";
     var plain = link(safeUrl(doc.url), base);
