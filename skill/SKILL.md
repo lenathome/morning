@@ -268,7 +268,7 @@ Every to-do with `Due` ≤ today. Numbering continues from In progress (it start
 
 ## Docs behind code
 
-Rendered after Testing. Not numbered, not tick-off-able. Omitted when `docs_drift` is empty. See "Docs behind code" below.
+Rendered directly after To do, before External meeting prep. Not numbered, not tick-off-able. Omitted when `docs_drift` is empty. See "Docs behind code" below.
 
 ## External meeting prep
 
@@ -445,7 +445,7 @@ Merged PRs the user can try by hand. Write them into the `testing` key of the br
 
 ### Docs behind code
 
-SDK options that merged in code while the docs still disagree. Put the array from Step 1 item 16 into the top-level `docs_drift` key of the brief JSON, copied verbatim: no rewording, no numbering. The renderer shows it as "Docs behind code" after Testing in the markdown and on the Testing tab of the page. Items are not numbered, not in the number map and not part of tick-off. They stay until the docs catch up, then drop out by themselves. If the array is empty, the section is omitted. If the script fails, `docs_drift` is `[]` and `unavailable` gets `Docs drift unavailable: <first line of stderr>`. Fixing an item is done with the `/ekko-api-docs` skill, then a manual upload to ReadMe.
+SDK options that merged in code while the docs still disagree. Put the array from Step 1 item 16 into the top-level `docs_drift` key of the brief JSON, copied verbatim: no rewording, no numbering. The renderer shows it as "Docs behind code" directly after To do in the markdown and in the right-hand column of the To do tab on the page, between In progress and Waiting for others. Items are not numbered, not in the number map and not part of tick-off. They stay until the docs catch up, then drop out by themselves. If the array is empty, the section is omitted. If the script fails, `docs_drift` is `[]` and `unavailable` gets `Docs drift unavailable: <first line of stderr>`. Fixing an item is done with the `/ekko-api-docs` skill, then a manual upload to ReadMe.
 
 ### External meeting prep
 

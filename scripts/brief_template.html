@@ -8,10 +8,11 @@
 <style>
 /* Layout: one full-width header (date and title, goals strip, then the pill row that doubles as the tab bar; the
    pill row sticks while scrolling), then one tab panel at a time, then dense rows with a fixed-width number column
-   so numbers can be read back. The page is at most 1240px wide. On the To do tab, from 1100px wide, the to-do
-   content sits on the left (3fr) and the In progress list is pinned on the right (2fr); with no in-progress items
-   the to-do content takes the full width. Below 1100px it is one column with In progress first. Every other tab is
-   a single full-width panel. */
+   so numbers can be read back. The page is at most 1240px wide. On the To do tab, from 1100px wide, the left
+   column (3fr) holds Urgent today, Coming up, Your actions and External meeting prep; the right column (2fr) is
+   pinned and holds In progress, Docs behind code and Waiting for others. When one column is empty the other takes
+   the full width. Below 1100px it is one column with the left content first, then the right content. Every other
+   tab is a single full-width panel. */
 :root {
   --bg: #f4f6f4;
   --surface: #ffffff;
@@ -724,25 +725,28 @@ body.has-bg .goals > h2 {
   }
 
   /* ---------- tab content ---------- */
-  /* To do: the to-do content on the left, In progress on the right (first in the markup, so it leads on narrow screens). */
+  /* To do: left column (Urgent today, Coming up, Your actions, External meeting prep), right column (In progress,
+     Docs behind code, Waiting for others). The left column comes first in the markup, so it leads on narrow screens. */
   function todoTab() {
-    var main = [];
+    var main = [], side = [];
     if (urgentItems.length) main.push(section("Urgent today", openCount(urgentItems), todoPanel(urgent)));
     if (countGroups(todos.coming_up)) main.push(section("Coming up", openInGroups(todos.coming_up), todoPanel(todos.coming_up)));
     if (yours.length) main.push(section("Your actions", openCount(yours), actionPanel(yours)));
-    if (waiting.length) main.push(waitingSection());
     if (meetings.length) {
       main.push(section("External meeting prep", meetings.length,
         el("div", { "class": "cards" }, meetings.map(meetingCard))));
     }
-    var cols = [];
-    if (inProgress.length) {
-      cols.push(el("aside", { "class": "todo-side", "aria-label": "In progress" },
-        [section("In progress", openCount(inProgress), inProgressPanel(inProgress))]));
+    if (inProgress.length) side.push(section("In progress", openCount(inProgress), inProgressPanel(inProgress)));
+    if (docsDrift.length) {
+      side.push(section("Docs behind code", docsDrift.length, el("div", { "class": "cards" },
+        docsDrift.map(driftRow).concat([el("div", { "class": "meta", text: "Fix with /ekko-api-docs, then upload to ReadMe." })]))));
     }
+    if (waiting.length) side.push(waitingSection());
+    var cols = [];
     if (main.length) cols.push(el("div", { "class": "todo-main" }, main));
+    if (side.length) cols.push(el("aside", { "class": "todo-side", "aria-label": "In progress and waiting" }, side));
     if (!cols.length) return [];
-    return [el("div", { "class": "todo-cols" + (inProgress.length && main.length ? " has-side" : "") }, cols)];
+    return [el("div", { "class": "todo-cols" + (side.length && main.length ? " has-side" : "") }, cols)];
   }
   function prsTab() {
     var out = [];
@@ -768,10 +772,6 @@ body.has-bg .goals > h2 {
         top.push(el("div", { "class": "meta", text: "No triage today (" + str(triage.status) + ")" }));
       }
       out = top.concat([section("Recently merged", openCount(testing), el("div", { "class": "cards" }, testing.map(testCard)))]);
-    }
-    if (docsDrift.length) {
-      out.push(section("Docs behind code", docsDrift.length, el("div", { "class": "cards" },
-        docsDrift.map(driftRow).concat([el("div", { "class": "meta", text: "Fix with /ekko-api-docs, then upload to ReadMe." })]))));
     }
     return out;
   }
@@ -837,7 +837,7 @@ body.has-bg .goals > h2 {
         count: openCount(inProgress) + openCount(urgentItems) + openInGroups(todos.coming_up) + openCount(yours) +
                meetings.length },
       { id: "prs", label: "PRs", build: prsTab, count: prTotal, empty: "No pull requests need you." },
-      { id: "testing", label: "Testing", build: testingTab, count: openCount(testing) + docsDrift.length,
+      { id: "testing", label: "Testing", build: testingTab, count: openCount(testing),
         empty: "Nothing merged recently that needs a manual test." },
       { id: "ideas", label: "Ideas bank", build: ideasTab,
         count: openInGroups(ideas.strategic) + openInGroups(ideas.other), empty: "No ideas parked." },
