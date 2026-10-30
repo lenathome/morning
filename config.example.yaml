@@ -126,3 +126,12 @@ docs_drift:
       interfaces:
         Features: features
         Appearance: appearance
+  # Optional: docs pages drafted but not merged yet. Each shows under "Docs behind
+  # code" until its file exists on origin/main of docs_checkout. Remove an entry
+  # once it lands if you want the config tidy; it drops out of the brief by itself.
+  # drafts:
+  #   - title: Customise the Checkout SDK
+  #     file: docs/api-guides/checkout-sdk-customisation.md
+  #     branch: docs/checkout-customisation
+  #     waiting_on: design review   # optional
+  #     added: 2026-10-30

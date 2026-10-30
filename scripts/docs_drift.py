@@ -8,6 +8,7 @@ Input:
     --config   YAML with a top-level `docs_drift` block:
                  lookback_days, docs_repo, docs_checkout, live_base,
                  watch: [{repo, file, guide, interfaces: {InterfaceName: dotted.prefix}}]
+                 drafts (optional): [{title, file, branch, added, waiting_on?}] hand-listed docs pages not merged yet
                No block: prints [] and exits 0.
     --merged   output of fetch_merged.sh: [{repo, number, title, url, mergedAt, files, ...}].
                A repo without a slash means the ekko-enviroconomy org.
@@ -25,8 +26,13 @@ checkout (code blocks by brace nesting, bullet lists by indent) and from the liv
 
 If the live page cannot be fetched, live_checked is false and status comes from the source alone.
 
+Drafts: each configured draft is listed as {status: "draft", title, branch, waiting_on, doc, first_seen, age_days}
+until its file exists on origin/main of the docs checkout. If that check fails, the draft stays. Drafts are not
+written to the state file: the config is their source of truth.
+
 Output (stdout): a JSON array of {path, change, pr, doc, live_url, status, live_checked, first_seen, age_days},
-sorted by age_days descending then path. Items stay in the state file until docs and code agree again.
+sorted by age_days descending then path, followed by the drafts in config order. Items stay in the state file until
+docs and code agree again.
 
 Exit codes:
     0 = success (per-PR and per-fetch failures print one `warning:` line on stderr and are skipped)
@@ -95,6 +101,17 @@ def git_fetch(checkout: str) -> None:
 
 def git_show(checkout: str, guide: str) -> str:
     return run_cmd(["git", "-C", checkout, "show", f"origin/main:{guide}"])
+
+
+def git_on_main(checkout: str, file: str) -> bool:
+    """True when the file exists on origin/main. A missing file is False; any other git failure raises."""
+    try:
+        run_cmd(["git", "-C", checkout, "cat-file", "-e", f"origin/main:{file}"])
+        return True
+    except RuntimeError as e:
+        if "does not exist in" in str(e) or "exists on disk, but not in" in str(e):
+            return False
+        raise
 
 
 def fetch_live(url: str) -> str:
@@ -329,8 +346,8 @@ def full_name(repo: str) -> str:
     return repo if "/" in repo else f"{DEFAULT_ORG}/{repo}"
 
 
-def guide_url(cfg: dict, guide: str, line=None) -> str:
-    url = f"https://github.com/{cfg['docs_repo']}/blob/main/{guide}"
+def guide_url(cfg: dict, guide: str, line=None, ref: str = "main") -> str:
+    url = f"https://github.com/{cfg['docs_repo']}/blob/{ref}/{guide}"
     return f"{url}#L{line}" if line else url
 
 
@@ -354,6 +371,28 @@ def make_item(cfg, entry, path, change, pr, status, line, live_checked, first_se
         "first_seen": first_seen.isoformat(),
         "age_days": (today - first_seen).days,
     }
+
+
+def draft_items(cfg: dict, today: dt.date) -> list:
+    """One item per configured draft whose file is not on origin/main yet, in config order."""
+    out = []
+    for d in cfg.get("drafts") or []:
+        try:
+            if git_on_main(os.path.expanduser(cfg["docs_checkout"]), d["file"]):
+                continue
+        except Exception as e:
+            print(f"warning: cannot check draft {d['file']} on origin/main: {e}", file=sys.stderr)
+        added = dt.date.fromisoformat(str(d["added"]))
+        out.append({
+            "status": "draft",
+            "title": d["title"],
+            "branch": d["branch"],
+            "waiting_on": d.get("waiting_on"),
+            "doc": {"file": d["file"], "line": None, "url": guide_url(cfg, d["file"], ref=d["branch"])},
+            "first_seen": added.isoformat(),
+            "age_days": max((today - added).days, 0),
+        })
+    return out
 
 
 def load_state(path) -> dict:
@@ -480,6 +519,16 @@ def load_config(path) -> dict:
     for i, w in enumerate(block["watch"]):
         if not isinstance(w, dict) or not all(w.get(k) for k in ("repo", "file", "guide", "interfaces")):
             raise InputError(f"docs_drift.watch[{i}] needs repo, file, guide and interfaces")
+    drafts = block.get("drafts") or []
+    if not isinstance(drafts, list):
+        raise InputError("docs_drift.drafts must be a list")
+    for i, d in enumerate(drafts):
+        if not isinstance(d, dict) or not all(d.get(k) for k in ("title", "file", "branch", "added")):
+            raise InputError(f"docs_drift.drafts[{i}] needs title, file, branch and added")
+        try:
+            dt.date.fromisoformat(str(d["added"]))
+        except ValueError:
+            raise InputError(f"docs_drift.drafts[{i}].added must be YYYY-MM-DD")
     return block
 
 
@@ -513,7 +562,7 @@ def main(argv=None) -> int:
     out, items = run(cfg, merged, load_state(args.state), today)
     Path(args.state).write_text(json.dumps({"items": items, "updated": today.isoformat()}, indent=2) + "\n",
                                 encoding="utf-8")
-    print(json.dumps(out, indent=2, ensure_ascii=False))
+    print(json.dumps(out + draft_items(cfg, today), indent=2, ensure_ascii=False))
     return 0
 
 

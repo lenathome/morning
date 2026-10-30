@@ -18,6 +18,18 @@ import docs_drift  # noqa: E402
 TODAY = "2026-10-29"
 WANTED = {"Features": "features", "Appearance": "appearance", "Hidden": "hidden"}
 
+DRAFTS_YAML = """  drafts:
+    - title: Customise the SDK
+      file: docs/guides/fake-customise.md
+      branch: docs/fake-customise
+      waiting_on: design review
+      added: 2026-10-20
+    - title: Second page
+      file: docs/guides/fake-second.md
+      branch: docs/fake-second
+      added: 2026-10-27
+"""
+
 CONFIG_YAML = """
 docs_drift:
   lookback_days: 30
@@ -62,7 +74,7 @@ def pr(number=7, files=None, merged="2026-10-21T10:00:00Z", repo="fake-sdk"):
 class Env:
     """Run main() with git, gh and the network patched."""
 
-    def __init__(self, test, guide=GUIDE, live=LIVE, before=BEFORE, after=AFTER, merged=None, state=None, config=CONFIG_YAML):
+    def __init__(self, test, guide=GUIDE, live=LIVE, before=BEFORE, after=AFTER, merged=None, state=None, config=CONFIG_YAML, on_main=False):
         self.tmp = Path(tempfile.mkdtemp())
         test.addCleanup(lambda: __import__("shutil").rmtree(self.tmp, ignore_errors=True))
         self.cfg = self.tmp / "config.yaml"
@@ -73,6 +85,7 @@ class Env:
         if state is not None:
             self.state.write_text(json.dumps(state))
         self.guide, self.live, self.before, self.after = guide, live, before, after
+        self.on_main = on_main  # bool, or a callable (checkout, file) -> bool that may raise
 
     def gh_file(self, repo, path, sha):
         return self.before if sha == "base-sha" else self.after
@@ -82,10 +95,14 @@ class Env:
             raise self.live
         return self.live
 
+    def git_on_main(self, checkout, file):
+        return self.on_main(checkout, file) if callable(self.on_main) else self.on_main
+
     def run(self, today=TODAY):
         out, err = io.StringIO(), io.StringIO()
         with mock.patch.object(docs_drift, "git_fetch"), \
                 mock.patch.object(docs_drift, "git_show", lambda c, g: self.guide), \
+                mock.patch.object(docs_drift, "git_on_main", self.git_on_main), \
                 mock.patch.object(docs_drift, "gh_pr_shas", lambda r, n: ("base-sha", "merge-sha")), \
                 mock.patch.object(docs_drift, "gh_file_at", self.gh_file), \
                 mock.patch.object(docs_drift, "fetch_live", self.fetch_live), \
@@ -288,6 +305,75 @@ class StateTests(unittest.TestCase):
         env.state.write_text("")
         _, items, _ = env.run()
         self.assertTrue(items)
+
+
+class DraftTests(unittest.TestCase):
+    CONFIG = CONFIG_YAML + DRAFTS_YAML
+
+    def drafts(self, items):
+        return [i for i in items if i["status"] == "draft"]
+
+    def test_draft_emitted_after_code_drift(self):
+        _, items, _ = Env(self, config=self.CONFIG).run()
+        drafts = self.drafts(items)
+        self.assertEqual(items[-2:], drafts)  # config order, after every code-drift item
+        self.assertTrue(len(items) > 2)
+        self.assertEqual(drafts[0], {
+            "status": "draft", "title": "Customise the SDK", "branch": "docs/fake-customise",
+            "waiting_on": "design review",
+            "doc": {"file": "docs/guides/fake-customise.md", "line": None,
+                    "url": "https://github.com/example-org/fake-docs/blob/docs/fake-customise/docs/guides/fake-customise.md"},
+            "first_seen": "2026-10-20", "age_days": 9})
+        self.assertIsNone(drafts[1]["waiting_on"])
+        self.assertEqual(drafts[1]["age_days"], 2)
+
+    def test_draft_dropped_when_file_on_main(self):
+        on_main = lambda c, f: f == "docs/guides/fake-customise.md"
+        _, items, _ = Env(self, config=self.CONFIG, on_main=on_main).run()
+        self.assertEqual([i["title"] for i in self.drafts(items)], ["Second page"])
+        _, items, _ = Env(self, config=self.CONFIG, on_main=True).run()
+        self.assertEqual(self.drafts(items), [])
+
+    def test_draft_kept_when_git_check_errors(self):
+        def boom(c, f):
+            raise RuntimeError("git failed")
+        _, items, err = Env(self, config=self.CONFIG, on_main=boom).run()
+        self.assertEqual(len(self.drafts(items)), 2)
+        self.assertIn("warning:", err)
+
+    def test_drafts_not_written_to_state(self):
+        env = Env(self, config=self.CONFIG)
+        env.run()
+        self.assertFalse([k for k, v in env.saved()["items"].items() if v.get("status") == "draft"])
+        self.assertNotIn("Customise the SDK", json.dumps(env.saved()))
+
+    def test_drafts_only_config_without_merged_prs(self):
+        _, items, _ = Env(self, config=self.CONFIG, merged=[]).run()
+        self.assertEqual(len(items), 2)
+        self.assertEqual({i["status"] for i in items}, {"draft"})
+
+    def test_bad_draft_config_exits_1(self):
+        for bad in ("  drafts:\n    - title: T\n      file: f.md\n      branch: b\n",
+                    "  drafts:\n    - title: T\n      file: f.md\n      branch: b\n      added: soon\n",
+                    "  drafts: nope\n"):
+            env = Env(self, config=CONFIG_YAML + bad)
+            with contextlib.redirect_stderr(io.StringIO()):
+                code = docs_drift.main(["--config", str(env.cfg), "--merged", str(env.merged),
+                                        "--state", str(env.state), "--today", TODAY])
+            self.assertEqual(code, 1)
+
+
+class GitOnMainTests(unittest.TestCase):
+    def check(self, message):
+        with mock.patch.object(docs_drift, "run_cmd", side_effect=RuntimeError(message)):
+            return docs_drift.git_on_main("/x", "f.md")
+
+    def test_missing_file_is_false_and_other_errors_raise(self):
+        self.assertFalse(self.check("git -C /x cat-file failed: fatal: path 'f.md' does not exist in 'origin/main'"))
+        with self.assertRaises(RuntimeError):
+            self.check("git -C /x cat-file failed: fatal: invalid object name 'origin/main'.")
+        with mock.patch.object(docs_drift, "run_cmd", return_value=""):
+            self.assertTrue(docs_drift.git_on_main("/x", "f.md"))
 
 
 class ConfigTests(unittest.TestCase):

@@ -295,7 +295,7 @@ class WaitingTest(unittest.TestCase):
         self.assertIn('waitingHere + " waiting for others"', html)
         self.assertIn('span("pill waiting", "⚡ chase")', html)
         self.assertNotIn("Product actions", html)
-        self.assertNotIn("waiting_on", html)
+        self.assertNotIn("p.waiting_on", html)  # the old project key; doc drafts have their own waiting_on
         self.assertNotIn("waiting on others", html.lower())
         # the section sits in the right column of the To do tab, after Docs behind code
         self.assertLess(html.index('side.push(section("Docs behind code"'), html.index('side.push(waitingSection())'))
@@ -780,6 +780,72 @@ def drift_md(*items):
     b["docs_drift"] = list(items)
     brief, _ = render_brief.number_items(b)
     return render_brief.to_markdown(brief)
+
+
+def draft_item(**over):
+    d = {"status": "draft", "title": "Customise the Checkout SDK", "branch": "docs/checkout-customisation",
+         "waiting_on": "design review",
+         "doc": {"file": "docs/api-guides/checkout-sdk-customisation.md", "line": None,
+                 "url": "https://github.com/ekko-enviroconomy/ekko-edge-api/blob/docs/checkout-customisation/"
+                        "docs/api-guides/checkout-sdk-customisation.md"},
+         "first_seen": "2026-10-20", "age_days": 9}
+    d.update(over)
+    return d
+
+
+class DocsDriftDraftTest(unittest.TestCase):
+    URL = draft_item()["doc"]["url"]
+
+    def line(self, **over):
+        return drift_md(draft_item(**over)).split("## Docs behind code\n\n")[1].split("\n")[0]
+
+    def test_draft_line(self):
+        self.assertEqual(
+            self.line(),
+            f"- Draft ready: [Customise the Checkout SDK]({self.URL}) on `docs/checkout-customisation`, "
+            "waiting on design review (9 days)")
+
+    def test_draft_line_without_waiting_on_and_age_words(self):
+        self.assertEqual(
+            self.line(waiting_on=None, age_days=1),
+            f"- Draft ready: [Customise the Checkout SDK]({self.URL}) on `docs/checkout-customisation` (1 day)")
+        self.assertTrue(self.line(age_days=0).endswith("(today)"))
+
+    def test_draft_renders_after_code_drift_item_and_does_not_count_as_number(self):
+        b = load()
+        b["docs_drift"] = [drift_item(), draft_item()]
+        brief, nmap = render_brief.number_items(b)
+        md = render_brief.to_markdown(brief)
+        sec = md.split("## Docs behind code\n\n")[1]
+        self.assertLess(sec.index("features.roundUp"), sec.index("Draft ready"))
+        self.assertTrue(all("n" not in d for d in brief["docs_drift"]))
+
+    def test_validation_accepts_draft_and_rejects_bad_ones(self):
+        b = load()
+        b["docs_drift"] = [draft_item(), draft_item(waiting_on=None)]
+        render_brief.number_items(b)
+        cases = [
+            ({"title": ""}, "draft .*title"),
+            ({"branch": ""}, "draft .*branch"),
+            ({"doc": {"file": "f", "line": None, "url": ""}}, "doc.url"),
+            ({"first_seen": "soon"}, "first_seen"),
+            ({"age_days": -1}, "age_days"),
+            ({"waiting_on": 3}, "waiting_on"),
+        ]
+        for over, rx in cases:
+            b = load()
+            b["docs_drift"] = [draft_item(**over)]
+            with self.assertRaisesRegex(ValueError, rx):
+                render_brief.number_items(b)
+        b = load()
+        d = draft_item()
+        del d["title"]
+        b["docs_drift"] = [d]
+        with self.assertRaisesRegex(ValueError, "draft '\\?'.*title"):
+            render_brief.number_items(b)
+
+    def test_page_template_has_draft_branch(self):
+        self.assertIn('d.status === "draft"', render_brief.TEMPLATE.read_text())
 
 
 class DocsDriftTest(unittest.TestCase):
