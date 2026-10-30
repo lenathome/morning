@@ -364,6 +364,36 @@ class WaitingTest(unittest.TestCase):
         self.assertNotIn("⚡", second["text"])
         self.assertNotIn("done", second["cls"])
 
+    def test_done_items_collapse_and_sink_below_the_open_ones(self):
+        t = (ROOT / "scripts" / "brief_template.html").read_text()
+        # the CSS hides everything but the title in a done row or card, and styles the label
+        self.assertIn(".row.done .rowbody > :not(:first-child), .card.done .rowbody > :not(:first-child), .card.done > .meta,", t)
+        self.assertIn(".card.done .prtitle > :not(a) { display: none; }", t)
+        self.assertIn(".donehead {", t)
+        # every section builder goes through the grouping, so every re-render regroups
+        for call in ("appendWithDone(panel, list, actionRow)", "appendWithDone(panel, list, waitingRow)",
+                     "cardList(list, prCard)", "cardList(testing, testCard)"):
+            self.assertIn(call, t)
+        self.assertIn('text: "Done (" + count + ")"', t)
+
+    def test_todo_panel_groups_done_rows_under_one_label_in_node(self):
+        brief, script = self._page_script()
+        self.assertEqual(script.count("  renderTabs();\n"), 1)
+        script = script.replace("  renderTabs();\n", "")
+        script = script.replace("  var shown = brief;", "  globalThis.__x = { todoPanel: todoPanel };\n  return;\n  var shown = brief;")
+        groups = [{"parent": "P1", "items": [{"n": 1, "title": "a", "done": True}, {"n": 2, "title": "b"}]},
+                  {"parent": "P2", "items": [{"n": 3, "title": "c", "done": True}]},
+                  {"parent": None, "items": [{"n": 4, "title": "d"}]}]
+        body = ("(function () {" + script + "})();\n"
+                "const p = globalThis.__x.todoPanel(" + json.dumps(groups) + ");\n"
+                "console.log(JSON.stringify(p.children.map(c => c.className + '|' + c.textContent)));\n"
+                "const q = globalThis.__x.todoPanel(" + json.dumps([groups[1]]) + ");\n"
+                "console.log(JSON.stringify(q.children.map(c => c.className + '|' + c.textContent)));\n")
+        mixed, all_done = self._run_node(brief, body)
+        # open rows keep their parent heading; P2 has no open rows so its heading goes; done rows follow the label
+        self.assertEqual(mixed, ["parent|P1", "row|2b", "row|4d", "donehead|Done (2)", "row done|1a", "row done|3c"])
+        self.assertEqual(all_done, ["donehead|Done (1)", "row done|3c"])
+
     def _page_script(self):
         brief, _ = render_brief.number_items(load())
         page = render_brief.to_html(brief)
