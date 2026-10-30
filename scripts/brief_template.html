@@ -6,13 +6,12 @@
 <title>Morning brief</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: one full-width header (date and title, goals strip, then the pill row that doubles as the tab bar; the
-   pill row sticks while scrolling), then one tab panel at a time, then dense rows with a fixed-width number column
-   so numbers can be read back. The page is at most 1240px wide. On the To do tab, from 1100px wide, the left
-   column (3fr) holds Urgent today, Coming up, Your actions and External meeting prep; the right column (2fr) is
-   pinned and holds In progress, Docs behind code and Waiting for others. When one column is empty the other takes
-   the full width. Below 1100px it is one column with the left content first, then the right content. Every other
-   tab is a single full-width panel. */
+/* Layout: one full-width header (date and title, then the goals as a row of small cards that open on click), then
+   the tab nav and one tab panel at a time. From 900px wide the nav is a vertical list in a left column (170px, it
+   sticks while scrolling) beside the panel. Below 900px it is one horizontally scrolling row of tabs that sticks to
+   the top, never wrapping. Each tab is a single full-width column. Numbered rows are one compact line: number cell
+   (tick box and number, a fixed-width column so numbers can be read back), the title, and the owner tag and due date
+   on the right. Everything else about the row opens under the title on click. The page is at most 1240px wide. */
 :root {
   --bg: #f4f6f4;
   --surface: #ffffff;
@@ -82,10 +81,11 @@ body {
   overflow-wrap: anywhere;
 }
 .wrap { max-width: 1240px; margin-inline: auto; display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.layout { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.panels { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
 .tabpanel { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
-/* To do tab: In progress comes first in the markup, so it leads on narrow screens; from 1100px it moves to the right. */
-.todo-cols { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
-.todo-main, .todo-side { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+/* Today tab: the focus line leads, then the sections */
+.focusline { margin: 0; font-size: 13.5px; }
 a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
 a:hover { text-decoration-thickness: 2px; }
 button { font: inherit; color: inherit; }
@@ -121,22 +121,26 @@ body.has-bg .focus { text-shadow: 0 1px 8px var(--bg); }
   .bg-hero { height: 300px; }
 }
 
-/* pills: the only navigation. Each pill is a tab; the row sticks to the top while scrolling. */
-.chips {
+/* tab nav: the only navigation. Below 900px a single scrolling row that sticks to the top; from 900px a vertical
+   list (see the media query at the end). The count sits at the right of each entry. */
+.sidenav {
   position: sticky; top: env(safe-area-inset-top, 0px); z-index: 2;
   background: var(--bg); border-bottom: 1px solid var(--line);
-  display: flex; flex-wrap: wrap; gap: 8px;
-  margin-inline: -16px; padding: 8px 16px 10px;
+  display: flex; flex-wrap: nowrap; gap: 4px; overflow-x: auto; scrollbar-width: none;
+  margin-inline: -16px; padding: 4px 16px 0;
 }
-.chip {
-  display: inline-flex; align-items: baseline; gap: 6px;
-  background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
-  padding: 6px 12px; cursor: pointer; font-size: 13px; white-space: nowrap;
+.sidenav::-webkit-scrollbar { display: none; }
+.navtab {
+  flex: none; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px;
+  background: none; border: 0; border-bottom: 2px solid transparent;
+  padding: 8px 10px; cursor: pointer; font-size: 13.5px; white-space: nowrap; text-align: left;
 }
-.chip:hover { border-color: var(--accent); }
-.chip[aria-selected="true"] { background: var(--accent-soft); border-color: var(--accent); font-weight: 600; }
-.chip b { font-family: var(--font-mono); font-weight: 500; font-variant-numeric: tabular-nums; }
-.chip .overdue { color: var(--bad); font-weight: 600; }
+.navtab:hover { background: var(--surface-2); }
+.navtab[aria-selected="true"] { border-bottom-color: var(--accent); font-weight: 600; }
+.navtab b { font-family: var(--font-mono); font-weight: 500; font-variant-numeric: tabular-nums; margin-left: auto; }
+.navtab b.warn { color: var(--warn); }
+.navtab b.muted { color: var(--muted); }
+.navtab .overdue { color: var(--bad); font-weight: 600; font-size: 11.5px; }
 
 /* sections and rows */
 section.group { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
@@ -149,6 +153,15 @@ h2 .count { font-family: var(--font-mono); font-weight: 400; }
 .parent + .row { border-top: 0; }
 .num { font-family: var(--font-mono); font-weight: 500; font-size: 13px; color: var(--accent); text-align: right; font-variant-numeric: tabular-nums; }
 .rowbody { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+/* compact row: title on the left, owner tag and due date muted on the right, the rest opens under the title */
+.rowline { display: flex; gap: 10px; align-items: baseline; min-width: 0; }
+.rowtitle { flex: 1; min-width: 0; }
+.rowside { flex: none; max-width: 45%; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px 8px; font-size: 12.5px; color: var(--muted); text-align: right; }
+.chevgap { flex: none; width: 20px; }
+details.rowbody > summary { cursor: pointer; list-style: none; }
+details.rowbody > summary::-webkit-details-marker { display: none; }
+details.rowbody > summary:focus-visible { outline-offset: 2px; border-radius: 4px; }
+.rowmore { display: flex; flex-direction: column; gap: 2px; padding-top: 4px; }
 .meta { display: flex; flex-wrap: wrap; gap: 4px 8px; font-size: 12.5px; color: var(--muted); }
 .due-overdue { color: var(--bad); font-weight: 600; }
 .due-today { color: var(--warn); font-weight: 600; }
@@ -160,9 +173,10 @@ h2 .count { font-family: var(--font-mono); font-weight: 400; }
 .updated { font-size: 12.5px; color: var(--muted); }
 .row.done, .card.done { color: var(--muted); }
 .done .num { color: var(--muted); }
-.row.done .rowbody > :first-child, .row.done a, .card.done .prtitle a { text-decoration: line-through; color: var(--muted); }
+.row.done .rowtitle, .row.done a, .card.done .prtitle a { text-decoration: line-through; color: var(--muted); }
 .done .due-overdue, .done .due-today { color: var(--muted); font-weight: 400; }
-.row.done .rowbody > :not(:first-child), .card.done .rowbody > :not(:first-child), .card.done > .meta,
+/* a done row is built as number and title only, with no detail toggle; a done card hides all but its title */
+.card.done .rowbody > :not(:first-child), .card.done > .meta,
 .card.done .prtitle > :not(a) { display: none; }
 .donehead { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); padding: 10px 12px 2px 56px; border-top: 1px solid var(--line); }
 .donehead + .row { border-top: 0; }
@@ -224,20 +238,13 @@ details.prow[open] .pnext { display: block; -webkit-line-clamp: unset; line-clam
   content: ""; position: absolute; left: 6px; top: 4px; width: 7px; height: 7px;
   border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(-45deg);
 }
-details.prow[open] .chev::before { transform: rotate(45deg); top: 3px; }
-details.prow > summary:hover .chev::before { border-color: var(--accent); }
-details.prow > summary:focus-visible { outline-offset: -2px; border-radius: 8px; }
-/* Waiting for others: folded by default, one line when shut */
-details.group > summary { cursor: pointer; list-style: none; display: flex; gap: 8px; align-items: center; min-width: 0; }
-details.group > summary::-webkit-details-marker { display: none; }
-details.group > summary h2 { flex-wrap: wrap; min-width: 0; }
-details.group > summary:hover .chev::before { border-color: var(--accent); }
-details.group > summary:focus-visible { outline-offset: 2px; border-radius: 6px; }
-details.group[open] .chev::before { transform: rotate(45deg); top: 3px; }
-details.group > .panel { margin-top: 8px; }
-.group-sum .tochase { text-transform: none; letter-spacing: 0; font-weight: 400; }
+details.prow[open] .chev::before, details.goalcard[open] .chev::before, details.rowbody[open] .chev::before { transform: rotate(45deg); top: 3px; }
+details.prow > summary:hover .chev::before, details.goalcard > summary:hover .chev::before,
+details.rowbody > summary:hover .chev::before { border-color: var(--accent); }
+details.prow > summary:focus-visible, details.goalcard > summary:focus-visible { outline-offset: -2px; border-radius: 8px; }
+h2 .tochase { text-transform: none; letter-spacing: 0; font-weight: 400; }
 .prows { overflow: hidden; }
-details.prow .detail { margin: 0 12px 10px; }
+details.prow .detail, details.goalcard .detail { margin: 0 12px 10px; }
 .phead { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
 .pname { font-weight: 600; }
 .pill { font-size: 11.5px; font-weight: 600; border-radius: 999px; padding: 1px 8px; text-transform: lowercase; }
@@ -262,8 +269,12 @@ td.nextcol { min-width: 160px; }
 tr:last-child td { border-bottom: 0; }
 .empty { color: var(--muted); padding: 24px 0; }
 
-/* goals strip: context under the header, not numbered. Rows reuse the project row styles. */
+/* goals: context under the header, not numbered. A row of small cards (one column on a phone); each opens on click. */
 .goals h2 { flex-wrap: wrap; }
+.goalcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; align-items: start; }
+details.goalcard { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; min-width: 0; }
+details.goalcard > summary { cursor: pointer; list-style: none; display: grid; grid-template-columns: minmax(0, 1fr) 20px; gap: 8px; align-items: start; padding: 10px 12px; }
+details.goalcard > summary::-webkit-details-marker { display: none; }
 .goals .pill.draft { background: var(--warn-soft); color: var(--warn); text-transform: none; letter-spacing: 0; }
 .goals .detail p.glabel { font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 /* over a seasonal photo (body.has-bg), the heading gets a soft panel so it stays legible */
@@ -274,17 +285,28 @@ body.has-bg .goals > h2 {
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .chip, .filter { transition: border-color 0.12s, background 0.12s; }
+  .navtab, .filter { transition: border-color 0.12s, background 0.12s; }
 }
 @media (max-width: 420px) {
   .focus { font-size: 22px; }
 }
-@media (min-width: 1100px) {
+/* on a phone the right-hand metadata drops to a second line under the title, so the title keeps its width */
+@media (max-width: 600px) {
+  .rowline { flex-wrap: wrap; }
+  .rowtitle { flex: 1 1 0; }
+  .rowside { flex: 1 1 100%; order: 3; max-width: none; justify-content: flex-start; text-align: left; }
+}
+/* from 900px: the nav becomes a vertical list beside the panel */
+@media (min-width: 900px) {
   body { padding-inline: 24px; }
-  .chips { margin-inline: 0; padding-inline: 0; }
-  .todo-cols.has-side { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 28px; align-items: start; }
-  .todo-cols.has-side .todo-main { grid-column: 1; grid-row: 1; }
-  .todo-cols.has-side .todo-side { grid-column: 2; grid-row: 1; position: sticky; top: 68px; max-height: calc(100vh - 84px); overflow-y: auto; }
+  .layout { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 28px; align-items: start; }
+  .sidenav {
+    top: 20px; flex-direction: column; flex-wrap: nowrap; overflow: visible; gap: 2px;
+    background: none; border-bottom: 0; margin-inline: 0; padding: 0;
+  }
+  .navtab { border-bottom: 0; border-left: 3px solid transparent; border-radius: 6px; padding: 7px 10px; }
+  .navtab[aria-selected="true"] { border-left-color: var(--accent); background: var(--accent-soft); }
+  .navtab .overdue { flex-basis: 100%; }
 }
 </style>
 </head>
@@ -398,8 +420,25 @@ body.has-bg .goals > h2 {
     }
     return el("span", { "class": "numcell" }, [box, num]);
   }
-  function numberedRow(n, body, done, undo) {
-    return el("div", { "class": "row" + (done ? " done" : "") }, [numCell(n, done, undo), el("div", { "class": "rowbody" }, body)]);
+  /* One compact line: number cell, `title` (nodes), then `side` (owner tag, due date) on the right. `more` (nodes)
+     opens under the title: the title line is the <summary>. A row with nothing more, and a done row (number and
+     struck-through title only), have no toggle. data-n keys the open state, so a re-render can reopen the right rows. */
+  function numberedRow(n, title, side, more, done, undo) {
+    var body;
+    if (done) {
+      body = el("div", { "class": "rowbody" }, [el("div", { "class": "rowtitle" }, title)]);
+    } else {
+      var line = [el("div", { "class": "rowtitle" }, title), side.length ? el("div", { "class": "rowside" }, side) : null];
+      if (more.length) {
+        body = el("details", { "class": "rowbody", "data-n": String(n) }, [
+          el("summary", { "class": "rowline" }, line.concat([span("chev", "")])),
+          el("div", { "class": "rowmore" }, more)
+        ]);
+      } else {
+        body = el("div", { "class": "rowbody" }, [el("div", { "class": "rowline" }, line.concat([span("chevgap", "")]))]);
+      }
+    }
+    return el("div", { "class": "row" + (done ? " done" : "") }, [numCell(n, done, undo), body]);
   }
   function dueSpan(due) {
     var d = String(due);
@@ -417,17 +456,11 @@ body.has-bg .goals > h2 {
     return item.tag && item.tag.why ? el("div", { "class": "why", text: item.tag.why }) : null;
   }
   function todoRow(item, showTags) {
-    var meta = [];
-    if (item.due) meta.push(dueSpan(item.due));
-    if (showTags) (item.categories || []).forEach(function (c) { meta.push(span("tag", c)); });
+    var side = [tagPill(item), item.due ? dueSpan(item.due) : null].filter(Boolean);
+    var meta = showTags ? (item.categories || []).map(function (c) { return span("tag", c); }) : [];
     if (item.note) meta.push(span("", item.note));
-    meta.push(tagPill(item));
-    meta = meta.filter(Boolean);
-    return numberedRow(item.n, [
-      el("div", { text: item.title }),
-      meta.length ? el("div", { "class": "meta" }, meta) : null,
-      whyLine(item)
-    ], item.done, item.tick_undo);
+    var more = [meta.length ? el("div", { "class": "meta" }, meta) : null, whyLine(item)].filter(Boolean);
+    return numberedRow(item.n, [item.title], side, more, item.done, item.tick_undo);
   }
   function todoPanel(groups, showTags) {
     var panel = el("div", { "class": "panel" });
@@ -444,12 +477,10 @@ body.has-bg .goals > h2 {
     return panel;
   }
   function actionRow(a) {
-    return numberedRow(a.n, [
-      el("div", {}, [link(safeUrl(a.url), a.text)]),
-      el("div", { "class": "meta" }, [span("", a.meeting + ", " + a.date),
-        a.due ? dueSpan(a.due) : null, a.note ? span("", a.note) : null, tagPill(a)]),
-      whyLine(a)
-    ], a.done, a.tick_undo);
+    var side = [tagPill(a), a.due ? dueSpan(a.due) : null].filter(Boolean);
+    var more = [el("div", { "class": "meta" }, [span("", a.meeting + ", " + a.date), a.note ? span("", a.note) : null]), whyLine(a)]
+      .filter(Boolean);
+    return numberedRow(a.n, [link(safeUrl(a.url), a.text)], side, more, a.done, a.tick_undo);
   }
   function actionPanel(list) {
     var panel = el("div", { "class": "panel" });
@@ -460,8 +491,9 @@ body.has-bg .goals > h2 {
     var panel = el("div", { "class": "panel" });
     return appendWithDone(panel, list, function (i) { return i.kind === "fathom" ? actionRow(i) : todoRow(i, true); });
   }
-  /* Waiting for others: the same row as Your actions. The title carries the "chase" pill and the link; who follows it.
-     The muted line holds the age, the chase reason (chase items only) and when it was last chased. */
+  /* Waiting for others: the same compact row as Your actions. The title carries the "chase" pill and the link; who
+     follows it. The opened detail holds the age, the chase reason (chase items only) and when it was last chased; a
+     moved chase-by date from the live overlay sits on the right like a due date. */
   function ageText(days) {
     return days === 0 ? "since today" : "waiting " + days + (days === 1 ? " day" : " days");
   }
@@ -473,36 +505,22 @@ body.has-bg .goals > h2 {
     var age = ageText(w.days);
     var info = [span("", age)];
     if (w.chase && w.chase_reason && w.chase_reason !== age) info.push(span("", w.chase_reason));
+    var side = [];
     /* a moved chase-by date comes from the live overlay as display wording ("due 30 Oct", "overdue since 12 Oct") */
     if (typeof w.due === "string" && w.due && !shortDate(w.due)) {
-      info.push(w.due.indexOf("due ") === 0 ? span(w.due === "due today" ? "due-today" : "", "chase-by " + w.due.slice(4)) : dueSpan(w.due));
+      side.push(w.due.indexOf("due ") === 0 ? span(w.due === "due today" ? "due-today" : "", "chase-by " + w.due.slice(4)) : dueSpan(w.due));
     }
     if (w.chased_today) info.push(span("", "chased today"));
     else if (w.chased_on && shortDate(w.chased_on)) info.push(span("", "chased " + shortDate(w.chased_on)));
-    return numberedRow(w.n, [el("div", {}, title), el("div", { "class": "meta" }, info)], w.done, w.tick_undo);
+    return numberedRow(w.n, title, side, [el("div", { "class": "meta" }, info)], w.done, w.tick_undo);
   }
   function waitingPanel(list) {
     var panel = el("div", { "class": "panel" });
     return appendWithDone(panel, list, waitingRow);
   }
-  /* Waiting for others is folded: the summary keeps the count and how many need a chase. The open state lives in
-     waitingOpen so the 30-second re-render does not shut it again. */
-  var waitingOpen = false;
-  function waitingSection() {
-    var open = waiting.filter(function (w) { return !w.done; });
-    var chase = open.filter(function (w) { return w.chase && !w.chased_today; }).length;
-    var node = el("details", { "class": "group", id: "waiting-for-others", ontoggle: function () { waitingOpen = node.open; } }, [
-      el("summary", { "class": "group-sum" }, [
-        el("h2", {}, [
-          "Waiting for others", span("count", String(open.length)),
-          chase ? span("count tochase", "\u00b7 " + chase + " to chase") : null
-        ]),
-        span("chev", "")
-      ]),
-      waitingPanel(waiting)
-    ]);
-    if (waitingOpen) node.open = true;
-    return node;
+  /* Open waiting items still marked to chase: the Waiting tab's count and the "to chase" note share it. */
+  function chaseCount() {
+    return waiting.filter(function (w) { return w.chase && !w.done; }).length;
   }
   /* PR and test cards: open cards first, then the Done label and the collapsed ones. */
   function cardList(list, build) { return appendWithDone(el("div", { "class": "cards" }), list, build); }
@@ -693,12 +711,10 @@ body.has-bg .goals > h2 {
     var waitingHere = openCount(waiting.filter(function (w) { return w.project === p.name; }));
     if (waitingHere) {
       meta.push(el("a", { "class": "pill waiting", href: "#waiting-for-others", onclick: function (e) {
-        /* the link sits inside <summary>: keep the card shut and jump to the section on the To do tab */
+        /* the link sits inside <summary>: keep the card shut and jump to the Waiting tab */
         e.preventDefault();
-        select("todo", false);
-        waitingOpen = true;
+        select("waiting", false);
         var target = document.getElementById("waiting-for-others");
-        if (target) target.open = true;
         if (target) target.scrollIntoView({ block: "start" });
       }, text: waitingHere + " waiting for others" }));
     }
@@ -738,7 +754,7 @@ body.has-bg .goals > h2 {
       detail.push(el("ul", {}, g.done_when.map(function (x) { return el("li", { text: x }); })));
     }
     if (!detail.length) detail.push(el("p", { "class": "muted", text: "No more detail." }));
-    return el("details", { "class": "prow" }, [
+    return el("details", { "class": "goalcard" }, [
       el("summary", {}, [
         el("div", { "class": "psum" }, [span("pname", g.title)]),
         el("span", { "class": "chev", "aria-hidden": "true" })
@@ -751,33 +767,41 @@ body.has-bg .goals > h2 {
     var draft = goals.status !== "agreed";
     return el("section", { "class": "group goals", "aria-label": "Goals" }, [
       el("h2", {}, [(goals.quarter || "") + " goals", draft ? span("pill draft", "Draft") : null]),
-      el("div", { "class": "panel prows" }, goals.goals.map(goalRow))
+      el("div", { "class": "goalcards" }, goals.goals.map(goalRow))
     ]);
   }
 
   /* ---------- tab content ---------- */
-  /* To do: left column (Urgent today, Coming up, Your actions, External meeting prep), right column (In progress,
-     Docs behind code, Waiting for others). The left column comes first in the markup, so it leads on narrow screens. */
+  /* Today: one column. A small focus line, then In progress, Urgent today, Coming up, Your actions and External
+     meeting prep. Waiting and Docs drift have their own tabs. With nothing to show the tab says so instead. */
   function todoTab() {
-    var main = [], side = [];
-    if (urgentItems.length) main.push(section("Urgent today", openCount(urgentItems), todoPanel(urgent)));
-    if (countGroups(todos.coming_up)) main.push(section("Coming up", openInGroups(todos.coming_up), todoPanel(todos.coming_up)));
-    if (yours.length) main.push(section("Your actions", openCount(yours), actionPanel(yours)));
+    var out = [];
+    if (inProgress.length) out.push(section("In progress", openCount(inProgress), inProgressPanel(inProgress)));
+    if (urgentItems.length) out.push(section("Urgent today", openCount(urgentItems), todoPanel(urgent)));
+    if (countGroups(todos.coming_up)) out.push(section("Coming up", openInGroups(todos.coming_up), todoPanel(todos.coming_up)));
+    if (yours.length) out.push(section("Your actions", openCount(yours), actionPanel(yours)));
     if (meetings.length) {
-      main.push(section("External meeting prep", meetings.length,
+      out.push(section("External meeting prep", meetings.length,
         el("div", { "class": "cards" }, meetings.map(meetingCard))));
     }
-    if (inProgress.length) side.push(section("In progress", openCount(inProgress), inProgressPanel(inProgress)));
-    if (docsDrift.length) {
-      side.push(section("Docs behind code", docsDrift.length, el("div", { "class": "cards" },
-        docsDrift.map(driftRow).concat([el("div", { "class": "meta", text: "Fix with /ekko-api-docs, then upload to ReadMe." })]))));
-    }
-    if (waiting.length) side.push(waitingSection());
-    var cols = [];
-    if (main.length) cols.push(el("div", { "class": "todo-main" }, main));
-    if (side.length) cols.push(el("aside", { "class": "todo-side", "aria-label": "In progress and waiting" }, side));
-    if (!cols.length) return [];
-    return [el("div", { "class": "todo-cols" + (side.length && main.length ? " has-side" : "") }, cols)];
+    if (out.length && brief.focus) out.unshift(el("p", { "class": "focusline muted", text: "Focus: " + brief.focus }));
+    return out;
+  }
+  /* Waiting: the list of what others owe, with how many need a chase. */
+  function waitingTab() {
+    if (!waiting.length) return [];
+    var chase = chaseCount();
+    return [el("section", { "class": "group", id: "waiting-for-others" }, [
+      el("h2", {}, ["Waiting for others", span("count", String(openCount(waiting))),
+        chase ? span("count tochase", "· " + chase + " to chase") : null]),
+      waitingPanel(waiting)
+    ])];
+  }
+  /* Docs drift: the docs behind code, one card per item (and any hand-added draft). */
+  function driftTab() {
+    if (!docsDrift.length) return [];
+    return [section("Docs behind code", docsDrift.length, el("div", { "class": "cards" },
+      docsDrift.map(driftRow).concat([el("div", { "class": "meta", text: "Fix with /ekko-api-docs, then upload to ReadMe." })])))];
   }
   function prsTab() {
     var out = [];
@@ -860,24 +884,31 @@ body.has-bg .goals > h2 {
     return [section("Partners - next actions", partners.length, el("div", { "class": "panel tablewrap" }, [table]))];
   }
 
-  /* The To do pill counts what is still open on its tab, In progress included, at every width. Waiting items are
-     not counted: they wait on someone else. Built on each render, because the counts change with the overlay. */
+  /* The Today count is what is still open on its tab, In progress included. Waiting items are not counted there: they
+     wait on someone else, and have their own tab, whose count is what still needs a chase (warning colour), or the open
+     total muted when nothing does. Docs drift counts its items, in the warning colour when there are any. `tone` is
+     the class of the count. Built on each render, because the counts change with the overlay. */
   function tabs() {
+    var chase = chaseCount();
     return [
-      { id: "todo", label: "To do", build: todoTab, empty: "Nothing to do.",
+      { id: "todo", label: "Today", build: todoTab, empty: "Nothing to do.",
         count: openCount(inProgress) + openCount(urgentItems) + openInGroups(todos.coming_up) + openCount(yours) +
                meetings.length },
-      { id: "prs", label: "PRs", build: prsTab, count: prTotal, empty: "No pull requests need you." },
+      { id: "waiting", label: "Waiting", build: waitingTab, count: chase || openCount(waiting),
+        tone: chase ? "warn" : "muted", empty: "Nobody owes you anything." },
+      { id: "drift", label: "Docs drift", build: driftTab, count: docsDrift.length,
+        tone: docsDrift.length ? "warn" : "muted", empty: "Docs match the code." },
       { id: "testing", label: "Testing", build: testingTab, count: openCount(testing),
         empty: "Nothing merged recently that needs a manual test." },
-      { id: "ideas", label: "Ideas bank", build: ideasTab,
+      { id: "prs", label: "PRs", build: prsTab, count: prTotal, empty: "No pull requests need you." },
+      { id: "ideas", label: "Ideas", build: ideasTab,
         count: openInGroups(ideas.strategic) + openInGroups(ideas.other), empty: "No ideas parked." },
       { id: "projects", label: "Projects", build: projectsTab, count: projects.length, empty: "No projects." },
       { id: "clients", label: "Clients", build: clientsTab, count: partners.length, empty: "No clients." }
     ];
   }
 
-  /* ---------- header: date and title, goals strip, then the pill row ---------- */
+  /* ---------- header: date and title, goals cards, then the nav and panels ---------- */
   var updatedEl = el("div", { "class": "updated", role: "status", hidden: "" });
   var saveEl = el("div", { "class": "updated", role: "status", hidden: "" });   /* "Couldn't save the tick on 12" */
   var header = el("header", {}, [
@@ -894,58 +925,70 @@ body.has-bg .goals > h2 {
   var goalsNode = goalsBlock(brief.goals);
   if (goalsNode) header.appendChild(goalsNode);
 
-  /* ---------- pills: one per tab, and the only tab bar ---------- */
-  /* Each pill carries its tab's label and count; To do also shows the overdue figure. A tab with nothing in it gets
-     no pill, except To do, which always shows. A tab that was there at load stays after a live update, even at 0, so
-     the row does not jump. renderTabs() builds the new bar and panels first and swaps them in last, so a failure
-     while building leaves the page as it was. */
+  /* ---------- nav: one entry per tab, and the only tab bar ---------- */
+  /* Each entry carries its tab's label and count; Today also shows the overdue figure. A tab with nothing in it gets
+     no entry, except Today, which always shows. A tab that was there at load stays after a live update, even at 0, so
+     the nav does not jump. renderTabs() builds the new nav and panels first and swaps them in last, so a failure
+     while building leaves the page as it was. The nav and the panels sit in one layout box: side by side from 900px. */
+  var layout = el("div", { "class": "layout" });
+  app.appendChild(layout);
   var tablist = null;
+  var panelBox = null;
   var panels = {};
   var tabButtons = {};
   var visibleIds = [];
   var shownAtLoad = null;
   var current = "todo";
+  /* Open <details> are remembered by key: an item row by its number (rows lose or gain their toggle as items are
+     ticked, so an index would drift), everything else by its position in the panel. */
+  function detailKey(d, i) {
+    var n = d.getAttribute("data-n");
+    return n ? "n" + n : "i" + i;
+  }
   function renderTabs() {
     var keep = shownAtLoad || {};
-    var nList = el("div", { "class": "chips", role: "tablist", "aria-label": "Brief sections" });
+    var nList = el("div", { "class": "sidenav", role: "tablist", "aria-label": "Brief sections" });
+    var nBox = el("div", { "class": "panels" });
     var nPanels = {}, nButtons = {}, nIds = [];
     tabs().forEach(function (t) {
       var content = t.build();
       if (!content.length && t.id !== "todo" && !keep[t.id]) return;
       nIds.push(t.id);
-      var b = el("button", { "class": "chip", role: "tab", type: "button", id: "tab-" + t.id,
+      var b = el("button", { "class": "navtab", role: "tab", type: "button", id: "tab-" + t.id,
         "aria-controls": "panel-" + t.id, "aria-selected": "false",
         onclick: function () { select(t.id, true); } }, [
-        span("", t.label), el("b", { text: String(t.count) }),
+        span("", t.label), el("b", { "class": t.tone || "", text: String(t.count) }),
         t.id === "todo" && overdue > 0 ? span("overdue", overdue + " overdue") : null
       ]);
       nButtons[t.id] = b;
       nList.appendChild(b);
       nPanels[t.id] = el("div", { "class": "tabpanel", role: "tabpanel", id: "panel-" + t.id, "aria-labelledby": "tab-" + t.id, hidden: "" },
         content.length ? content : [el("p", { "class": "empty", text: t.empty })]);
+      nBox.appendChild(nPanels[t.id]);
     });
     nList.addEventListener("keydown", onTabKey);
 
-    /* what the reader had: scroll position, a focused pill, opened <details> */
+    /* what the reader had: scroll position, a focused tab, opened <details> */
     var scrollY = window.scrollY;
     var focusId = document.activeElement && /^tab-/.test(document.activeElement.id || "") ? document.activeElement.id : null;
     var opened = {};
     visibleIds.forEach(function (id) {
       Array.prototype.forEach.call(panels[id].querySelectorAll("details"), function (d, i) {
-        if (d.open) (opened[id] = opened[id] || []).push(i);
+        if (d.open) (opened[id] = opened[id] || {})[detailKey(d, i)] = true;
       });
     });
     if (tablist && tablist.parentNode) tablist.parentNode.removeChild(tablist);
-    visibleIds.forEach(function (id) { if (panels[id].parentNode) panels[id].parentNode.removeChild(panels[id]); });
+    if (panelBox && panelBox.parentNode) panelBox.parentNode.removeChild(panelBox);
 
-    tablist = nList; panels = nPanels; tabButtons = nButtons; visibleIds = nIds;
+    tablist = nList; panelBox = nBox; panels = nPanels; tabButtons = nButtons; visibleIds = nIds;
     if (!shownAtLoad) { shownAtLoad = {}; nIds.forEach(function (id) { shownAtLoad[id] = true; }); }
-    app.appendChild(tablist);
-    visibleIds.forEach(function (id) { app.appendChild(panels[id]); });
+    layout.appendChild(tablist);
+    layout.appendChild(panelBox);
     Object.keys(opened).forEach(function (id) {
       if (!panels[id]) return;
-      var ds = panels[id].querySelectorAll("details");
-      opened[id].forEach(function (i) { if (ds[i]) ds[i].open = true; });
+      Array.prototype.forEach.call(panels[id].querySelectorAll("details"), function (d, i) {
+        if (opened[id][detailKey(d, i)]) d.open = true;
+      });
     });
     select(current, false);
     if (scrollY && window.scrollY !== scrollY) window.scrollTo(0, scrollY);
@@ -962,12 +1005,16 @@ body.has-bg .goals > h2 {
       tabButtons[tid].tabIndex = on ? 0 : -1;
     });
     try { localStorage.setItem("morning-brief-tab", id); } catch (e) { /* storage unavailable */ }
-    if (scrollUp && tablist.getBoundingClientRect().top < 0) tablist.scrollIntoView({ block: "start" });
+    /* in the scrolling row, bring the selected tab into view */
+    if (tablist.scrollWidth > tablist.clientWidth) tablist.scrollLeft = tabButtons[id].offsetLeft - 16;
+    if (scrollUp && layout.getBoundingClientRect().top < 0) layout.scrollIntoView({ block: "start" });
   }
+  /* The nav is a row on a phone and a column from 900px, so Left/Right and Up/Down both move between tabs. */
   function onTabKey(e) {
     var cur = visibleIds.indexOf(document.activeElement && document.activeElement.id.replace("tab-", ""));
     if (cur < 0) return;
-    var next = e.key === "ArrowRight" ? cur + 1 : e.key === "ArrowLeft" ? cur - 1 : null;
+    var next = e.key === "ArrowRight" || e.key === "ArrowDown" ? cur + 1
+      : e.key === "ArrowLeft" || e.key === "ArrowUp" ? cur - 1 : null;
     if (next == null) return;
     next = (next + visibleIds.length) % visibleIds.length;
     select(visibleIds[next], false);
