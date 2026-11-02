@@ -332,13 +332,13 @@ Notion rows with `Type: Idea` are still dropped in Step 1; the Ideas bank here i
 
 **Parent/subtask rendering.** The Tasks DB has a self-referencing `Parent` / `Subtasks` relation. Tasks split into three kinds:
 - **Parent groupers** — `Subtasks` non-empty. These are containers, NOT actionable themselves. Do NOT render parent groupers as task lines. Use their Name as the heading for their child subtasks. If the query returns an empty `Subtasks` field on every row, that view doesn't populate it - infer parent groupers instead from the children's `Parent` relation: any page named by at least one other row's `Parent` field is a grouper, even though its own `Subtasks` field reads empty.
-- **Subtasks** — `Parent` non-empty. Bucketed individually by their own Due/Category (see below), but never rendered under more than one heading.
+- **Subtasks** — `Parent` non-empty. Bucketed individually by their own Due/Category (see below), and listed once.
 - **Standalone tasks** — both `Parent` and `Subtasks` empty. Bucketed individually.
 
-**Each parent group renders exactly once across Urgent today, Coming up and the Ideas bank together** - never split across buckets, never repeated:
-1. Bucket every subtask individually, using the bucket logic above against its own Due/Category.
-2. Place the group in the bucket of its most urgent subtask: the bucket of the subtask with the earliest `Due` date. If no subtask in the group has a `Due` date, the group goes to the Ideas bank: **Strategic** if any subtask's `Category` contains `Strategic`, otherwise **Operational**. A group whose most urgent subtask is overdue or due today renders only under Urgent today, with all its subtasks.
-3. Within that one bucket, render the group once, with its subtasks sorted by `Due` date (undated subtasks last). Each subtask line still shows its own due date.
+**Each subtask is bucketed on its own `Due` and `Category`, exactly like a standalone task:** Urgent today if due on or before today, Coming up if due later, the Ideas bank if undated (**Strategic** if its `Category` contains `Strategic`, otherwise **Operational**). One due subtask never pulls its undated siblings out of the Ideas bank.
+1. A parent group therefore renders once in each bucket that holds at least one of its subtasks, with the same `*<Parent name>:*` heading each time and only that bucket's subtasks under it.
+2. Within a group, sort subtasks by `Due` date (undated last). Each subtask line still shows its own due date.
+3. A subtask is never listed twice.
 
 Within each bucket (Urgent today, Coming up, Strategic, Operational): standalone tasks first (flat, no indent, sorted by due date), then parent groups (alphabetically by parent name).
 
