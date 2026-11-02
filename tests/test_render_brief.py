@@ -78,6 +78,21 @@ class NumberingTest(unittest.TestCase):
         self.assertEqual(numbers["9"], {"kind": "notion", "id": "p4"})
         self.assertEqual(len(numbers), 10)
 
+    def test_same_parent_in_two_buckets_renders_both_headings_and_numbers_each_subtask_once(self):
+        raw = load()
+        raw["urgent"] = [{"parent": "Public documentation", "items": [
+            {"id": "d1", "title": "Fix quickstart (today)", "due": "2 Nov", "categories": ["Operational"], "note": ""}]}]
+        raw["ideas"]["other"] = [{"parent": "Public documentation", "items": [
+            {"id": "d2", "title": "Link to methodology PDFs", "due": "", "categories": ["Operational"], "note": ""},
+            {"id": "d3", "title": "Add changelog", "due": "", "categories": ["Operational"], "note": ""}]}]
+        brief, numbers = render_brief.number_items(raw)
+        md = render_brief.to_markdown(brief)
+        self.assertEqual(md.count("*Public documentation:*"), 2)
+        ids = [v["id"] for v in numbers.values() if v["kind"] == "notion" and v["id"] in ("d1", "d2", "d3")]
+        self.assertEqual(sorted(ids), ["d1", "d2", "d3"])
+        for title in ("Fix quickstart", "Link to methodology PDFs", "Add changelog"):
+            self.assertEqual(md.count(title), 1)
+
     def test_missing_lists_default_to_empty(self):
         brief, numbers = render_brief.number_items({"date": "d", "weekday_label": "w", "focus": "f"})
         self.assertEqual(numbers, {})
